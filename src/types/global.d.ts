@@ -1,5 +1,16 @@
 import type * as React from "react";
 
+// Define BoundingBox interface
+export interface BoundingBox {
+  x_min: number;
+  y_min: number;
+  z_min: number;
+  x_max: number;
+  y_max: number;
+  z_max: number;
+}
+
+// Define custom attributes for babylon-viewer element
 interface HTML3DElementAttributes
   extends React.DetailedHTMLProps<
     React.HTMLAttributes<HTMLElement>,
