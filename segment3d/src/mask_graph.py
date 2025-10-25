@@ -155,7 +155,7 @@ def load_associations(
 
 
 def build_mask_graph_cli(
-    K: int = 5, tau: float = 0.2, min_points_in_3D_segment: int = 100
+    dataset_name: str, K: int = 5, tau: float = 0.2, min_points_in_3D_segment: int = 100
 ) -> None:
     """
     Build a mask graph from association files.
@@ -170,7 +170,7 @@ def build_mask_graph_cli(
     from .io_paths import get_associations_dir, get_outputs_dir, load_config
 
     # Load configuration
-    config = load_config()
+    config = load_config(dataset_name)
 
     associations_dir = get_associations_dir(config)
     outputs_dir = get_outputs_dir(config)
@@ -303,6 +303,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build mask graph from 2D-3D associations"
     )
+
+    parser.add_argument(
+        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
+    )
     parser.add_argument(
         "--K", type=int, default=5, help="Minimum overlap size threshold (default: 5)"
     )
@@ -322,7 +326,10 @@ def main() -> None:
     args = parser.parse_args()
 
     build_mask_graph_cli(
-        K=args.K, tau=args.tau, min_points_in_3D_segment=args.min_points
+        dataset_name=args.dataset_name,
+        K=args.K,
+        tau=args.tau,
+        min_points_in_3D_segment=args.min_points,
     )
 
 

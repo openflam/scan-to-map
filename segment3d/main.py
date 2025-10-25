@@ -18,13 +18,15 @@ import sys
 import time
 from pathlib import Path
 
-from src.sam_runner import main as run_sam
+from src.sam_runner import run_sam_on_images
 from src.associate2d3d import associate_all_images
 from src.mask_graph import build_mask_graph_cli
 from src.bbox_corners import get_all_bbox_corners_cli
 from src.project_bbox import project_all_bboxes_cli
 from src.crop_images import crop_all_images_cli
 from src.io_paths import load_config
+from config import list_datasets
+import os
 
 
 def print_step_header(step_num: int, total_steps: int, title: str) -> None:
@@ -39,8 +41,159 @@ def print_step_complete(elapsed_time: float) -> None:
     print(f"\n✓ Step completed in {elapsed_time:.2f} seconds")
 
 
-def main() -> None:
-    """Run the complete pipeline."""
+def run_pipeline(
+    dataset_name: str,
+    skip_sam: bool = False,
+    skip_association: bool = False,
+    K: int = 5,
+    tau: float = 0.2,
+    percentile: float = 95.0,
+    min_fraction: float = 0.3,
+) -> None:
+    """
+    Run the complete pipeline.
+
+    Args:
+        dataset_name: Name of the dataset to process
+        skip_sam: Skip SAM segmentation step
+        skip_association: Skip 2D-3D association step
+        K: Number of nearest neighbors for mask graph
+        tau: Jaccard similarity threshold for mask graph
+        percentile: Percentile threshold for bbox outlier removal
+        min_fraction: Minimum fraction of visible points for projection
+    """
+    # Load and display configuration
+    print("\n" + "=" * 80)
+    print("SCAN-TO-MAP PIPELINE")
+    print("=" * 80)
+
+    # Set environment variable for dataset name so all modules can access it
+    os.environ["SCAN_TO_MAP_DATASET"] = dataset_name
+
+    try:
+        config = load_config(dataset_name=dataset_name)
+        print(f"\nConfiguration loaded for dataset: {dataset_name}")
+        print(f"  Images directory: {config.get('images_dir')}")
+        print(f"  COLMAP model: {config.get('colmap_model_dir')}")
+        print(f"  SAM checkpoint: {config.get('sam_ckpt')}")
+        print(f"  Device: {config.get('device')}")
+        print(f"  Outputs directory: {config.get('outputs_dir')}")
+    except Exception as e:
+        print(f"\nError loading configuration: {e}")
+        sys.exit(1)
+
+    print("\nPipeline Parameters:")
+    if skip_sam:
+        print("  SAM segmentation: SKIPPED")
+    if skip_association:
+        print("  2D-3D association: SKIPPED")
+    print(f"  Mask graph K: {K}")
+    print(f"  Mask graph tau: {tau}")
+    print(f"  Bbox percentile: {percentile}")
+    print(f"  Min fraction: {min_fraction}")
+
+    # Track overall timing
+    pipeline_start = time.time()
+    total_steps = 6
+    current_step = 0
+
+    try:
+        # Step 1: Run SAM
+        if not skip_sam:
+            current_step += 1
+            print_step_header(current_step, total_steps, "Run SAM Segmentation")
+            step_start = time.time()
+
+            run_sam_on_images(dataset_name=dataset_name)
+
+            print_step_complete(time.time() - step_start)
+        else:
+            print("\nSkipping Step 1: SAM Segmentation (using existing masks)")
+
+        # Step 2: Associate 2D-3D
+        if not skip_association:
+            current_step += 1
+            print_step_header(
+                current_step, total_steps, "Associate 2D Masks with 3D Points"
+            )
+            step_start = time.time()
+
+            associate_all_images(dataset_name=dataset_name)
+
+            print_step_complete(time.time() - step_start)
+        else:
+            print("\nSkipping Step 2: 2D-3D Association (using existing associations)")
+
+        # Step 3: Build mask graph
+        current_step += 1
+        print_step_header(current_step, total_steps, "Build Mask Connectivity Graph")
+        step_start = time.time()
+
+        build_mask_graph_cli(dataset_name=dataset_name, K=K, tau=tau)
+
+        print_step_complete(time.time() - step_start)
+
+        # Step 4: Compute bounding boxes
+        current_step += 1
+        print_step_header(current_step, total_steps, "Compute 3D Bounding Boxes")
+        step_start = time.time()
+
+        get_all_bbox_corners_cli(dataset_name=dataset_name, percentile=percentile)
+
+        print_step_complete(time.time() - step_start)
+
+        # Step 5: Project to 2D
+        current_step += 1
+        print_step_header(current_step, total_steps, "Project Bounding Boxes to Images")
+        step_start = time.time()
+
+        project_all_bboxes_cli(dataset_name=dataset_name, min_fraction=min_fraction)
+
+        print_step_complete(time.time() - step_start)
+
+        # Step 6: Crop images
+        current_step += 1
+        print_step_header(current_step, total_steps, "Crop Images")
+        step_start = time.time()
+
+        crop_all_images_cli(dataset_name=dataset_name)
+
+        print_step_complete(time.time() - step_start)
+
+        # Pipeline complete
+        total_time = time.time() - pipeline_start
+        print("\n" + "=" * 80)
+        print("PIPELINE COMPLETE")
+        print("=" * 80)
+        print(
+            f"\nTotal execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)"
+        )
+        print(f"\nResults saved to: {config.get('outputs_dir')}")
+        print("\nOutput structure:")
+        print("  ├── masks/              - SAM segmentation masks")
+        print("  ├── associations/       - 2D-3D point associations")
+        print("  ├── mask_graph.gpickle  - Mask connectivity graph")
+        print("  ├── connected_components.json")
+        print("  ├── bbox_corners.json   - 3D bounding box corners")
+        print("  ├── image_crop_coordinates.json")
+        print("  ├── crop_stats.json")
+        print("  └── crops/              - Cropped image regions")
+        print("      ├── component_0/")
+        print("      ├── component_1/")
+        print("      └── manifest.json")
+
+    except KeyboardInterrupt:
+        print("\n\nPipeline interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n\nPipeline failed at step {current_step}: {e}")
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run the complete scan-to-map pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -54,8 +207,18 @@ Pipeline Steps:
   6. Crop images based on projected coordinates
 
 Configuration:
-  All settings are read from segment3d/config.yaml
+  Dataset configurations are defined in segment3d/config.py
         """,
+    )
+
+    # Dataset selection
+    available_datasets = list_datasets()
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="Area2300",
+        choices=available_datasets,
+        help=f"Dataset to process (default: Area2300). Available: {', '.join(available_datasets)}",
     )
 
     # Pipeline parameters
@@ -104,139 +267,13 @@ Configuration:
     if args.min_fraction <= 0 or args.min_fraction > 1:
         parser.error("--min-fraction must be between 0 and 1")
 
-    # Load and display configuration
-    print("\n" + "=" * 80)
-    print("SCAN-TO-MAP PIPELINE")
-    print("=" * 80)
-
-    try:
-        config = load_config()
-        print("\nConfiguration loaded from: segment3d/config.yaml")
-        print(f"  Images directory: {config.get('images_dir')}")
-        print(f"  COLMAP model: {config.get('colmap_model_dir')}")
-        print(f"  SAM checkpoint: {config.get('sam_ckpt')}")
-        print(f"  Device: {config.get('device')}")
-        print(f"  Outputs directory: {config.get('outputs_dir')}")
-    except Exception as e:
-        print(f"\nError loading configuration: {e}")
-        sys.exit(1)
-
-    print("\nPipeline Parameters:")
-    if args.skip_sam:
-        print("  SAM segmentation: SKIPPED")
-    if args.skip_association:
-        print("  2D-3D association: SKIPPED")
-    print(f"  Mask graph K: {args.K}")
-    print(f"  Mask graph tau: {args.tau}")
-    print(f"  Bbox percentile: {args.percentile}")
-    print(f"  Min fraction: {args.min_fraction}")
-
-    # Track overall timing
-    pipeline_start = time.time()
-    total_steps = 6
-    current_step = 0
-
-    try:
-        # Step 1: Run SAM
-        if not args.skip_sam:
-            current_step += 1
-            print_step_header(current_step, total_steps, "Run SAM Segmentation")
-            step_start = time.time()
-
-            # SAM runner's main() uses sys.argv, so we need to clear it
-            old_argv = sys.argv
-            sys.argv = [sys.argv[0]]
-            try:
-                run_sam()
-            finally:
-                sys.argv = old_argv
-
-            print_step_complete(time.time() - step_start)
-        else:
-            print("\nSkipping Step 1: SAM Segmentation (using existing masks)")
-
-        # Step 2: Associate 2D-3D
-        if not args.skip_association:
-            current_step += 1
-            print_step_header(
-                current_step, total_steps, "Associate 2D Masks with 3D Points"
-            )
-            step_start = time.time()
-
-            associate_all_images()
-
-            print_step_complete(time.time() - step_start)
-        else:
-            print("\nSkipping Step 2: 2D-3D Association (using existing associations)")
-
-        # Step 3: Build mask graph
-        current_step += 1
-        print_step_header(current_step, total_steps, "Build Mask Connectivity Graph")
-        step_start = time.time()
-
-        build_mask_graph_cli(K=args.K, tau=args.tau)
-
-        print_step_complete(time.time() - step_start)
-
-        # Step 4: Compute bounding boxes
-        current_step += 1
-        print_step_header(current_step, total_steps, "Compute 3D Bounding Boxes")
-        step_start = time.time()
-
-        get_all_bbox_corners_cli(percentile=args.percentile)
-
-        print_step_complete(time.time() - step_start)
-
-        # Step 5: Project to 2D
-        current_step += 1
-        print_step_header(current_step, total_steps, "Project Bounding Boxes to Images")
-        step_start = time.time()
-
-        project_all_bboxes_cli(min_fraction=args.min_fraction)
-
-        print_step_complete(time.time() - step_start)
-
-        # Step 6: Crop images
-        current_step += 1
-        print_step_header(current_step, total_steps, "Crop Images")
-        step_start = time.time()
-
-        crop_all_images_cli()
-
-        print_step_complete(time.time() - step_start)
-
-        # Pipeline complete
-        total_time = time.time() - pipeline_start
-        print("\n" + "=" * 80)
-        print("PIPELINE COMPLETE")
-        print("=" * 80)
-        print(
-            f"\nTotal execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)"
-        )
-        print(f"\nResults saved to: {config.get('outputs_dir')}")
-        print("\nOutput structure:")
-        print("  ├── masks/              - SAM segmentation masks")
-        print("  ├── associations/       - 2D-3D point associations")
-        print("  ├── mask_graph.gpickle  - Mask connectivity graph")
-        print("  ├── connected_components.json")
-        print("  ├── bbox_corners.json   - 3D bounding box corners")
-        print("  ├── image_crop_coordinates.json")
-        print("  ├── crop_stats.json")
-        print("  └── crops/              - Cropped image regions")
-        print("      ├── component_0/")
-        print("      ├── component_1/")
-        print("      └── manifest.json")
-
-    except KeyboardInterrupt:
-        print("\n\nPipeline interrupted by user")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n\nPipeline failed at step {current_step}: {e}")
-        import traceback
-
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    # Run the pipeline with parsed arguments
+    run_pipeline(
+        dataset_name=args.dataset,
+        skip_sam=args.skip_sam,
+        skip_association=args.skip_association,
+        K=args.K,
+        tau=args.tau,
+        percentile=args.percentile,
+        min_fraction=args.min_fraction,
+    )

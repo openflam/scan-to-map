@@ -2,42 +2,40 @@
 
 from __future__ import annotations
 
+import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
-import yaml
-
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
-
-REQUIRED_KEYS = {
-    "images_dir",
-    "colmap_model_dir",
-    "sam_ckpt",
-    "masks_dir",
-    "associations_dir",
-    "outputs_dir",
-    "device",
-}
-
-_CREATABLE_DIR_KEYS = {"outputs_dir", "masks_dir", "associations_dir"}
+# Import the config module
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from config import get_config, REQUIRED_KEYS
 
 
-def load_config(config_path: str | Path = CONFIG_PATH) -> Dict[str, Any]:
-    """Load the YAML config file and validate required keys."""
-    path = Path(config_path).expanduser()
-    if not path.is_file():
-        raise FileNotFoundError(f"Config file not found: {path}")
+def load_config(dataset_name: str) -> Dict[str, Any]:
+    """
+    Load configuration for a dataset.
 
-    with path.open(encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
+    Args:
+        dataset_name: Name of the dataset (e.g., "Area2300"). Required.
 
-    missing = REQUIRED_KEYS.difference(data)
-    if missing:
-        missing_csv = ", ".join(sorted(missing))
-        raise KeyError(f"Config missing required keys: {missing_csv}")
+    Returns:
+        Configuration dictionary
 
-    data["_config_dir"] = path.parent
-    return data
+    Raises:
+        ValueError: If dataset_name is not provided or not recognized
+    """
+    # Check for dataset_name in environment variable if not provided as argument
+    if not dataset_name:
+        env_dataset = os.environ.get("SCAN_TO_MAP_DATASET")
+        if not env_dataset:
+            raise ValueError(
+                "dataset_name is required. Either pass it as an argument or set "
+                "the SCAN_TO_MAP_DATASET environment variable."
+            )
+        dataset_name = env_dataset
+
+    return get_config(dataset_name)
 
 
 def get_images_dir(config: Mapping[str, Any]) -> Path:
@@ -97,7 +95,7 @@ def _resolve_path(config: Mapping[str, Any], key: str) -> Path:
     if not isinstance(raw_value, str):
         raise TypeError(f"Config value for {key} must be a string path")
 
-    base_dir = Path(config.get("_config_dir", CONFIG_PATH.parent))
+    base_dir = Path(config.get("_config_dir", Path(__file__).resolve().parents[1]))
     path = Path(raw_value).expanduser()
     if not path.is_absolute():
         path = (base_dir / path).resolve()
@@ -105,7 +103,6 @@ def _resolve_path(config: Mapping[str, Any], key: str) -> Path:
 
 
 __all__ = [
-    "CONFIG_PATH",
     "REQUIRED_KEYS",
     "get_colmap_model_dir",
     "get_device",

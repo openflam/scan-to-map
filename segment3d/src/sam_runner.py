@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -18,14 +19,14 @@ from .io_paths import (
 )
 
 
-def run_sam_on_images(config_path: str | Path | None = None) -> None:
+def run_sam_on_images(dataset_name: str) -> None:
     """Run SAM on all images and save masks in COCO format.
 
     Args:
         config_path: Path to config file (uses default if None)
     """
     # Load configuration
-    config = load_config() if config_path is None else load_config(config_path)
+    config = load_config(dataset_name)
 
     images_dir = get_images_dir(config)
     masks_dir = get_masks_dir(config)
@@ -108,7 +109,14 @@ def run_sam_on_images(config_path: str | Path | None = None) -> None:
 
 def main() -> None:
     """Main entry point."""
-    run_sam_on_images()
+
+    parser = argparse.ArgumentParser(description="Run SAM on images")
+    parser.add_argument(
+        "--dataset-name", type=str, required=True, help="Name of the dataset to process"
+    )
+    args = parser.parse_args()
+
+    run_sam_on_images(dataset_name=args.dataset_name)
 
 
 if __name__ == "__main__":

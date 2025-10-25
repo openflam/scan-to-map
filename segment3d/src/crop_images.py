@@ -72,14 +72,14 @@ def crop_single_image(
     return True
 
 
-def crop_all_images_cli() -> None:
+def crop_all_images_cli(dataset_name: str) -> None:
     """
     Crop all images based on projected bounding box coordinates.
     """
     from .io_paths import load_config, get_images_dir, get_outputs_dir
 
     # Load configuration
-    config = load_config()
+    config = load_config(dataset_name)
 
     images_dir = get_images_dir(config)
     outputs_dir = get_outputs_dir(config)
@@ -204,10 +204,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Crop images based on projected 3D bounding boxes"
     )
+    parser.add_argument(
+        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
+    )
 
     args = parser.parse_args()
 
-    crop_all_images_cli()
+    crop_all_images_cli(args.dataset_name)
 
 
 if __name__ == "__main__":

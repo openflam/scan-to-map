@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Set
@@ -131,7 +132,7 @@ def load_masks_rle(path: Path) -> List[Dict[str, Any]]:
         raise ValueError(f"Unexpected masks data format in {path}")
 
 
-def associate_all_images() -> None:
+def associate_all_images(dataset_name: str) -> None:
     """
     Associate 2D masks with 3D points for all COLMAP images.
 
@@ -152,7 +153,7 @@ def associate_all_images() -> None:
     )
 
     # Load configuration
-    config = load_config()
+    config = load_config(dataset_name)
 
     images_dir = get_images_dir(config)
     masks_dir = get_masks_dir(config)
@@ -251,7 +252,22 @@ def associate_all_images() -> None:
 
 def main() -> None:
     """Main entry point for CLI."""
-    associate_all_images()
+    parser = argparse.ArgumentParser(description="Associate 2D masks with 3D points")
+    parser.add_argument(
+        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
+    )
+
+    args = parser.parse_args()
+
+    associate_all_images(args.dataset_name)
+    parser = argparse.ArgumentParser(description="Associate 2D masks with 3D points")
+    parser.add_argument(
+        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
+    )
+
+    args = parser.parse_args()
+
+    associate_all_images(args.dataset_name)
 
 
 if __name__ == "__main__":

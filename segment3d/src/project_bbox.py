@@ -180,18 +180,19 @@ def bbox_3d_to_2d(
     return result
 
 
-def project_all_bboxes_cli(min_fraction: float = 0.3) -> None:
+def project_all_bboxes_cli(dataset_name: str, min_fraction: float = 0.3) -> None:
     """
     Project all 3D bounding boxes onto images and save crop coordinates.
 
     Args:
+        dataset_name: Name of the dataset
         min_fraction: Minimum fraction of 3D points that must be visible in an image
     """
     import json
     from .io_paths import get_colmap_model_dir, get_outputs_dir, load_config
 
     # Load configuration
-    config = load_config()
+    config = load_config(dataset_name)
 
     outputs_dir = get_outputs_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
@@ -331,6 +332,12 @@ def main() -> None:
         description="Project 3D bounding boxes onto images"
     )
     parser.add_argument(
+        "--dataset-name",
+        type=str,
+        required=True,
+        help="Name of the dataset",
+    )
+    parser.add_argument(
         "--min-fraction",
         type=float,
         default=0.3,
@@ -342,7 +349,9 @@ def main() -> None:
     if args.min_fraction <= 0 or args.min_fraction > 1:
         parser.error("min-fraction must be between 0 and 1")
 
-    project_all_bboxes_cli(min_fraction=args.min_fraction)
+    project_all_bboxes_cli(
+        dataset_name=args.dataset_name, min_fraction=args.min_fraction
+    )
 
 
 if __name__ == "__main__":

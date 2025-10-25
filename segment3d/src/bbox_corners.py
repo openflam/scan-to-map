@@ -97,18 +97,19 @@ def get_bbox(
     }
 
 
-def get_all_bbox_corners_cli(percentile: float = 95.0) -> None:
+def get_all_bbox_corners_cli(dataset_name: str, percentile: float = 95.0) -> None:
     """
     Compute bounding box corners for all connected components.
 
     Args:
+        dataset_name: Name of the dataset
         percentile: Percentile threshold for outlier removal (default: 95.0)
     """
     import json
     from .io_paths import get_colmap_model_dir, get_outputs_dir, load_config
 
     # Load configuration
-    config = load_config()
+    config = load_config(dataset_name)
 
     outputs_dir = get_outputs_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
@@ -220,6 +221,12 @@ def main() -> None:
         description="Compute bounding box corners for all connected components"
     )
     parser.add_argument(
+        "--dataset-name",
+        type=str,
+        required=True,
+        help="Name of the dataset",
+    )
+    parser.add_argument(
         "--percentile",
         type=float,
         default=95.0,
@@ -231,7 +238,7 @@ def main() -> None:
     if args.percentile <= 0 or args.percentile > 100:
         parser.error("Percentile must be between 0 and 100")
 
-    get_all_bbox_corners_cli(percentile=args.percentile)
+    get_all_bbox_corners_cli(dataset_name=args.dataset_name, percentile=args.percentile)
 
 
 if __name__ == "__main__":
