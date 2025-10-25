@@ -6,7 +6,7 @@ indexed representations for images and 3D points.
 """
 
 import numpy as np
-from typing import Dict, Tuple, Any
+from typing import Dict, Tuple, Any, List
 from .utils.read_write_model import read_model
 
 
@@ -75,3 +75,27 @@ def index_point3d(points3D: Dict) -> Dict[int, Dict[str, Any]]:
         }
 
     return point3d_index
+
+
+def reverse_index_points3D(points3D: Dict) -> Dict[int, List[int]]:
+    """
+    Create a reverse index mapping 3D point IDs to the images they appear in.
+
+    Args:
+        points3D: Dictionary of point3d_id -> Point3D namedtuples from COLMAP
+
+    Returns:
+        Dictionary mapping point3d_id to list of image_ids where the point is visible
+    """
+    reverse_index = {}
+
+    for point3d_id, point3d in points3D.items():
+        # point3d.image_ids is an array of image IDs where this 3D point is observed
+        image_ids = (
+            point3d.image_ids.tolist()
+            if hasattr(point3d.image_ids, "tolist")
+            else list(point3d.image_ids)
+        )
+        reverse_index[point3d_id] = image_ids
+
+    return reverse_index
