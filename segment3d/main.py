@@ -18,9 +18,6 @@ import sys
 import time
 from pathlib import Path
 
-# Add parent directory to path to import src modules
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from src.sam_runner import main as run_sam
 from src.associate2d3d import associate_all_images
 from src.mask_graph import build_mask_graph_cli

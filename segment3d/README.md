@@ -10,7 +10,7 @@ This directory contains the main pipeline script.
 
 ```bash
 cd segment3d
-python scripts/main.py
+python main.py
 ```
 
 ### Options
@@ -30,22 +30,22 @@ python scripts/main.py
 
 Run the complete pipeline with default parameters:
 ```bash
-python scripts/main.py
+python main.py
 ```
 
 Run with custom parameters:
 ```bash
-python scripts/main.py --K 10 --tau 0.3 --percentile 90 --min-fraction 0.5
+python main.py --K 10 --tau 0.3 --percentile 90 --min-fraction 0.5
 ```
 
 Skip SAM if masks already exist:
 ```bash
-python scripts/main.py --skip-sam
+python main.py --skip-sam
 ```
 
 Skip SAM and associations:
 ```bash
-python scripts/main.py --skip-sam --skip-association
+python main.py --skip-sam --skip-association
 ```
 
 ### Pipeline Steps
