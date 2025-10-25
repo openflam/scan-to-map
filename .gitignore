@@ -2,6 +2,7 @@
 data
 checkpoints
 outputs
+outputs_old
 
 # Python cache files
 .pytest_cache
