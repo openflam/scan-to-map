@@ -22,7 +22,7 @@ from io_paths import (
     get_colmap_model_dir,
     get_device,
     get_images_dir,
-    get_labels_dir,
+    get_associations_dir,
     get_masks_dir,
     get_outputs_dir,
     get_sam_checkpoint,
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         colmap_dir = get_colmap_model_dir(config)
         sam_ckpt = get_sam_checkpoint(config)
         masks_dir = get_masks_dir(config)
-        labels_dir = get_labels_dir(config)
+        associations_dir = get_associations_dir(config)
         outputs_dir = get_outputs_dir(config)
     except Exception as exc:
         logger.error("Validation error: %s", exc)
@@ -67,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("colmap_model_dir: %s", colmap_dir)
     logger.info("sam_ckpt: %s", sam_ckpt)
     logger.info("masks_dir: %s", masks_dir)
-    logger.info("labels_dir: %s", labels_dir)
+    logger.info("associations_dir: %s", associations_dir)
     logger.info("outputs_dir: %s", outputs_dir)
     logger.info("device: %s", get_device(config))
 

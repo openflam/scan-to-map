@@ -14,12 +14,12 @@ REQUIRED_KEYS = {
     "colmap_model_dir",
     "sam_ckpt",
     "masks_dir",
-    "labels_dir",
+    "associations_dir",
     "outputs_dir",
     "device",
 }
 
-_CREATABLE_DIR_KEYS = {"outputs_dir", "masks_dir", "labels_dir"}
+_CREATABLE_DIR_KEYS = {"outputs_dir", "masks_dir", "associations_dir"}
 
 
 def load_config(config_path: str | Path = CONFIG_PATH) -> Dict[str, Any]:
@@ -59,8 +59,8 @@ def get_masks_dir(config: Mapping[str, Any]) -> Path:
     return _require_dir(config, "masks_dir", create=True)
 
 
-def get_labels_dir(config: Mapping[str, Any]) -> Path:
-    return _require_dir(config, "labels_dir", create=True)
+def get_associations_dir(config: Mapping[str, Any]) -> Path:
+    return _require_dir(config, "associations_dir", create=True)
 
 
 def get_outputs_dir(config: Mapping[str, Any]) -> Path:
@@ -110,7 +110,7 @@ __all__ = [
     "get_colmap_model_dir",
     "get_device",
     "get_images_dir",
-    "get_labels_dir",
+    "get_associations_dir",
     "get_masks_dir",
     "get_outputs_dir",
     "get_sam_checkpoint",

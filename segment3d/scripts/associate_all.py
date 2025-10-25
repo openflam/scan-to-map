@@ -12,7 +12,7 @@ from src.colmap_io import index_image_metadata, load_colmap_model
 from src.io_paths import (
     get_colmap_model_dir,
     get_images_dir,
-    get_labels_dir,
+    get_associations_dir,
     get_masks_dir,
     load_config,
 )
@@ -33,12 +33,12 @@ def associate_all_images() -> None:
 
     images_dir = get_images_dir(config)
     masks_dir = get_masks_dir(config)
-    labels_dir = get_labels_dir(config)
+    associations_dir = get_associations_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
 
     print(f"Images directory: {images_dir}")
     print(f"Masks directory: {masks_dir}")
-    print(f"Labels directory: {labels_dir}")
+    print(f"Associations directory: {associations_dir}")
     print(f"COLMAP model directory: {colmap_model_dir}")
 
     # Load COLMAP model
@@ -107,8 +107,8 @@ def associate_all_images() -> None:
             "W": W,
         }
 
-        # Save to labels directory
-        output_path = labels_dir / f"imageId_{image_id}.json"
+        # Save to associations directory
+        output_path = associations_dir / f"imageId_{image_id}.json"
         with output_path.open("w", encoding="utf-8") as f:
             json.dump(output_data, f, indent=2)
 
@@ -123,7 +123,7 @@ def associate_all_images() -> None:
     print(f"Processing complete!")
     print(f"Processed: {processed_count} images")
     print(f"Skipped: {skipped_count} images")
-    print(f"Results saved to: {labels_dir}")
+    print(f"Results saved to: {associations_dir}")
 
 
 def main() -> None:
