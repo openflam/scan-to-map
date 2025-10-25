@@ -1,1 +1,17 @@
+# Large files and directories to be ignored
 data
+checkpoints
+outputs
+
+# Python cache files
+.pytest_cache
+__pycache__
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VSCode settings
+.vscode
+
+# Ignore temporary files
+temp.ipynb

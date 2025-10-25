@@ -1,0 +1,8 @@
+images_dir: ../data/Area2300/ns_data/images
+colmap_model_dir: ../data/Area2300/colmap_known_poses/sparse/1
+sam_model_type: vit_h
+sam_ckpt: ../checkpoints/sam_vit_h_4b8939.pth
+masks_dir: ../outputs/masks
+labels_dir: ../outputs/labels
+outputs_dir: ../outputs
+device: cuda
