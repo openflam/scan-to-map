@@ -3,9 +3,11 @@ import { useState } from "react";
 
 interface SearchBarProps {
   onSearch: (searchTerm: string) => void;
+  showAutoTags: boolean;
+  onShowAutoTagsChange: (show: boolean) => void;
 }
 
-function SearchBar({ onSearch }: SearchBarProps) {
+function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
 
   const handleSearch = () => {
@@ -21,24 +23,34 @@ function SearchBar({ onSearch }: SearchBarProps) {
   };
 
   return (
-    <InputGroup className="mb-3">
-      <Form.Select style={{ maxWidth: "200px" }}>
-        <option disabled>Method</option>
-        <option value="conceptfusion">ConceptFusion</option>
-        <option value="3d-llm">3D-LLM</option>
-      </Form.Select>
+    <>
+      <InputGroup className="mb-3">
+        <Form.Select style={{ maxWidth: "200px" }}>
+          <option disabled>Method</option>
+          <option value="conceptfusion">ConceptFusion</option>
+          <option value="3d-llm">3D-LLM</option>
+        </Form.Select>
 
-      <FormControl
-        placeholder="Search..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        onKeyDown={handleKeyPress}
+        <FormControl
+          placeholder="Search..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          onKeyDown={handleKeyPress}
+        />
+
+        <Button variant="outline-primary" onClick={handleSearch}>
+          Search
+        </Button>
+      </InputGroup>
+
+      <Form.Check
+        type="checkbox"
+        label="Show Auto Tags"
+        checked={showAutoTags}
+        onChange={(e) => onShowAutoTagsChange(e.target.checked)}
+        className="mb-3"
       />
-
-      <Button variant="outline-primary" onClick={handleSearch}>
-        Search
-      </Button>
-    </InputGroup>
+    </>
   );
 }
 
