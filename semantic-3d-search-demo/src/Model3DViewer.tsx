@@ -55,7 +55,7 @@ function Model3DViewer(props: {
     // Create new bounding box if provided
     if (props.boundingBox) {
       console.log("Updating bounding box:", props.boundingBox);
-      createBoundingBoxMesh(props.boundingBox, sceneRef.current, Color3.Red(), 0.1);
+      createBoundingBoxMesh(props.boundingBox, sceneRef.current, Color3.Red(), 0.3);
 
       // Request a safe render through the viewer's engine
       // This avoids the WebGPU destroyed texture error
