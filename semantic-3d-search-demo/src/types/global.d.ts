@@ -10,6 +10,12 @@ export interface BoundingBox {
   z_max: number;
 }
 
+// Define SearchResult interface
+export interface SearchResult {
+  boundingBox: BoundingBox;
+  reason: string;
+}
+
 // Define custom attributes for babylon-viewer element
 interface HTML3DElementAttributes
   extends React.DetailedHTMLProps<
@@ -28,4 +34,4 @@ declare global {
   }
 }
 
-export {};
+export { };

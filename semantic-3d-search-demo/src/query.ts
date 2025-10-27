@@ -1,8 +1,8 @@
-import type { BoundingBox } from "./types/global";
+import type { SearchResult } from "./types/global";
 
 const SEARCH_SERVER_URL = "http://localhost:5000";
 
-export async function query(searchTerm: string): Promise<BoundingBox> {
+export async function query(searchTerm: string): Promise<SearchResult> {
   console.log("Querying for:", searchTerm);
 
   try {
@@ -12,10 +12,15 @@ export async function query(searchTerm: string): Promise<BoundingBox> {
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
     }
 
-    const boundingBox: BoundingBox = await response.json();
-    console.log("Received bounding box:", boundingBox);
+    const data = await response.json();
+    console.log("Received response:", data);
 
-    return boundingBox;
+    // Extract bounding box and reason from the response
+    // Server returns: {"bbox": {...}, "reason": "..."}
+    return {
+      boundingBox: data.bbox,
+      reason: data.reason
+    };
   } catch (error) {
     console.error("Error querying search server:", error);
     throw error;

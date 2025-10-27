@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 
 import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
+import SearchResult from "./SearchResult";
 import { query } from "./query";
 import type { BoundingBox } from "./types/global";
 
@@ -13,6 +14,9 @@ function App() {
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
   const [annotations, setAnnotations] = useState<string[]>([]);
+  const [searchResult, setSearchResult] = useState<string | undefined>(
+    undefined
+  );
 
   // Load bbox_corners.json on mount
   useEffect(() => {
@@ -44,7 +48,8 @@ function App() {
 
   const handleSearch = async (searchTerm: string) => {
     const result = await query(searchTerm);
-    setBoundingBox(result);
+    setBoundingBox(result.boundingBox);
+    setSearchResult(result.reason);
   };
 
   return (
@@ -64,6 +69,9 @@ function App() {
           showAutoTags={showAutoTags}
           annotations={annotations}
         />
+      </Row>
+      <Row>
+        <SearchResult result={searchResult} />
       </Row>
     </Container>
   );
