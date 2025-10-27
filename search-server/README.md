@@ -1,12 +1,17 @@
 # Search Server
 
-A Flask server that provides a search API for the semantic 3D search demo.
+A Flask server that provides a search API for the semantic 3D search demo. Uses OpenAI API to match search queries to 3D object components.
 
 ## Installation
 
 1. Install dependencies:
 ```bash
 pip install -r requirements.txt
+```
+
+2. Set your OpenAI API key:
+```bash
+export OPENAI_API_KEY='your-api-key-here'
 ```
 
 ## Running the Server
@@ -48,19 +53,14 @@ curl -X POST http://localhost:5000/search \
   -d '{"query": "printer"}'
 ```
 
-### GET /health
-Health check endpoint.
+## How It Works
 
-**Response:**
-```json
-{
-  "status": "ok"
-}
-```
+The search endpoint uses OpenAI's GPT-4o-mini model to:
+1. Analyze the search query
+2. Compare it against captions from all available 3D components
+3. Return the bounding box of the most relevant component
 
-## Testing
-
-For testing purposes, the `/search` endpoint currently returns the bounding box of the 3rd component from `/outputs/PrintersNoNeg/bbox_corners.json`, regardless of the query.
+The component captions are loaded from `/outputs/PrintersNoNeg/component_captions.json` and matched against the query using natural language understanding.
 
 ## CORS
 
