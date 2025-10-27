@@ -24,6 +24,7 @@ from src.mask_graph import build_mask_graph_cli
 from src.bbox_corners import get_all_bbox_corners_cli
 from src.project_bbox import project_all_bboxes_cli
 from src.crop_images import crop_all_images_cli
+from src.caption_images import caption_all_components_cli
 from src.io_paths import load_config
 from config import list_datasets
 import os
@@ -45,10 +46,14 @@ def run_pipeline(
     dataset_name: str,
     skip_sam: bool = False,
     skip_association: bool = False,
+    skip_caption: bool = False,
     K: int = 5,
     tau: float = 0.2,
     percentile: float = 95.0,
     min_fraction: float = 0.3,
+    caption_n_images: int = 5,
+    caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
+    caption_device: int = 0,
 ) -> None:
     """
     Run the complete pipeline.
@@ -57,10 +62,14 @@ def run_pipeline(
         dataset_name: Name of the dataset to process
         skip_sam: Skip SAM segmentation step
         skip_association: Skip 2D-3D association step
+        skip_caption: Skip VLM captioning step
         K: Number of nearest neighbors for mask graph
         tau: Jaccard similarity threshold for mask graph
         percentile: Percentile threshold for bbox outlier removal
         min_fraction: Minimum fraction of visible points for projection
+        caption_n_images: Number of top images to use for captioning
+        caption_model: VLM model to use for captioning
+        caption_device: GPU device ID for captioning
     """
     # Load and display configuration
     print("\n" + "=" * 80)
@@ -87,14 +96,20 @@ def run_pipeline(
         print("  SAM segmentation: SKIPPED")
     if skip_association:
         print("  2D-3D association: SKIPPED")
+    if skip_caption:
+        print("  VLM captioning: SKIPPED")
     print(f"  Mask graph K: {K}")
     print(f"  Mask graph tau: {tau}")
     print(f"  Bbox percentile: {percentile}")
     print(f"  Min fraction: {min_fraction}")
+    if not skip_caption:
+        print(f"  Caption model: {caption_model}")
+        print(f"  Caption n_images: {caption_n_images}")
+        print(f"  Caption device: {caption_device}")
 
     # Track overall timing
     pipeline_start = time.time()
-    total_steps = 6
+    total_steps = 7
     current_step = 0
 
     try:
@@ -160,6 +175,23 @@ def run_pipeline(
 
         print_step_complete(time.time() - step_start)
 
+        # Step 7: Caption components
+        if not skip_caption:
+            current_step += 1
+            print_step_header(current_step, total_steps, "Generate Captions with VLM")
+            step_start = time.time()
+
+            caption_all_components_cli(
+                dataset_name=dataset_name,
+                n_images=caption_n_images,
+                model=caption_model,
+                device=caption_device,
+            )
+
+            print_step_complete(time.time() - step_start)
+        else:
+            print("\nSkipping Step 7: VLM Captioning")
+
         # Pipeline complete
         total_time = time.time() - pipeline_start
         print("\n" + "=" * 80)
@@ -181,6 +213,7 @@ def run_pipeline(
         print("      ├── component_0/")
         print("      ├── component_1/")
         print("      └── manifest.json")
+        print("  └── component_captions.json - VLM-generated captions")
 
     except KeyboardInterrupt:
         print("\n\nPipeline interrupted by user")
@@ -205,6 +238,7 @@ Pipeline Steps:
   4. Compute 3D bounding boxes for each component
   5. Project 3D bounding boxes onto images
   6. Crop images based on projected coordinates
+  7. Generate captions for each component using VLM
 
 Configuration:
   Dataset configurations are defined in segment3d/config.py
@@ -233,6 +267,11 @@ Configuration:
         help="Skip 2D-3D association step (use existing associations)",
     )
     parser.add_argument(
+        "--skip-caption",
+        action="store_true",
+        help="Skip VLM captioning step",
+    )
+    parser.add_argument(
         "--K",
         type=int,
         default=5,
@@ -256,6 +295,24 @@ Configuration:
         default=0.3,
         help="Minimum fraction of visible points for projection (default: 0.3)",
     )
+    parser.add_argument(
+        "--caption-n-images",
+        type=int,
+        default=2,
+        help="Number of top images to use for captioning (default: 2)",
+    )
+    parser.add_argument(
+        "--caption-model",
+        type=str,
+        default="Qwen/Qwen2.5-VL-7B-Instruct",
+        help="VLM model to use for captioning (default: Qwen/Qwen2.5-VL-7B-Instruct)",
+    )
+    parser.add_argument(
+        "--caption-device",
+        type=int,
+        default=0,
+        help="GPU device ID for captioning (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -266,14 +323,20 @@ Configuration:
         parser.error("--percentile must be between 0 and 100")
     if args.min_fraction <= 0 or args.min_fraction > 1:
         parser.error("--min-fraction must be between 0 and 1")
+    if args.caption_n_images < 1:
+        parser.error("--caption-n-images must be at least 1")
 
     # Run the pipeline with parsed arguments
     run_pipeline(
         dataset_name=args.dataset,
         skip_sam=args.skip_sam,
         skip_association=args.skip_association,
+        skip_caption=args.skip_caption,
         K=args.K,
         tau=args.tau,
         percentile=args.percentile,
         min_fraction=args.min_fraction,
+        caption_n_images=args.caption_n_images,
+        caption_model=args.caption_model,
+        caption_device=args.caption_device,
     )
