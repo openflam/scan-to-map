@@ -12,22 +12,30 @@ function App() {
   );
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
+  const [annotations, setAnnotations] = useState<string[]>([]);
 
   // Load bbox_corners.json on mount
   useEffect(() => {
     fetch("/data/bbox_corners.json")
       .then((response) => response.json())
       .then((data) => {
-        // Extract bounding boxes from the JSON data
+        // Extract bounding boxes from the JSON data. 
+        // Swap axes as needed -- results of trial and error.
         const bboxes: BoundingBox[] = data.map((item: any) => ({
-          x_min: item.bbox.min[0],
-          y_min: item.bbox.min[1],
-          z_min: item.bbox.min[2],
-          x_max: item.bbox.max[0],
-          y_max: item.bbox.max[1],
-          z_max: item.bbox.max[2],
+          x_min: -item.bbox.min[1],
+          y_min: item.bbox.min[2],
+          z_min: item.bbox.min[0],
+          x_max: -item.bbox.max[1],
+          y_max: item.bbox.max[2],
+          z_max: item.bbox.max[0],
         }));
         setAutoTagBBoxes(bboxes);
+
+        // Extract annotations (connected_comp_id)
+        const annotationList: string[] = data.map((item: any) =>
+          item.connected_comp_id.toString()
+        );
+        setAnnotations(annotationList);
       })
       .catch((error) => {
         console.error("Error loading bbox_corners.json:", error);
@@ -54,6 +62,7 @@ function App() {
           boundingBox={boundingBox}
           autoTagBBoxes={autoTagBBoxes}
           showAutoTags={showAutoTags}
+          annotations={annotations}
         />
       </Row>
     </Container>

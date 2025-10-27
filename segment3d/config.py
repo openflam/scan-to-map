@@ -37,9 +37,8 @@ def get_config(dataset_name: str) -> Dict[str, Any]:
         "images_dir": data_dir / dataset_name / "ns_data" / "images",
         "colmap_model_dir": data_dir
         / dataset_name
-        / "colmap_known_poses"
-        / "sparse"
-        / "1",
+        / "hloc_data"
+        / "sfm_reconstruction",
         "sam_model_type": "vit_h",
         "sam_ckpt": checkpoints_dir / "sam_vit_h_4b8939.pth",
         "masks_dir": outputs_base / dataset_name / "masks",

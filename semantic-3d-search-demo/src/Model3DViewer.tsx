@@ -1,7 +1,7 @@
 // import "./App.css";
 import { useEffect, useRef } from "react";
 import { Viewer, CreateViewerForCanvas } from "@babylonjs/viewer";
-import { MeshBuilder, Color3, StandardMaterial } from "@babylonjs/core";
+import { MeshBuilder, Color3, StandardMaterial, DynamicTexture, Mesh } from "@babylonjs/core";
 import type { BoundingBox } from "./types/global";
 
 function Model3DViewer(props: {
@@ -9,6 +9,7 @@ function Model3DViewer(props: {
   boundingBox?: BoundingBox;
   autoTagBBoxes?: BoundingBox[];
   showAutoTags?: boolean;
+  annotations?: string[];
 }) {
   const canvasRef = useRef(null);
   const viewerRef = useRef<Viewer | null>(null);
@@ -83,7 +84,7 @@ function Model3DViewer(props: {
 
     // Remove existing auto tag bounding box meshes if they exist
     const existingAutoTagMeshes = sceneRef.current.meshes.filter(
-      (mesh: any) => mesh.name && mesh.name.startsWith("autoTagBox_")
+      (mesh: any) => mesh.name && (mesh.name.startsWith("autoTagBox_") || mesh.name.startsWith("autoTagLabel_"))
     );
     existingAutoTagMeshes.forEach((mesh: any) => mesh.dispose());
 
@@ -101,6 +102,12 @@ function Model3DViewer(props: {
           0.05,
           `autoTagBox_${index}`
         );
+
+        // Create label if annotation exists
+        if (props.annotations && props.annotations[index]) {
+          const label = props.annotations[index];
+          createTextLabel(bbox, sceneRef.current, label, `autoTagLabel_${index}`);
+        }
       });
 
       // Request a safe render through the viewer's engine
@@ -120,7 +127,7 @@ function Model3DViewer(props: {
         }
       }
     }
-  }, [props.autoTagBBoxes, props.showAutoTags]); // Re-run when auto tag boxes or visibility changes
+  }, [props.autoTagBBoxes, props.showAutoTags, props.annotations]); // Re-run when auto tag boxes or visibility changes
 
   return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 }
@@ -182,6 +189,62 @@ function createBoundingBoxMesh(
   }
 
   box.material = material;
+}
+
+// Function to create text label for bounding box
+function createTextLabel(
+  boundingBox: BoundingBox,
+  sceneRef: any,
+  text: string,
+  name: string = "textLabel"
+) {
+  const { x_min, y_min: _y_min, z_min, x_max, y_max, z_max } = boundingBox;
+
+  // Calculate center position (place label at top center of bounding box)
+  const centerX = (x_min + x_max) / 2;
+  const centerY = y_max + 0.1; // Top of the box
+  const centerZ = (z_min + z_max) / 2;
+
+  // Create a plane for the text
+  const plane = MeshBuilder.CreatePlane(name, { width: 0.2, height: 0.2 }, sceneRef);
+  plane.position.set(centerX, centerY, centerZ);
+
+  // Make the plane always face the camera
+  plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
+
+  // Create dynamic texture for text
+  const textureResolution = 512;
+  const texture = new DynamicTexture(
+    `${name}Texture`,
+    textureResolution,
+    sceneRef,
+    false
+  );
+
+  const ctx = texture.getContext() as CanvasRenderingContext2D;
+  const fontSize = 100;
+
+  // Clear and set background
+  ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+  ctx.fillRect(0, 0, textureResolution, textureResolution);
+
+  // Draw text
+  ctx.font = `bold ${fontSize}px Arial`;
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, textureResolution / 2, textureResolution / 2);
+
+  texture.update();
+
+  // Create material and apply texture
+  const material = new StandardMaterial(`${name}Material`, sceneRef);
+  material.diffuseTexture = texture;
+  material.emissiveTexture = texture;
+  material.opacityTexture = texture;
+  material.backFaceCulling = false;
+
+  plane.material = material;
 }
 
 export default Model3DViewer;
