@@ -12,7 +12,7 @@ export interface BoundingBox {
 
 // Define SearchResult interface
 export interface SearchResult {
-  boundingBox: BoundingBox;
+  boundingBox: BoundingBox[];
   reason: string;
 }
 

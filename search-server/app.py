@@ -20,7 +20,7 @@ CAPTIONS_DATA_PATH = (
     Path(__file__).parent
     / ".."
     / "outputs"
-    / "PrintersNoNeg"
+    / "ArenaLabSemanticNeg"
     / "component_captions.json"
 )
 
@@ -54,24 +54,27 @@ def search():
     if not query:
         return jsonify({"error": "No query provided"}), 400
 
-    # Find the most relevant component bounding box and reason using OpenAI
+    # Find the most relevant component bounding boxes and reason using OpenAI
     result_data = process_query(query, component_captions)
-    bbox = result_data["bbox"]
+    bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     reason = result_data["reason"]
 
-    # Transform the bounding box to match the coordinate system
+    # Transform each bounding box to match the coordinate system
     # used in Model3DViewer (as seen in App.tsx)
-    transformed_bbox = {
-        "x_min": -bbox["min"][1],
-        "y_min": bbox["min"][2],
-        "z_min": bbox["min"][0],
-        "x_max": -bbox["max"][1],
-        "y_max": bbox["max"][2],
-        "z_max": bbox["max"][0],
-    }
+    transformed_bboxes = []
+    for bbox in bboxes:
+        transformed_bbox = {
+            "x_min": -bbox["min"][1],
+            "y_min": bbox["min"][2],
+            "z_min": bbox["min"][0],
+            "x_max": -bbox["max"][1],
+            "y_max": bbox["max"][2],
+            "z_max": bbox["max"][0],
+        }
+        transformed_bboxes.append(transformed_bbox)
 
     result = {
-        "bbox": transformed_bbox,
+        "bbox": transformed_bboxes,
         "reason": reason,
     }
 

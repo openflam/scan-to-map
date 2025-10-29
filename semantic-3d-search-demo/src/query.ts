@@ -1,6 +1,6 @@
 import type { SearchResult } from "./types/global";
 
-const SEARCH_SERVER_URL = "http://localhost:5000";
+const SEARCH_SERVER_URL = "http://172.26.101.175:5000";
 
 export async function query(searchTerm: string): Promise<SearchResult> {
   console.log("Querying for:", searchTerm);
@@ -17,8 +17,11 @@ export async function query(searchTerm: string): Promise<SearchResult> {
 
     // Extract bounding box and reason from the response
     // Server returns: {"bbox": {...}, "reason": "..."}
+    // Wrap single bbox in array for consistency
+    const bboxArray = Array.isArray(data.bbox) ? data.bbox : [data.bbox];
+
     return {
-      boundingBox: data.bbox,
+      boundingBox: bboxArray,
       reason: data.reason
     };
   } catch (error) {

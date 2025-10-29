@@ -8,9 +8,7 @@ import { query } from "./query";
 import type { BoundingBox } from "./types/global";
 
 function App() {
-  const [boundingBox, setBoundingBox] = useState<BoundingBox | undefined>(
-    undefined
-  );
+  const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
   const [annotations, setAnnotations] = useState<string[]>([]);

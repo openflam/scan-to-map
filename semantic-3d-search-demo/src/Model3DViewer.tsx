@@ -6,7 +6,7 @@ import type { BoundingBox } from "./types/global";
 
 function Model3DViewer(props: {
   source: string | ArrayBufferView | File;
-  boundingBox?: BoundingBox;
+  boundingBox?: BoundingBox[];
   autoTagBBoxes?: BoundingBox[];
   showAutoTags?: boolean;
   annotations?: string[];
@@ -42,20 +42,19 @@ function Model3DViewer(props: {
     if (!sceneRef.current || !viewerRef.current) return;
 
     // Remove existing bounding box meshes if they exist
-    const existingBox = sceneRef.current.getMeshByName("boundingBox");
-    const existingEdges = sceneRef.current.getMeshByName("boundingBoxEdges");
+    const existingBBoxMeshes = sceneRef.current.meshes.filter(
+      (mesh: any) => mesh.name && (mesh.name.startsWith("boundingBox") || mesh.name === "boundingBoxEdges")
+    );
+    existingBBoxMeshes.forEach((mesh: any) => mesh.dispose());
 
-    if (existingBox) {
-      existingBox.dispose();
-    }
-    if (existingEdges) {
-      existingEdges.dispose();
-    }
+    // Create new bounding box(es) if provided
+    if (props.boundingBox && props.boundingBox.length > 0) {
+      console.log("Updating bounding box(es):", props.boundingBox.length);
 
-    // Create new bounding box if provided
-    if (props.boundingBox) {
-      console.log("Updating bounding box:", props.boundingBox);
-      createBoundingBoxMesh(props.boundingBox, sceneRef.current, Color3.Red(), 0.3);
+      props.boundingBox.forEach((bbox, index) => {
+        const name = props.boundingBox!.length > 1 ? `boundingBox_${index}` : "boundingBox";
+        createBoundingBoxMesh(bbox, sceneRef.current, Color3.Red(), 0.3, name);
+      });
 
       // Request a safe render through the viewer's engine
       // This avoids the WebGPU destroyed texture error
