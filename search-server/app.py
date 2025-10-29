@@ -1,16 +1,30 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
+import sys
 from pathlib import Path
 from process_query import process_query
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+# Get dataset name from command line argument
+if len(sys.argv) < 2:
+    print("Usage: python app.py <dataset_name>")
+    print("Example: python app.py ArenaLabSemanticNeg")
+    sys.exit(1)
+
+DATASET_NAME = sys.argv[1]
+print(f"Loading data for dataset: {DATASET_NAME}")
+
 # Load bbox_corners.json on startup
 BBOX_DATA_PATH = (
-    Path(__file__).parent / ".." / "outputs" / "PrintersNoNeg" / "bbox_corners.json"
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "bbox_corners.json"
 )
+
+if not BBOX_DATA_PATH.exists():
+    print(f"Error: bbox_corners.json not found at {BBOX_DATA_PATH}")
+    sys.exit(1)
 
 with open(BBOX_DATA_PATH, "r") as f:
     bbox_data = json.load(f)
@@ -20,9 +34,13 @@ CAPTIONS_DATA_PATH = (
     Path(__file__).parent
     / ".."
     / "outputs"
-    / "ArenaLabSemanticNeg"
+    / DATASET_NAME
     / "component_captions.json"
 )
+
+if not CAPTIONS_DATA_PATH.exists():
+    print(f"Error: component_captions.json not found at {CAPTIONS_DATA_PATH}")
+    sys.exit(1)
 
 with open(CAPTIONS_DATA_PATH, "r") as f:
     captions_list = json.load(f)
