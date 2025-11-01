@@ -11,7 +11,7 @@ from .colmap_io import load_colmap_model
 
 
 def get_bbox(
-    point3D_ids: List[int], colmap_model_dir: str | Path, percentile: float = 95.0
+    point3D_ids: List[int], colmap_model: any, percentile: float = 95.0
 ) -> Dict[str, Any]:
     """
     Compute bounding box corners for a set of 3D point IDs.
@@ -35,7 +35,7 @@ def get_bbox(
         - "num_filtered": int - Number of points filtered out
     """
     # Load COLMAP model
-    cameras, images, points3D = load_colmap_model(str(colmap_model_dir))
+    cameras, images, points3D = colmap_model
 
     # Collect 3D coordinates for valid point IDs
     coords_list = []
@@ -131,6 +131,10 @@ def get_all_bbox_corners_cli(dataset_name: str, percentile: float = 95.0) -> Non
         connected_components = json.load(f)
 
     print(f"Found {len(connected_components)} connected components")
+    
+    # Load COLMAP model
+    print("\nLoading COLMAP model...")
+    colmap_model = load_colmap_model(colmap_model_dir)
 
     # Compute bounding boxes for each component
     bbox_results = []
@@ -142,7 +146,7 @@ def get_all_bbox_corners_cli(dataset_name: str, percentile: float = 95.0) -> Non
         print(f"\nProcessing component {comp_id} ({len(point3D_ids)} points)...")
 
         try:
-            bbox_info = get_bbox(point3D_ids, colmap_model_dir, percentile=percentile)
+            bbox_info = get_bbox(point3D_ids, colmap_model, percentile=percentile)
 
             # Convert numpy arrays to lists for JSON serialization
             bbox_result = {

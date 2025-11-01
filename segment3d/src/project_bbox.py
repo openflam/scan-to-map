@@ -83,7 +83,7 @@ def project_point_to_image(point_3d: np.ndarray, image, camera) -> np.ndarray | 
 def bbox_3d_to_2d(
     bbox_corners_3d: np.ndarray,
     set_of_point3DIds: List[int],
-    colmap_model_dir: str | Path,
+    colmap_model: any,
     min_fraction: float = 0.3,
 ) -> Dict[str, Any]:
     """
@@ -109,7 +109,7 @@ def bbox_3d_to_2d(
         }
     """
     # Load COLMAP model
-    cameras, images, points3D = load_colmap_model(str(colmap_model_dir))
+    cameras, images, points3D = colmap_model
 
     # Create reverse index
     point_to_images = reverse_index_points3D(points3D)
@@ -201,6 +201,10 @@ def project_all_bboxes_cli(dataset_name: str, min_fraction: float = 0.3) -> None
     print(f"COLMAP model directory: {colmap_model_dir}")
     print(f"Minimum fraction threshold: {min_fraction}")
 
+    # Load COLMAP model
+    print(f"\nLoading COLMAP model from: {colmap_model_dir}")
+    colmap_model = load_colmap_model(colmap_model_dir)
+
     # Load connected components
     components_path = outputs_dir / "connected_components.json"
     if not components_path.exists():
@@ -254,7 +258,7 @@ def project_all_bboxes_cli(dataset_name: str, min_fraction: float = 0.3) -> None
             image_projections = bbox_3d_to_2d(
                 bbox_corners_3d,
                 point3D_ids,
-                colmap_model_dir,
+                colmap_model,
                 min_fraction=min_fraction,
             )
 

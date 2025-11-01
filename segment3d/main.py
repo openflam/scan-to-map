@@ -14,6 +14,7 @@ This script orchestrates the complete scan-to-map pipeline:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -49,6 +50,7 @@ def run_pipeline(
     skip_caption: bool = False,
     K: int = 5,
     tau: float = 0.2,
+    min_points_in_3D_segment: int = 100,
     percentile: float = 95.0,
     min_fraction: float = 0.3,
     caption_n_images: int = 5,
@@ -112,6 +114,28 @@ def run_pipeline(
     total_steps = 7
     current_step = 0
 
+    # Dictionary to store runtime statistics
+    runtime_stats = {
+        "dataset_name": dataset_name,
+        "pipeline_start_time": time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(pipeline_start)
+        ),
+        "steps": {},
+        "parameters": {
+            "K": K,
+            "tau": tau,
+            "min_points_in_3D_segment": min_points_in_3D_segment,
+            "percentile": percentile,
+            "min_fraction": min_fraction,
+            "caption_n_images": caption_n_images,
+            "caption_model": caption_model,
+            "caption_device": caption_device,
+            "skip_sam": skip_sam,
+            "skip_association": skip_association,
+            "skip_caption": skip_caption,
+        },
+    }
+
     try:
         # Step 1: Run SAM
         if not skip_sam:
@@ -121,9 +145,18 @@ def run_pipeline(
 
             run_sam_on_images(dataset_name=dataset_name)
 
-            print_step_complete(time.time() - step_start)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["1_sam_segmentation"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
         else:
             print("\nSkipping Step 1: SAM Segmentation (using existing masks)")
+            runtime_stats["steps"]["1_sam_segmentation"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
         # Step 2: Associate 2D-3D
         if not skip_association:
@@ -135,18 +168,37 @@ def run_pipeline(
 
             associate_all_images(dataset_name=dataset_name)
 
-            print_step_complete(time.time() - step_start)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["2_associate_2d_3d"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
         else:
             print("\nSkipping Step 2: 2D-3D Association (using existing associations)")
+            runtime_stats["steps"]["2_associate_2d_3d"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
         # Step 3: Build mask graph
         current_step += 1
         print_step_header(current_step, total_steps, "Build Mask Connectivity Graph")
         step_start = time.time()
 
-        build_mask_graph_cli(dataset_name=dataset_name, K=K, tau=tau)
+        build_mask_graph_cli(
+            dataset_name=dataset_name,
+            K=K,
+            tau=tau,
+            min_points_in_3D_segment=min_points_in_3D_segment,
+        )
 
-        print_step_complete(time.time() - step_start)
+        step_time = time.time() - step_start
+        runtime_stats["steps"]["3_build_mask_graph"] = {
+            "duration_seconds": step_time,
+            "status": "completed",
+        }
+        print_step_complete(step_time)
 
         # Step 4: Compute bounding boxes
         current_step += 1
@@ -155,7 +207,12 @@ def run_pipeline(
 
         get_all_bbox_corners_cli(dataset_name=dataset_name, percentile=percentile)
 
-        print_step_complete(time.time() - step_start)
+        step_time = time.time() - step_start
+        runtime_stats["steps"]["4_compute_bboxes"] = {
+            "duration_seconds": step_time,
+            "status": "completed",
+        }
+        print_step_complete(step_time)
 
         # Step 5: Project to 2D
         current_step += 1
@@ -164,7 +221,12 @@ def run_pipeline(
 
         project_all_bboxes_cli(dataset_name=dataset_name, min_fraction=min_fraction)
 
-        print_step_complete(time.time() - step_start)
+        step_time = time.time() - step_start
+        runtime_stats["steps"]["5_project_bboxes"] = {
+            "duration_seconds": step_time,
+            "status": "completed",
+        }
+        print_step_complete(step_time)
 
         # Step 6: Crop images
         current_step += 1
@@ -173,7 +235,12 @@ def run_pipeline(
 
         crop_all_images_cli(dataset_name=dataset_name)
 
-        print_step_complete(time.time() - step_start)
+        step_time = time.time() - step_start
+        runtime_stats["steps"]["6_crop_images"] = {
+            "duration_seconds": step_time,
+            "status": "completed",
+        }
+        print_step_complete(step_time)
 
         # Step 7: Caption components
         if not skip_caption:
@@ -188,12 +255,35 @@ def run_pipeline(
                 device=caption_device,
             )
 
-            print_step_complete(time.time() - step_start)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["7_caption_components"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
         else:
             print("\nSkipping Step 7: VLM Captioning")
+            runtime_stats["steps"]["7_caption_components"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
         # Pipeline complete
         total_time = time.time() - pipeline_start
+
+        # Add total time to runtime stats
+        runtime_stats["total_duration_seconds"] = total_time
+        runtime_stats["total_duration_minutes"] = total_time / 60
+        runtime_stats["pipeline_end_time"] = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime()
+        )
+
+        # Save runtime statistics to file
+        outputs_dir = Path(config.get("outputs_dir"))
+        runtime_stats_path = outputs_dir / "runtime_stats.json"
+        with runtime_stats_path.open("w", encoding="utf-8") as f:
+            json.dump(runtime_stats, f, indent=2)
+
         print("\n" + "=" * 80)
         print("PIPELINE COMPLETE")
         print("=" * 80)
@@ -201,18 +291,21 @@ def run_pipeline(
             f"\nTotal execution time: {total_time:.2f} seconds ({total_time/60:.2f} minutes)"
         )
         print(f"\nResults saved to: {config.get('outputs_dir')}")
+        print(f"Runtime statistics saved to: {runtime_stats_path}")
         print("\nOutput structure:")
         print("  ├── masks/              - SAM segmentation masks")
+        print("  ├── masks_images/       - SAM visualization images")
         print("  ├── associations/       - 2D-3D point associations")
         print("  ├── mask_graph.gpickle  - Mask connectivity graph")
         print("  ├── connected_components.json")
         print("  ├── bbox_corners.json   - 3D bounding box corners")
         print("  ├── image_crop_coordinates.json")
         print("  ├── crop_stats.json")
-        print("  └── crops/              - Cropped image regions")
-        print("      ├── component_0/")
-        print("      ├── component_1/")
-        print("      └── manifest.json")
+        print("  ├── runtime_stats.json  - Pipeline execution times")
+        print("  ├── crops/              - Cropped image regions")
+        print("  │   ├── component_0/")
+        print("  │   ├── component_1/")
+        print("  │   └── manifest.json")
         print("  └── component_captions.json - VLM-generated captions")
 
     except KeyboardInterrupt:
@@ -250,9 +343,9 @@ Configuration:
     parser.add_argument(
         "--dataset",
         type=str,
-        default="Area2300",
+        required=True,
         choices=available_datasets,
-        help=f"Dataset to process (default: Area2300). Available: {', '.join(available_datasets)}",
+        help=f"Dataset to process (required). Available: {', '.join(available_datasets)}",
     )
 
     # Pipeline parameters
@@ -282,6 +375,12 @@ Configuration:
         type=float,
         default=0.2,
         help="Jaccard similarity threshold for mask graph (default: 0.2)",
+    )
+    parser.add_argument(
+        "--min-points-in-3D-segment",
+        type=int,
+        default=100,
+        help="Minimum points in 3D segment for mask graph (default: 100)",
     )
     parser.add_argument(
         "--percentile",
@@ -334,6 +433,7 @@ Configuration:
         skip_caption=args.skip_caption,
         K=args.K,
         tau=args.tau,
+        min_points_in_3D_segment=args.min_points_in_3D_segment,
         percentile=args.percentile,
         min_fraction=args.min_fraction,
         caption_n_images=args.caption_n_images,

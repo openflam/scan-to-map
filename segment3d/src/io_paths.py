@@ -57,6 +57,10 @@ def get_masks_dir(config: Mapping[str, Any]) -> Path:
     return _require_dir(config, "masks_dir", create=True)
 
 
+def get_masks_images_dir(config: Mapping[str, Any]) -> Path:
+    return _require_dir(config, "masks_images_dir", create=True)
+
+
 def get_associations_dir(config: Mapping[str, Any]) -> Path:
     return _require_dir(config, "associations_dir", create=True)
 
@@ -109,6 +113,7 @@ __all__ = [
     "get_images_dir",
     "get_associations_dir",
     "get_masks_dir",
+    "get_masks_images_dir",
     "get_outputs_dir",
     "get_sam_checkpoint",
     "get_sam_model_type",
