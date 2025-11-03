@@ -185,11 +185,11 @@ def caption_components_batch_qwen(
 
 def caption_all_components_cli(
     dataset_name: str,
-    n_images: int = 5,
+    n_images: int = 1,
     model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     device: int = 0,
     max_components: Optional[int] = None,
-    batch_size: int = 4,
+    batch_size: int = 16,
 ) -> None:
     """
     Caption all components by reading manifest.json and bbox_corners.json.

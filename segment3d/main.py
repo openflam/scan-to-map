@@ -383,8 +383,8 @@ Configuration:
     parser.add_argument(
         "--min-points-in-3D-segment",
         type=int,
-        default=100,
-        help="Minimum points in 3D segment for mask graph (default: 100)",
+        default=5,
+        help="Minimum points in 3D segment for mask graph (default: 5)",
     )
     parser.add_argument(
         "--percentile",
@@ -401,8 +401,8 @@ Configuration:
     parser.add_argument(
         "--caption-n-images",
         type=int,
-        default=2,
-        help="Number of top images to use for captioning (default: 2)",
+        default=1,
+        help="Number of top images to use for captioning (default: 1)",
     )
     parser.add_argument(
         "--caption-model",
@@ -419,8 +419,8 @@ Configuration:
     parser.add_argument(
         "--caption-batch-size",
         type=int,
-        default=4,
-        help="Batch size for captioning inference (default: 4)",
+        default=16,
+        help="Batch size for captioning inference (default: 16)",
     )
 
     args = parser.parse_args()
