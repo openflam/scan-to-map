@@ -42,20 +42,27 @@ def prepare_component_messages(
     component_id: str | int,
     top_images: List[Dict[str, Any]],
     crops_dir: Path,
-) -> tuple[List[str], Optional[List[Dict]]]:
+    processor: Any,
+) -> tuple[List[str], Optional[Dict]]:
     """
-    Prepare messages for a component without calling the model.
+    Prepare messages for a component in vLLM format using AutoProcessor.
 
     Args:
         component_id: ID of the component
         top_images: List of top crop information from get_top_images
         crops_dir: Directory containing the cropped images
+        processor: HuggingFace AutoProcessor instance
 
     Returns:
-        Tuple of (image_paths, messages) or ([], None) if no valid images
+        Tuple of (image_paths, vllm_input) or ([], None) if no valid images
+        vllm_input is a dict with 'prompt' and 'multi_modal_data' keys
     """
+    from PIL import Image
+
     # Prepare image paths from crop filenames
     image_paths = []
+    pil_images = []
+
     for crop_info in top_images:
         crop_filename = crop_info["crop_filename"]
         image_path = crops_dir / f"component_{component_id}" / crop_filename
@@ -65,72 +72,83 @@ def prepare_component_messages(
             continue
 
         image_paths.append(str(image_path))
+        # Load image as PIL Image
+        pil_images.append(Image.open(image_path))
 
     if not image_paths:
         return [], None
 
-    # Create the prompt
-    # prompt_text = (
-    #     "These images show different views of the same object or region in a 3D scene. "
-    #     "Analyze all the images together and provide a concise, descriptive caption "
-    #     "that captures what this object or region is. Focus on:\n"
-    #     "1. What the main object/region is\n"
-    #     "2. Its key visual characteristics (color, shape, texture)\n"
-    #     "3. Any notable features or context\n\n"
-    #     "Keep the caption clear and factual, suitable for 3D semantic search."
-    # )
-    prompt_text = (
-        "Caption images. Focus on:\n"
-        "The main object,\n"
-        "Its key visual characteristics (color, shape, texture)\n"
-        "Any notable features or context\n\n"
-        "Keep the caption clear and suitable for 3D semantic search."
+    # Create messages in the format expected by AutoProcessor
+    question = (
+        "These images show different views of the same object or region in a 3D scene. "
+        "Analyze all the images together and provide a concise, descriptive caption "
+        "that captures what this object or region is. Focus on:\n"
+        "1. What the main object/region is\n"
+        "2. Its key visual characteristics (color, shape, texture)\n"
+        "3. Any notable features or context\n\n"
+        "Keep the caption clear and factual, suitable for 3D semantic search."
     )
 
-    # Build messages with images and text prompt
+    # Build placeholders for each image
+    placeholders = [{"type": "image", "image": img} for img in pil_images]
+
     messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
         {
             "role": "user",
-            "content": (
-                [{"type": "image", "image": path} for path in image_paths]
-                + [{"type": "text", "text": prompt_text}]
-            ),
+            "content": [
+                *placeholders,
+                {"type": "text", "text": question},
+            ],
         },
     ]
 
-    return image_paths, messages
+    # Use AutoProcessor to format the prompt
+    prompt = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
+
+    # Build vLLM input format with proper structure
+    vllm_input = {
+        "prompt": prompt,
+        "multi_modal_data": {"image": pil_images},
+    }
+
+    return image_paths, vllm_input
 
 
-def caption_components_batch_qwen(
+def caption_components_batch_vllm(
     batch_data: List[tuple[str | int, List[Dict[str, Any]]]],
     crops_dir: Path,
-    pipe: Any,
+    llm: Any,
+    processor: Any,
     model: str,
 ) -> List[tuple[str | int, str, List[str]]]:
     """
-    Generate captions for multiple components in batch using HuggingFace Qwen model.
+    Generate captions for multiple components in batch using vLLM.
 
     Args:
         batch_data: List of (component_id, top_images) tuples
         crops_dir: Directory containing the cropped images
-        pipe: HuggingFace pipeline for image-text-to-text
-        model: Model name (default: "Qwen/Qwen2.5-VL-7B-Instruct")
+        llm: vLLM LLM instance
+        processor: HuggingFace AutoProcessor instance
+        model: Model name
 
     Returns:
         List of (component_id, caption, image_paths) tuples
     """
     results = []
-    batch_messages = []
+    vllm_inputs = []
     batch_component_ids = []
     batch_image_paths = []
 
-    # Prepare all messages
+    # Prepare all messages (already in vLLM format from prepare_component_messages)
     for component_id, top_images in batch_data:
-        image_paths, messages = prepare_component_messages(
-            component_id, top_images, crops_dir
+        image_paths, vllm_input = prepare_component_messages(
+            component_id, top_images, crops_dir, processor
         )
 
-        if messages is None:
+        if vllm_input is None:
             # No valid images for this component
             results.append(
                 (
@@ -140,27 +158,33 @@ def caption_components_batch_qwen(
                 )
             )
         else:
-            batch_messages.append(messages)
+            vllm_inputs.append(vllm_input)
             batch_component_ids.append(component_id)
             batch_image_paths.append(image_paths)
 
-    # Process batch
-    if batch_messages:
+    # Process batch with vLLM
+    if vllm_inputs:
         try:
-            # Call pipeline with batch of messages
-            responses = pipe(
-                text=batch_messages,
-                max_new_tokens=300,
-                return_full_text=False,
-                batch_size=len(batch_messages),
-                do_sample=False,  # Ensure deterministic output
+            from vllm import SamplingParams
+
+            # Create SamplingParams object
+            sampling_params = SamplingParams(
+                max_tokens=300,
+                temperature=0.0,  # Deterministic output
             )
 
-            # Extract captions from responses
-            for component_id, response, image_paths in zip(
-                batch_component_ids, responses, batch_image_paths
+            # Generate captions in batch
+            outputs = llm.generate(
+                vllm_inputs,
+                sampling_params=sampling_params,
+            )
+
+            # Extract captions from outputs
+            for component_id, output, image_paths in zip(
+                batch_component_ids, outputs, batch_image_paths
             ):
-                caption = response[0]["generated_text"].strip()
+                caption = output.outputs[0].text.strip()
+
                 # Qwen/Qwen2.5-VL-7B-Instruct generated "addCriterion" for some reason.
                 # Just remove that if it appears.
                 if model == "Qwen/Qwen2.5-VL-7B-Instruct":
@@ -168,10 +192,11 @@ def caption_components_batch_qwen(
                     caption = caption.replace("addCriterion\n", "").strip()
                     caption = caption.replace("addCriterion", "").strip()
                     caption = caption.strip('"\\"')
+
                 results.append((component_id, caption, image_paths))
 
         except Exception as e:
-            print(f"  Error calling Qwen model for batch: {e}")
+            print(f"  Error calling vLLM for batch: {e}")
             # Add error results for all components in batch
             for component_id, image_paths in zip(
                 batch_component_ids, batch_image_paths
@@ -189,7 +214,7 @@ def caption_all_components_cli(
     model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     device: int = 0,
     max_components: Optional[int] = None,
-    batch_size: int = 16,
+    batch_size: int = 1024,
 ) -> None:
     """
     Caption all components by reading manifest.json and bbox_corners.json.
@@ -206,7 +231,7 @@ def caption_all_components_cli(
     """
     import os
     import torch
-    from transformers import pipeline
+    from vllm import LLM
     from .io_paths import load_config, get_outputs_dir
 
     import time as time_module
@@ -224,13 +249,21 @@ def caption_all_components_cli(
     print(f"Images per component: {n_images}")
     print(f"Batch size: {batch_size}")
 
-    # Initialize the pipeline
-    print(f"\nInitializing {model}...")
-    pipe = pipeline(
-        task="image-text-to-text",
+    # Initialize AutoProcessor
+    print(f"\nInitializing AutoProcessor for {model}...")
+    from transformers import AutoProcessor
+
+    processor = AutoProcessor.from_pretrained(model)
+    print("Processor loaded successfully!")
+
+    # Initialize vLLM
+    print(f"\nInitializing vLLM with {model}...")
+    llm = LLM(
         model=model,
-        device=device,
-        dtype=torch.bfloat16,
+        dtype="bfloat16",
+        max_model_len=4096,
+        limit_mm_per_prompt={"image": 10},  # Allow up to 10 images per prompt
+        gpu_memory_utilization=0.9,
     )
     print("Model loaded successfully!")
 
@@ -293,8 +326,8 @@ def caption_all_components_cli(
 
         # Process batch
         try:
-            batch_results = caption_components_batch_qwen(
-                batch_data, crops_dir, pipe, model
+            batch_results = caption_components_batch_vllm(
+                batch_data, crops_dir, llm, processor, model
             )
 
             # Process results

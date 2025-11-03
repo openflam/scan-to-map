@@ -419,8 +419,8 @@ Configuration:
     parser.add_argument(
         "--caption-batch-size",
         type=int,
-        default=16,
-        help="Batch size for captioning inference (default: 16)",
+        default=1024,
+        help="Batch size for captioning inference (default: 1024)",
     )
 
     args = parser.parse_args()
