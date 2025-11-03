@@ -269,7 +269,11 @@ def build_mask_graph_cli(
 
     # Save summary statistics
     stats = {
-        "parameters": {"K": K, "tau": tau},
+        "parameters": {
+            "K": K,
+            "tau": tau,
+            "min_points_in_3D_segment": min_points_in_3D_segment,
+        },
         "nodes": {"total": total_nodes, "non_empty": non_empty_nodes},
         "edges": {"total": G.number_of_edges()},
         "point_associations": {

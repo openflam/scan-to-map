@@ -240,11 +240,13 @@ def project_all_bboxes_cli(dataset_name: str, min_fraction: float = 0.3) -> None
     # Project each component's bounding box
     all_image_crops = {}
 
-    for component in connected_components:
+    for idx, component in enumerate(connected_components):
         comp_id = component["connected_comp_id"]
         point3D_ids = component["set_of_point3DIds"]
 
-        print(f"\nProcessing component {comp_id} ({len(point3D_ids)} points)...")
+        print(
+            f"\n[{idx}/{len(connected_components)}] Processing component {comp_id} ({len(point3D_ids)} points)..."
+        )
 
         # Get bbox corners for this component
         if comp_id not in bbox_lookup:

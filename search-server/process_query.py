@@ -2,13 +2,14 @@ import os
 from openai import OpenAI
 
 
-def process_query(query: str, component_captions: dict) -> dict:
+def process_query(query: str, component_captions: dict, bbox_lookup: dict) -> dict:
     """
     Process a search query and return the bounding boxes of the most relevant components.
 
     Args:
         query: The search query string
-        component_captions: Dictionary keyed by component ID with captions and bbox stored
+        component_captions: Dictionary keyed by component ID with captions
+        bbox_lookup: Dictionary keyed by component ID with bbox data
 
     Returns:
         A dictionary with "bbox" (list of bounding boxes) and "reason" (explanation for the choice)
@@ -82,8 +83,8 @@ If multiple components match, include all of them. If no component matches well,
         invalid_ids = []
 
         for component_id in component_ids:
-            if component_id in component_captions:
-                valid_bboxes.append(component_captions[component_id]["bbox"])
+            if component_id in component_captions and component_id in bbox_lookup:
+                valid_bboxes.append(bbox_lookup[component_id])
             else:
                 invalid_ids.append(component_id)
 
@@ -91,7 +92,11 @@ If multiple components match, include all of them. If no component matches well,
         if not valid_bboxes:
             print(f"Warning: No valid component IDs found. Using first component.")
             first_component_id = list(component_captions.keys())[0]
-            valid_bboxes = [component_captions[first_component_id]["bbox"]]
+            if first_component_id in bbox_lookup:
+                valid_bboxes = [bbox_lookup[first_component_id]]
+            else:
+                # Fallback to first bbox if component_id doesn't match
+                valid_bboxes = [list(bbox_lookup.values())[0]]
             reason = "Fallback: Using first available component due to invalid IDs."
         elif invalid_ids:
             print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
@@ -103,7 +108,12 @@ If multiple components match, include all of them. If no component matches well,
         print(f"Error processing query with OpenAI: {e}")
         # Fallback: return the bounding box of the first component
         first_component_id = list(component_captions.keys())[0]
+        if first_component_id in bbox_lookup:
+            fallback_bbox = bbox_lookup[first_component_id]
+        else:
+            # Fallback to first bbox if component_id doesn't match
+            fallback_bbox = list(bbox_lookup.values())[0]
         return {
-            "bbox": [component_captions[first_component_id]["bbox"]],
+            "bbox": [fallback_bbox],
             "reason": "Error occurred during search. Showing first available component.",
         }

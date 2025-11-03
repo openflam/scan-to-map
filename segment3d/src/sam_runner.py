@@ -107,21 +107,22 @@ def run_sam_on_images(dataset_name: str) -> None:
     sam.to(device=device)
 
     # Create mask generator with specified parameters and COCO RLE output
-    mask_generator = SamAutomaticMaskGenerator(
-        model=sam,
-        points_per_side=32,
-        points_per_batch=64,
-        pred_iou_thresh=0.94,
-        stability_score_thresh=0.98,
-        stability_score_offset=1.0,
-        box_nms_thresh=0.5,
-        crop_n_layers=0,
-        crop_nms_thresh=0.5,
-        crop_overlap_ratio=0.2,
-        crop_n_points_downscale_factor=2,
-        min_mask_region_area=10000,
-        output_mode="coco_rle",
-    )
+    # mask_generator = SamAutomaticMaskGenerator(
+    #     model=sam,
+    #     points_per_side=32,
+    #     points_per_batch=64,
+    #     pred_iou_thresh=0.94,
+    #     stability_score_thresh=0.98,
+    #     stability_score_offset=1.0,
+    #     box_nms_thresh=0.5,
+    #     crop_n_layers=0,
+    #     crop_nms_thresh=0.5,
+    #     crop_overlap_ratio=0.2,
+    #     crop_n_points_downscale_factor=2,
+    #     min_mask_region_area=10000,
+    #     output_mode="coco_rle",
+    # )
+    mask_generator = SamAutomaticMaskGenerator(sam, output_mode="coco_rle")
 
     # Get all image files
     image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff"}

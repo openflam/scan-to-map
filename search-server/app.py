@@ -31,11 +31,7 @@ with open(BBOX_DATA_PATH, "r") as f:
 
 # Load component_captions.json on startup
 CAPTIONS_DATA_PATH = (
-    Path(__file__).parent
-    / ".."
-    / "outputs"
-    / DATASET_NAME
-    / "component_captions.json"
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "component_captions.json"
 )
 
 if not CAPTIONS_DATA_PATH.exists():
@@ -47,6 +43,9 @@ with open(CAPTIONS_DATA_PATH, "r") as f:
 
 # Convert captions list to dictionary keyed by component_id
 component_captions = {item["component_id"]: item for item in captions_list}
+
+# Create bbox lookup dictionary keyed by component_id
+bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 
 
 @app.route("/search", methods=["GET", "POST"])
@@ -73,7 +72,7 @@ def search():
         return jsonify({"error": "No query provided"}), 400
 
     # Find the most relevant component bounding boxes and reason using OpenAI
-    result_data = process_query(query, component_captions)
+    result_data = process_query(query, component_captions, bbox_lookup)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     reason = result_data["reason"]
 

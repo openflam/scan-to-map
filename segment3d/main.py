@@ -56,6 +56,7 @@ def run_pipeline(
     caption_n_images: int = 5,
     caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     caption_device: int = 0,
+    caption_batch_size: int = 4,
 ) -> None:
     """
     Run the complete pipeline.
@@ -72,6 +73,7 @@ def run_pipeline(
         caption_n_images: Number of top images to use for captioning
         caption_model: VLM model to use for captioning
         caption_device: GPU device ID for captioning
+        caption_batch_size: Batch size for captioning inference
     """
     # Load and display configuration
     print("\n" + "=" * 80)
@@ -108,6 +110,7 @@ def run_pipeline(
         print(f"  Caption model: {caption_model}")
         print(f"  Caption n_images: {caption_n_images}")
         print(f"  Caption device: {caption_device}")
+        print(f"  Caption batch size: {caption_batch_size}")
 
     # Track overall timing
     pipeline_start = time.time()
@@ -253,6 +256,7 @@ def run_pipeline(
                 n_images=caption_n_images,
                 model=caption_model,
                 device=caption_device,
+                batch_size=caption_batch_size,
             )
 
             step_time = time.time() - step_start
@@ -412,6 +416,12 @@ Configuration:
         default=0,
         help="GPU device ID for captioning (default: 0)",
     )
+    parser.add_argument(
+        "--caption-batch-size",
+        type=int,
+        default=4,
+        help="Batch size for captioning inference (default: 4)",
+    )
 
     args = parser.parse_args()
 
@@ -424,6 +434,8 @@ Configuration:
         parser.error("--min-fraction must be between 0 and 1")
     if args.caption_n_images < 1:
         parser.error("--caption-n-images must be at least 1")
+    if args.caption_batch_size < 1:
+        parser.error("--caption-batch-size must be at least 1")
 
     # Run the pipeline with parsed arguments
     run_pipeline(
@@ -439,4 +451,5 @@ Configuration:
         caption_n_images=args.caption_n_images,
         caption_model=args.caption_model,
         caption_device=args.caption_device,
+        caption_batch_size=args.caption_batch_size,
     )
