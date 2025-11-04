@@ -30,7 +30,7 @@ def process_query(
     result = search_provider.match_components(query)
     end_time = time.perf_counter()
     search_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
-    
+
     component_ids = result["component_ids"]
     reason = result["reason"]
 

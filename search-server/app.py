@@ -78,7 +78,11 @@ def search():
     # Get search query and method
     if request.method == "POST":
         query = request.json.get("query", "") if request.json else ""
-        method = request.json.get("method", "gpt-4o-mini [Full]") if request.json else "gpt-4o-mini [Full]"
+        method = (
+            request.json.get("method", "gpt-4o-mini [Full]")
+            if request.json
+            else "gpt-4o-mini [Full]"
+        )
     else:
         query = request.args.get("query", "")
         method = request.args.get("method", "gpt-4o-mini [Full]")
