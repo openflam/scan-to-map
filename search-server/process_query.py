@@ -1,23 +1,12 @@
-from typing import Dict, Any, List, Optional
-from semantic_search import SemanticSearchProvider, OpenAIProvider, BM25Provider
-
-
-def set_provider(provider: SemanticSearchProvider) -> None:
-    """
-    Set a custom semantic search provider.
-
-    Args:
-        provider: An instance of a SemanticSearchProvider
-    """
-    global _default_provider
-    _default_provider = provider
+from typing import Dict, Any, List
+from semantic_search import SemanticSearchProvider
 
 
 def process_query(
     query: str,
     component_captions: Dict[int, Any],
     bbox_lookup: Dict[int, Any],
-    provider: Optional[SemanticSearchProvider] = None,
+    provider: SemanticSearchProvider,
 ) -> Dict[str, Any]:
     """
     Process a search query and return the bounding boxes of the most relevant components.
@@ -26,20 +15,16 @@ def process_query(
         query: The search query string
         component_captions: Dictionary keyed by component ID with captions
         bbox_lookup: Dictionary keyed by component ID with bbox data
-        provider: Optional custom semantic search provider (uses default if not provided)
+        provider: Semantic search provider to use for matching
 
     Returns:
         A dictionary with "bbox" (list of bounding boxes) and "reason" (explanation for the choice)
     """
-    # Use provided provider, or default provider, or create BM25 on-the-fly
-    if provider is not None:
-        search_provider = provider
-    else:
-        # Default: create a BM25 provider with the current component_captions
-        search_provider = BM25Provider(component_captions)
+    # Use the provided provider
+    search_provider = provider
 
     # Get matched component IDs from the provider
-    result = search_provider.match_components(query, component_captions)
+    result = search_provider.match_components(query)
     component_ids = result["component_ids"]
     reason = result["reason"]
 

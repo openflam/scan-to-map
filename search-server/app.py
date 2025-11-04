@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 from process_query import process_query
+from semantic_search import OpenAIProvider, BM25Provider
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -47,12 +48,24 @@ component_captions = {item["component_id"]: item for item in captions_list}
 # Create bbox lookup dictionary keyed by component_id
 bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 
+# Initialize providers
+print("Initializing search providers...")
+openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
+bm25_provider = BM25Provider(component_captions)
+print("Providers initialized successfully")
+
+# Map method names to providers
+PROVIDERS = {
+    "gpt-4o-mini [Full]": openai_provider,
+    "BM25": bm25_provider,
+}
+
 
 @app.route("/search", methods=["GET", "POST"])
 def search():
     """
     Search endpoint that returns a bounding box.
-    Uses OpenAI API to find the most relevant component based on the search query.
+    Uses the specified search provider to find the most relevant component based on the search query.
 
     The bounding box is transformed to match the format expected by Model3DViewer:
     - x_min = -bbox.min[1]
@@ -62,17 +75,26 @@ def search():
     - y_max = bbox.max[2]
     - z_max = bbox.max[0]
     """
-    # Get search query
+    # Get search query and method
     if request.method == "POST":
         query = request.json.get("query", "") if request.json else ""
+        method = request.json.get("method", "gpt-4o-mini [Full]") if request.json else "gpt-4o-mini [Full]"
     else:
         query = request.args.get("query", "")
+        method = request.args.get("method", "gpt-4o-mini [Full]")
 
     if not query:
         return jsonify({"error": "No query provided"}), 400
 
-    # Find the most relevant component bounding boxes and reason using OpenAI
-    result_data = process_query(query, component_captions, bbox_lookup)
+    # Get the appropriate provider based on the method
+    provider = PROVIDERS.get(method)
+    if provider is None:
+        return jsonify({"error": f"Invalid method: {method}"}), 400
+
+    print(f"Processing query: '{query}' using method: '{method}'")
+
+    # Find the most relevant component bounding boxes and reason using the selected provider
+    result_data = process_query(query, component_captions, bbox_lookup, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     reason = result_data["reason"]
 

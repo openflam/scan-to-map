@@ -18,6 +18,7 @@ class OpenAIProvider(SemanticSearchProvider):
 
     def __init__(
         self,
+        component_captions: Dict[int, Any],
         model: str = "gpt-4o-mini",
         temperature: float = 0.0,
         max_tokens: int = 100,
@@ -27,6 +28,7 @@ class OpenAIProvider(SemanticSearchProvider):
         Initialize the OpenAI provider.
 
         Args:
+            component_captions: Dictionary keyed by component ID with captions
             model: The OpenAI model to use
             temperature: Sampling temperature
             max_tokens: Maximum tokens in response
@@ -36,30 +38,24 @@ class OpenAIProvider(SemanticSearchProvider):
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+        self.component_captions = component_captions
+        # Build components text once at initialization
+        self.components_text = self._build_components_text(component_captions)
 
-    def match_components(
-        self, query: str, component_captions: Optional[Dict[int, Any]] = None
-    ) -> Dict[str, Any]:
+    def match_components(self, query: str) -> Dict[str, Any]:
         """
         Match a search query to component descriptions using OpenAI.
 
         Args:
             query: The search query string
-            component_captions: Dictionary keyed by component ID with captions.
-                               Must be provided for OpenAI provider.
 
         Returns:
             A dictionary with:
                 - "component_ids": list of matched component IDs
                 - "reason": explanation for the choice
         """
-        if component_captions is None:
-            raise ValueError("component_captions must be provided for OpenAI provider")
-        # Build components text for the prompt
-        components_text = self._build_components_text(component_captions)
-
-        # Build the prompt
-        prompt = build_component_matching_prompt(query, components_text)
+        # Build the prompt using pre-built components text
+        prompt = build_component_matching_prompt(query, self.components_text)
 
         try:
             # Call OpenAI API
@@ -82,9 +78,7 @@ class OpenAIProvider(SemanticSearchProvider):
             reason = parsed_result.get("reason", "Selected based on query match.")
 
             # Parse comma-separated component IDs
-            component_ids = self._parse_component_ids(
-                component_ids_str, component_captions
-            )
+            component_ids = self._parse_component_ids(component_ids_str)
 
             return {"component_ids": component_ids, "reason": reason}
 
@@ -92,8 +86,7 @@ class OpenAIProvider(SemanticSearchProvider):
             print(f"Error processing query with OpenAI: {e}")
             # Fallback: return the first component
             return self._get_fallback_result(
-                component_captions,
-                "Error occurred during search. Showing first available component.",
+                "Error occurred during search. Showing first available component."
             )
 
     def _build_components_text(self, component_captions: Dict[int, Any]) -> str:
@@ -104,16 +97,14 @@ class OpenAIProvider(SemanticSearchProvider):
             components_text += f"Component {component_id}: {caption}\n\n"
         return components_text
 
-    def _parse_component_ids(
-        self, component_ids_str: str, component_captions: Dict[int, Any]
-    ) -> List[int]:
+    def _parse_component_ids(self, component_ids_str: str) -> List[int]:
         """Parse comma-separated component IDs and validate them."""
         try:
             component_ids = [
                 int(id.strip()) for id in component_ids_str.split(",") if id.strip()
             ]
             # Validate that all IDs exist
-            valid_ids = [id for id in component_ids if id in component_captions]
+            valid_ids = [id for id in component_ids if id in self.component_captions]
             if not valid_ids:
                 raise ValueError("No valid component IDs found")
             return valid_ids
@@ -122,11 +113,9 @@ class OpenAIProvider(SemanticSearchProvider):
                 f"Warning: Could not parse component IDs from '{component_ids_str}': {e}"
             )
             # Fallback to first component
-            return [list(component_captions.keys())[0]]
+            return [list(self.component_captions.keys())[0]]
 
-    def _get_fallback_result(
-        self, component_captions: Dict[int, Any], reason: str
-    ) -> Dict[str, Any]:
+    def _get_fallback_result(self, reason: str) -> Dict[str, Any]:
         """Get fallback result with first component."""
-        first_component_id = list(component_captions.keys())[0]
+        first_component_id = list(self.component_captions.keys())[0]
         return {"component_ids": [first_component_id], "reason": reason}

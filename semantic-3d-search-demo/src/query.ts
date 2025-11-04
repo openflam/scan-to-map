@@ -2,11 +2,11 @@ import type { SearchResult } from "./types/global";
 
 const SEARCH_SERVER_URL = "http://172.26.101.175:5000";
 
-export async function query(searchTerm: string): Promise<SearchResult> {
-  console.log("Querying for:", searchTerm);
+export async function query(searchTerm: string, method: string = "gpt-4o-mini [Full]"): Promise<SearchResult> {
+  console.log("Querying for:", searchTerm, "with method:", method);
 
   try {
-    const response = await fetch(`${SEARCH_SERVER_URL}/search?query=${encodeURIComponent(searchTerm)}`);
+    const response = await fetch(`${SEARCH_SERVER_URL}/search?query=${encodeURIComponent(searchTerm)}&method=${encodeURIComponent(method)}`);
 
     if (!response.ok) {
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);

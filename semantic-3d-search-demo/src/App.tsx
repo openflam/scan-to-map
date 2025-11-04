@@ -44,8 +44,8 @@ function App() {
       });
   }, []);
 
-  const handleSearch = async (searchTerm: string) => {
-    const result = await query(searchTerm);
+  const handleSearch = async (searchTerm: string, method: string) => {
+    const result = await query(searchTerm, method);
     setBoundingBox(result.boundingBox);
     setSearchResult(result.reason);
   };
