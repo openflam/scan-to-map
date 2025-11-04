@@ -16,3 +16,6 @@ __pycache__
 
 # Ignore temporary files
 temp.ipynb
+
+# Environment files
+.env
