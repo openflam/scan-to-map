@@ -1,17 +1,5 @@
 from typing import Dict, Any, List, Optional
-from semantic_search import SemanticSearchProvider, OpenAIProvider
-
-
-# Default provider instance (can be configured)
-_default_provider: Optional[SemanticSearchProvider] = None
-
-
-def get_default_provider() -> SemanticSearchProvider:
-    """Get or create the default semantic search provider."""
-    global _default_provider
-    if _default_provider is None:
-        _default_provider = OpenAIProvider()
-    return _default_provider
+from semantic_search import SemanticSearchProvider, OpenAIProvider, BM25Provider
 
 
 def set_provider(provider: SemanticSearchProvider) -> None:
@@ -43,8 +31,12 @@ def process_query(
     Returns:
         A dictionary with "bbox" (list of bounding boxes) and "reason" (explanation for the choice)
     """
-    # Use provided provider or default
-    search_provider = provider or get_default_provider()
+    # Use provided provider, or default provider, or create BM25 on-the-fly
+    if provider is not None:
+        search_provider = provider
+    else:
+        # Default: create a BM25 provider with the current component_captions
+        search_provider = BM25Provider(component_captions)
 
     # Get matched component IDs from the provider
     result = search_provider.match_components(query, component_captions)

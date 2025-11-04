@@ -11,7 +11,7 @@ function SearchResult({ result }: SearchResultProps) {
                 <div className="d-flex justify-content-between align-items-start">
                     <div className="flex-grow-1">
                         {result ? (
-                            <p className="mb-0">{result}</p>
+                            <p className="mb-0" style={{ whiteSpace: 'pre-line' }}>{result}</p>
                         ) : (
                             <p className="text-muted mb-0">No search results yet</p>
                         )}

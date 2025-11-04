@@ -2,7 +2,7 @@
 
 import os
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -38,20 +38,23 @@ class OpenAIProvider(SemanticSearchProvider):
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
     def match_components(
-        self, query: str, component_captions: Dict[int, Any]
+        self, query: str, component_captions: Optional[Dict[int, Any]] = None
     ) -> Dict[str, Any]:
         """
         Match a search query to component descriptions using OpenAI.
 
         Args:
             query: The search query string
-            component_captions: Dictionary keyed by component ID with captions
+            component_captions: Dictionary keyed by component ID with captions.
+                               Must be provided for OpenAI provider.
 
         Returns:
             A dictionary with:
                 - "component_ids": list of matched component IDs
                 - "reason": explanation for the choice
         """
+        if component_captions is None:
+            raise ValueError("component_captions must be provided for OpenAI provider")
         # Build components text for the prompt
         components_text = self._build_components_text(component_captions)
 
