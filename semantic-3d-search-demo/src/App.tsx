@@ -15,6 +15,7 @@ function App() {
   const [searchResult, setSearchResult] = useState<string | undefined>(
     undefined
   );
+  const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
 
   // Load bbox_corners.json on mount
   useEffect(() => {
@@ -48,6 +49,7 @@ function App() {
     const result = await query(searchTerm, method);
     setBoundingBox(result.boundingBox);
     setSearchResult(result.reason);
+    setSearchTime(result.searchTimeMs);
   };
 
   return (
@@ -57,6 +59,7 @@ function App() {
           onSearch={handleSearch}
           showAutoTags={showAutoTags}
           onShowAutoTagsChange={setShowAutoTags}
+          searchTime={searchTime}
         />
       </Row>
       <Row style={{ height: "80vh" }}>

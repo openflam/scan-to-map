@@ -97,6 +97,7 @@ def search():
     result_data = process_query(query, component_captions, bbox_lookup, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     reason = result_data["reason"]
+    search_time_ms = result_data["search_time_ms"]
 
     # Transform each bounding box to match the coordinate system
     # used in Model3DViewer (as seen in App.tsx)
@@ -115,6 +116,7 @@ def search():
     result = {
         "bbox": transformed_bboxes,
         "reason": reason,
+        "search_time_ms": search_time_ms,
     }
 
     return jsonify(result)

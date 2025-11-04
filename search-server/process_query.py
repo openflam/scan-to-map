@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
 from semantic_search import SemanticSearchProvider
+import time
 
 
 def process_query(
@@ -18,13 +19,18 @@ def process_query(
         provider: Semantic search provider to use for matching
 
     Returns:
-        A dictionary with "bbox" (list of bounding boxes) and "reason" (explanation for the choice)
+        A dictionary with "bbox" (list of bounding boxes), "reason" (explanation for the choice),
+        and "search_time_ms" (time taken to match components in milliseconds)
     """
     # Use the provided provider
     search_provider = provider
 
-    # Get matched component IDs from the provider
+    # Get matched component IDs from the provider and measure time
+    start_time = time.perf_counter()
     result = search_provider.match_components(query)
+    end_time = time.perf_counter()
+    search_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
+    
     component_ids = result["component_ids"]
     reason = result["reason"]
 
@@ -51,5 +57,5 @@ def process_query(
     elif invalid_ids:
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
 
-    # Return the list of bounding boxes and reason
-    return {"bbox": valid_bboxes, "reason": reason}
+    # Return the list of bounding boxes, reason, and search time
+    return {"bbox": valid_bboxes, "reason": reason, "search_time_ms": search_time_ms}

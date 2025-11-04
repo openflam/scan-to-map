@@ -5,9 +5,10 @@ interface SearchBarProps {
   onSearch: (searchTerm: string, method: string) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
+  searchTime?: number;
 }
 
-function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange }: SearchBarProps) {
+function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [method, setMethod] = useState("gpt-4o-mini [Full]");
 
@@ -47,13 +48,18 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange }: SearchBarPr
         </Button>
       </InputGroup>
 
-      <Form.Check
-        type="checkbox"
-        label="Show Auto Tags"
-        checked={showAutoTags}
-        onChange={(e) => onShowAutoTagsChange(e.target.checked)}
-        className="mb-3"
-      />
+      <div className="d-flex align-items-center justify-content-between mb-3">
+        <Form.Check
+          type="checkbox"
+          label="Show Auto Tags"
+          checked={showAutoTags}
+          onChange={(e) => onShowAutoTagsChange(e.target.checked)}
+        />
+        <div className="d-flex align-items-center" style={{ fontSize: "1.1rem", fontWeight: "500" }}>
+          <i className="bi bi-clock me-2"></i>
+          {searchTime !== undefined ? `${searchTime.toFixed(2)} ms` : '...'}
+        </div>
+      </div>
     </>
   );
 }

@@ -15,14 +15,15 @@ export async function query(searchTerm: string, method: string = "gpt-4o-mini [F
     const data = await response.json();
     console.log("Received response:", data);
 
-    // Extract bounding box and reason from the response
-    // Server returns: {"bbox": {...}, "reason": "..."}
+    // Extract bounding box, reason, and search time from the response
+    // Server returns: {"bbox": {...}, "reason": "...", "search_time_ms": ...}
     // Wrap single bbox in array for consistency
     const bboxArray = Array.isArray(data.bbox) ? data.bbox : [data.bbox];
 
     return {
       boundingBox: bboxArray,
-      reason: data.reason
+      reason: data.reason,
+      searchTimeMs: data.search_time_ms,
     };
   } catch (error) {
     console.error("Error querying search server:", error);

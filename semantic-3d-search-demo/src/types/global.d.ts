@@ -14,6 +14,7 @@ export interface BoundingBox {
 export interface SearchResult {
   boundingBox: BoundingBox[];
   reason: string;
+  searchTimeMs: number;
 }
 
 // Define custom attributes for babylon-viewer element
