@@ -85,9 +85,7 @@ class OpenAIProvider(SemanticSearchProvider):
         except Exception as e:
             print(f"Error processing query with OpenAI: {e}")
             # Fallback: return the first component
-            return self._get_fallback_result(
-                "Error occurred during search. Showing first available component."
-            )
+            return self._get_fallback_result(f"Error processing query with OpenAI: {e}")
 
     def _build_components_text(self, component_captions: Dict[int, Any]) -> str:
         """Build formatted text of all component descriptions."""
