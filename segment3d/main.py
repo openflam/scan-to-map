@@ -25,7 +25,7 @@ from src.mask_graph import build_mask_graph_cli
 from src.bbox_corners import get_all_bbox_corners_cli
 from src.project_bbox import project_all_bboxes_cli
 from src.crop_images import crop_all_images_cli
-from src.caption_images import caption_all_components_cli
+from src.captioning import caption_all_components_cli
 from src.io_paths import load_config
 from config import list_datasets
 import os
@@ -54,6 +54,7 @@ def run_pipeline(
     percentile: float = 95.0,
     min_fraction: float = 0.3,
     caption_n_images: int = 5,
+    captioner_type: str = "vllm",
     caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     caption_device: int = 0,
     caption_batch_size: int = 4,
@@ -71,6 +72,7 @@ def run_pipeline(
         percentile: Percentile threshold for bbox outlier removal
         min_fraction: Minimum fraction of visible points for projection
         caption_n_images: Number of top images to use for captioning
+        captioner_type: Type of captioner to use (e.g., "vllm")
         caption_model: VLM model to use for captioning
         caption_device: GPU device ID for captioning
         caption_batch_size: Batch size for captioning inference
@@ -107,6 +109,7 @@ def run_pipeline(
     print(f"  Bbox percentile: {percentile}")
     print(f"  Min fraction: {min_fraction}")
     if not skip_caption:
+        print(f"  Captioner type: {captioner_type}")
         print(f"  Caption model: {caption_model}")
         print(f"  Caption n_images: {caption_n_images}")
         print(f"  Caption device: {caption_device}")
@@ -131,8 +134,10 @@ def run_pipeline(
             "percentile": percentile,
             "min_fraction": min_fraction,
             "caption_n_images": caption_n_images,
+            "captioner_type": captioner_type,
             "caption_model": caption_model,
             "caption_device": caption_device,
+            "caption_batch_size": caption_batch_size,
             "skip_sam": skip_sam,
             "skip_association": skip_association,
             "skip_caption": skip_caption,
@@ -254,6 +259,7 @@ def run_pipeline(
             caption_all_components_cli(
                 dataset_name=dataset_name,
                 n_images=caption_n_images,
+                captioner_type=captioner_type,
                 model=caption_model,
                 device=caption_device,
                 batch_size=caption_batch_size,
@@ -405,6 +411,12 @@ Configuration:
         help="Number of top images to use for captioning (default: 1)",
     )
     parser.add_argument(
+        "--captioner-type",
+        type=str,
+        default="vllm",
+        help="Type of captioner to use (default: vllm)",
+    )
+    parser.add_argument(
         "--caption-model",
         type=str,
         default="Qwen/Qwen2.5-VL-7B-Instruct",
@@ -449,6 +461,7 @@ Configuration:
         percentile=args.percentile,
         min_fraction=args.min_fraction,
         caption_n_images=args.caption_n_images,
+        captioner_type=args.captioner_type,
         caption_model=args.caption_model,
         caption_device=args.caption_device,
         caption_batch_size=args.caption_batch_size,

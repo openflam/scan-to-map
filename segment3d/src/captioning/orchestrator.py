@@ -1,12 +1,15 @@
 """
-Caption images for each connected component using a Vision Language Model.
+Model-agnostic orchestrator for component captioning pipeline.
 """
 
 from __future__ import annotations
 
 import json
+import time as time_module
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from .captioner_base import Captioner, create_captioner
 
 
 def get_top_images(
@@ -38,203 +41,36 @@ def get_top_images(
     return sorted_crops[:n]
 
 
-def prepare_component_messages(
-    component_id: str | int,
-    top_images: List[Dict[str, Any]],
-    crops_dir: Path,
-    processor: Any,
-) -> tuple[List[str], Optional[Dict]]:
-    """
-    Prepare messages for a component in vLLM format using AutoProcessor.
-
-    Args:
-        component_id: ID of the component
-        top_images: List of top crop information from get_top_images
-        crops_dir: Directory containing the cropped images
-        processor: HuggingFace AutoProcessor instance
-
-    Returns:
-        Tuple of (image_paths, vllm_input) or ([], None) if no valid images
-        vllm_input is a dict with 'prompt' and 'multi_modal_data' keys
-    """
-    from PIL import Image
-
-    # Prepare image paths from crop filenames
-    image_paths = []
-    pil_images = []
-
-    for crop_info in top_images:
-        crop_filename = crop_info["crop_filename"]
-        image_path = crops_dir / f"component_{component_id}" / crop_filename
-
-        if not image_path.exists():
-            print(f"  Warning: Crop image not found: {image_path}, skipping")
-            continue
-
-        image_paths.append(str(image_path))
-        # Load image as PIL Image
-        pil_images.append(Image.open(image_path))
-
-    if not image_paths:
-        return [], None
-
-    # Create messages in the format expected by AutoProcessor
-    question = (
-        "These images show different views of the same object or region in a 3D scene. "
-        "Analyze all the images together and provide a concise, descriptive caption "
-        "that captures what this object or region is. Focus on:\n"
-        "1. What the main object/region is\n"
-        "2. Its key visual characteristics (color, shape, texture)\n"
-        "3. Any notable features or context\n\n"
-        "Keep the caption clear and factual, suitable for 3D semantic search."
-    )
-
-    # Build placeholders for each image
-    placeholders = [{"type": "image", "image": img} for img in pil_images]
-
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {
-            "role": "user",
-            "content": [
-                *placeholders,
-                {"type": "text", "text": question},
-            ],
-        },
-    ]
-
-    # Use AutoProcessor to format the prompt
-    prompt = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-
-    # Build vLLM input format with proper structure
-    vllm_input = {
-        "prompt": prompt,
-        "multi_modal_data": {"image": pil_images},
-    }
-
-    return image_paths, vllm_input
-
-
-def caption_components_batch_vllm(
-    batch_data: List[tuple[str | int, List[Dict[str, Any]]]],
-    crops_dir: Path,
-    llm: Any,
-    processor: Any,
-    model: str,
-) -> List[tuple[str | int, str, List[str]]]:
-    """
-    Generate captions for multiple components in batch using vLLM.
-
-    Args:
-        batch_data: List of (component_id, top_images) tuples
-        crops_dir: Directory containing the cropped images
-        llm: vLLM LLM instance
-        processor: HuggingFace AutoProcessor instance
-        model: Model name
-
-    Returns:
-        List of (component_id, caption, image_paths) tuples
-    """
-    results = []
-    vllm_inputs = []
-    batch_component_ids = []
-    batch_image_paths = []
-
-    # Prepare all messages (already in vLLM format from prepare_component_messages)
-    for component_id, top_images in batch_data:
-        image_paths, vllm_input = prepare_component_messages(
-            component_id, top_images, crops_dir, processor
-        )
-
-        if vllm_input is None:
-            # No valid images for this component
-            results.append(
-                (
-                    component_id,
-                    f"[No valid crop images found for component {component_id}]",
-                    [],
-                )
-            )
-        else:
-            vllm_inputs.append(vllm_input)
-            batch_component_ids.append(component_id)
-            batch_image_paths.append(image_paths)
-
-    # Process batch with vLLM
-    if vllm_inputs:
-        try:
-            from vllm import SamplingParams
-
-            # Create SamplingParams object
-            sampling_params = SamplingParams(
-                max_tokens=300,
-                temperature=0.0,  # Deterministic output
-            )
-
-            # Generate captions in batch
-            outputs = llm.generate(
-                vllm_inputs,
-                sampling_params=sampling_params,
-            )
-
-            # Extract captions from outputs
-            for component_id, output, image_paths in zip(
-                batch_component_ids, outputs, batch_image_paths
-            ):
-                caption = output.outputs[0].text.strip()
-
-                # Qwen/Qwen2.5-VL-7B-Instruct generated "addCriterion" for some reason.
-                # Just remove that if it appears.
-                if model == "Qwen/Qwen2.5-VL-7B-Instruct":
-                    caption = caption.replace("addCriterion:", "").strip()
-                    caption = caption.replace("addCriterion\n", "").strip()
-                    caption = caption.replace("addCriterion", "").strip()
-                    caption = caption.strip('"\\"')
-
-                results.append((component_id, caption, image_paths))
-
-        except Exception as e:
-            print(f"  Error calling vLLM for batch: {e}")
-            # Add error results for all components in batch
-            for component_id, image_paths in zip(
-                batch_component_ids, batch_image_paths
-            ):
-                results.append(
-                    (component_id, f"[Error generating caption: {str(e)}]", image_paths)
-                )
-
-    return results
-
-
 def caption_all_components_cli(
     dataset_name: str,
     n_images: int = 1,
+    captioner_type: str = "vllm",
     model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     device: int = 0,
     max_components: Optional[int] = None,
-    batch_size: int = 1024,
+    batch_size: int = 16,
+    **captioner_kwargs,
 ) -> None:
     """
     Caption all components by reading manifest.json and bbox_corners.json.
 
-    Uses cropped images from the crops directory for captioning.
+    This is the main orchestrator function that:
+    1. Loads the manifest and configuration
+    2. Creates a captioner instance
+    3. Batches components and calls the captioner
+    4. Saves results and statistics
 
     Args:
         dataset_name: Name of the dataset to process
         n_images: Number of top images to use for each component
-        model: Name of the VLM model to use
+        captioner_type: Type of captioner to use (e.g., "vllm")
+        model: Name of the model to use
         device: GPU device ID to use for inference
         max_components: Maximum number of components to process (None for all)
-        batch_size: Number of components to process in each batch (default: 4)
+        batch_size: Number of components to process in each batch
+        **captioner_kwargs: Additional arguments to pass to the captioner
     """
-    import os
-    import torch
-    from vllm import LLM
-    from .io_paths import load_config, get_outputs_dir
-
-    import time as time_module
+    from ..io_paths import load_config, get_outputs_dir
 
     # Load configuration
     config = load_config(dataset_name=dataset_name)
@@ -244,28 +80,19 @@ def caption_all_components_cli(
 
     print(f"Outputs directory: {outputs_dir}")
     print(f"Crops directory: {crops_dir}")
+    print(f"Captioner type: {captioner_type}")
     print(f"Model: {model}")
     print(f"Device: {device}")
     print(f"Images per component: {n_images}")
     print(f"Batch size: {batch_size}")
 
-    # Initialize AutoProcessor
-    print(f"\nInitializing AutoProcessor for {model}...")
-    from transformers import AutoProcessor
-
-    processor = AutoProcessor.from_pretrained(model)
-    print("Processor loaded successfully!")
-
-    # Initialize vLLM
-    print(f"\nInitializing vLLM with {model}...")
-    llm = LLM(
+    # Create captioner instance
+    captioner = create_captioner(
+        captioner_type=captioner_type,
         model=model,
-        dtype="bfloat16",
-        max_model_len=4096,
-        limit_mm_per_prompt={"image": 10},  # Allow up to 10 images per prompt
-        gpu_memory_utilization=0.9,
+        device=device,
+        **captioner_kwargs,
     )
-    print("Model loaded successfully!")
 
     # Load manifest
     manifest_path = crops_dir / "manifest.json"
@@ -324,14 +151,14 @@ def caption_all_components_cli(
             print("No valid components in this batch, skipping")
             continue
 
-        # Process batch
+        # Process batch using the captioner
         try:
-            batch_results = caption_components_batch_vllm(
-                batch_data, crops_dir, llm, processor, model
-            )
+            batch_results = captioner.caption_batch(batch_data, crops_dir)
 
             # Process results
-            for component_id, caption, image_paths in batch_results:
+            for result in batch_results:
+                component_id = result.component_id
+                caption = result.caption
                 comp_id_int = int(component_id)
 
                 # Get the top images info from metadata (already retrieved)
@@ -361,6 +188,12 @@ def caption_all_components_cli(
             traceback.print_exc()
             continue
 
+    # Clean up captioner resources
+    try:
+        captioner.cleanup()
+    except Exception as e:
+        print(f"Warning: Error during captioner cleanup: {e}")
+
     # Calculate timing statistics
     end_time = time_module.time()
     total_runtime = end_time - start_time
@@ -387,6 +220,7 @@ def caption_all_components_cli(
         "time_per_caption_seconds": time_per_caption,
         "batch_size": batch_size,
         "n_images_per_component": n_images,
+        "captioner_type": captioner_type,
         "model": model,
         "device": device,
     }
@@ -441,10 +275,16 @@ def main() -> None:
         help="Number of top images to use per component (default: 2)",
     )
     parser.add_argument(
+        "--captioner-type",
+        type=str,
+        default="vllm",
+        help="Type of captioner to use (default: vllm)",
+    )
+    parser.add_argument(
         "--model",
         type=str,
         default="Qwen/Qwen2.5-VL-7B-Instruct",
-        help="VLM model to use (default: Qwen/Qwen2.5-VL-7B-Instruct)",
+        help="Model to use (default: Qwen/Qwen2.5-VL-7B-Instruct)",
     )
     parser.add_argument(
         "--device",
@@ -462,7 +302,7 @@ def main() -> None:
         "--batch-size",
         type=int,
         default=16,
-        help="Number of components to process in each batch (default: 4)",
+        help="Number of components to process in each batch (default: 16)",
     )
 
     args = parser.parse_args()
@@ -479,6 +319,7 @@ def main() -> None:
     caption_all_components_cli(
         dataset_name=args.dataset,
         n_images=args.n_images,
+        captioner_type=args.captioner_type,
         model=args.model,
         device=args.device,
         max_components=args.max_components,
