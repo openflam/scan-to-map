@@ -9,6 +9,8 @@ This script orchestrates the complete scan-to-map pipeline:
 4. Compute 3D bounding boxes
 5. Project bounding boxes to images
 6. Crop images based on projections
+7. Generate captions with VLM
+8. Generate CLIP embeddings
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from src.bbox_corners import get_all_bbox_corners_cli
 from src.project_bbox import project_all_bboxes_cli
 from src.crop_images import crop_all_images_cli
 from src.captioning import caption_all_components_cli
+from src.clip_embed import generate_clip_embeddings_cli
 from src.io_paths import load_config
 from config import list_datasets
 import os
@@ -48,6 +51,7 @@ def run_pipeline(
     skip_sam: bool = False,
     skip_association: bool = False,
     skip_caption: bool = False,
+    skip_clip: bool = False,
     K: int = 5,
     tau: float = 0.2,
     min_points_in_3D_segment: int = 100,
@@ -58,6 +62,10 @@ def run_pipeline(
     caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     caption_device: int = 0,
     caption_batch_size: int = 4,
+    clip_model: str = "ViT-B-32",
+    clip_pretrained: str = "laion2b_s34b_b79k",
+    clip_batch_size: int = 32,
+    clip_device: int = 0,
 ) -> None:
     """
     Run the complete pipeline.
@@ -67,6 +75,7 @@ def run_pipeline(
         skip_sam: Skip SAM segmentation step
         skip_association: Skip 2D-3D association step
         skip_caption: Skip VLM captioning step
+        skip_clip: Skip CLIP embedding generation step
         K: Number of nearest neighbors for mask graph
         tau: Jaccard similarity threshold for mask graph
         percentile: Percentile threshold for bbox outlier removal
@@ -76,6 +85,10 @@ def run_pipeline(
         caption_model: VLM model to use for captioning
         caption_device: GPU device ID for captioning
         caption_batch_size: Batch size for captioning inference
+        clip_model: OpenCLIP model name for embeddings
+        clip_pretrained: Pretrained weights for CLIP model
+        clip_batch_size: Batch size for CLIP embedding generation
+        clip_device: GPU device ID for CLIP embeddings
     """
     # Load and display configuration
     print("\n" + "=" * 80)
@@ -104,6 +117,8 @@ def run_pipeline(
         print("  2D-3D association: SKIPPED")
     if skip_caption:
         print("  VLM captioning: SKIPPED")
+    if skip_clip:
+        print("  CLIP embedding generation: SKIPPED")
     print(f"  Mask graph K: {K}")
     print(f"  Mask graph tau: {tau}")
     print(f"  Bbox percentile: {percentile}")
@@ -114,10 +129,15 @@ def run_pipeline(
         print(f"  Caption n_images: {caption_n_images}")
         print(f"  Caption device: {caption_device}")
         print(f"  Caption batch size: {caption_batch_size}")
+    if not skip_clip:
+        print(f"  CLIP model: {clip_model}")
+        print(f"  CLIP pretrained: {clip_pretrained}")
+        print(f"  CLIP batch size: {clip_batch_size}")
+        print(f"  CLIP device: {clip_device}")
 
     # Track overall timing
     pipeline_start = time.time()
-    total_steps = 7
+    total_steps = 8
     current_step = 0
 
     # Dictionary to store runtime statistics
@@ -138,9 +158,14 @@ def run_pipeline(
             "caption_model": caption_model,
             "caption_device": caption_device,
             "caption_batch_size": caption_batch_size,
+            "clip_model": clip_model,
+            "clip_pretrained": clip_pretrained,
+            "clip_batch_size": clip_batch_size,
+            "clip_device": clip_device,
             "skip_sam": skip_sam,
             "skip_association": skip_association,
             "skip_caption": skip_caption,
+            "skip_clip": skip_clip,
         },
     }
 
@@ -278,6 +303,33 @@ def run_pipeline(
                 "status": "skipped",
             }
 
+        # Step 8: Generate CLIP embeddings
+        if not skip_clip:
+            current_step += 1
+            print_step_header(current_step, total_steps, "Generate CLIP Embeddings")
+            step_start = time.time()
+
+            generate_clip_embeddings_cli(
+                dataset_name=dataset_name,
+                model_name=clip_model,
+                pretrained=clip_pretrained,
+                device=clip_device,
+                batch_size=clip_batch_size,
+            )
+
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["8_clip_embeddings"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
+        else:
+            print("\nSkipping Step 8: CLIP Embedding Generation")
+            runtime_stats["steps"]["8_clip_embeddings"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
+
         # Pipeline complete
         total_time = time.time() - pipeline_start
 
@@ -316,7 +368,10 @@ def run_pipeline(
         print("  │   ├── component_0/")
         print("  │   ├── component_1/")
         print("  │   └── manifest.json")
-        print("  └── component_captions.json - VLM-generated captions")
+        print("  ├── component_captions.json - VLM-generated captions")
+        print("  ├── clip_embeddings.json    - CLIP embeddings (JSON)")
+        print("  ├── clip_embeddings.npz     - CLIP embeddings (numpy)")
+        print("  └── clip_embedding_stats.json")
 
     except KeyboardInterrupt:
         print("\n\nPipeline interrupted by user")
@@ -342,6 +397,7 @@ Pipeline Steps:
   5. Project 3D bounding boxes onto images
   6. Crop images based on projected coordinates
   7. Generate captions for each component using VLM
+  8. Generate CLIP embeddings for each component
 
 Configuration:
   Dataset configurations are defined in segment3d/config.py
@@ -373,6 +429,11 @@ Configuration:
         "--skip-caption",
         action="store_true",
         help="Skip VLM captioning step",
+    )
+    parser.add_argument(
+        "--skip-clip",
+        action="store_true",
+        help="Skip CLIP embedding generation step",
     )
     parser.add_argument(
         "--K",
@@ -434,6 +495,30 @@ Configuration:
         default=1024,
         help="Batch size for captioning inference (default: 1024)",
     )
+    parser.add_argument(
+        "--clip-model",
+        type=str,
+        default="ViT-B-32",
+        help="OpenCLIP model name for embeddings (default: ViT-B-32)",
+    )
+    parser.add_argument(
+        "--clip-pretrained",
+        type=str,
+        default="laion2b_s34b_b79k",
+        help="Pretrained weights for CLIP model (default: laion2b_s34b_b79k)",
+    )
+    parser.add_argument(
+        "--clip-batch-size",
+        type=int,
+        default=32,
+        help="Batch size for CLIP embedding generation (default: 32)",
+    )
+    parser.add_argument(
+        "--clip-device",
+        type=int,
+        default=0,
+        help="GPU device ID for CLIP embeddings (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -448,6 +533,8 @@ Configuration:
         parser.error("--caption-n-images must be at least 1")
     if args.caption_batch_size < 1:
         parser.error("--caption-batch-size must be at least 1")
+    if args.clip_batch_size < 1:
+        parser.error("--clip-batch-size must be at least 1")
 
     # Run the pipeline with parsed arguments
     run_pipeline(
@@ -455,6 +542,7 @@ Configuration:
         skip_sam=args.skip_sam,
         skip_association=args.skip_association,
         skip_caption=args.skip_caption,
+        skip_clip=args.skip_clip,
         K=args.K,
         tau=args.tau,
         min_points_in_3D_segment=args.min_points_in_3D_segment,
@@ -465,4 +553,8 @@ Configuration:
         caption_model=args.caption_model,
         caption_device=args.caption_device,
         caption_batch_size=args.caption_batch_size,
+        clip_model=args.clip_model,
+        clip_pretrained=args.clip_pretrained,
+        clip_batch_size=args.clip_batch_size,
+        clip_device=args.clip_device,
     )
