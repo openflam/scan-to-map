@@ -33,6 +33,7 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
           style={{ maxWidth: "200px" }}
         >
           <option value="gpt-4o-mini [Full]">gpt-4o-mini [Full]</option>
+          <option value="gpt-4o-mini [RAG]">gpt-4o-mini [RAG]</option>
           <option value="BM25">BM25</option>
         </Form.Select>
 

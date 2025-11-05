@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 from process_query import process_query
-from semantic_search import OpenAIProvider, BM25Provider
+from semantic_search import OpenAIProvider, BM25Provider, OpenAIRAGProvider
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -52,12 +52,14 @@ bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 print("Initializing search providers...")
 openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
 bm25_provider = BM25Provider(component_captions)
+openai_rag_provider = OpenAIRAGProvider(component_captions, model="gpt-4o-mini", bm25_top_k=20)
 print("Providers initialized successfully")
 
 # Map method names to providers
 PROVIDERS = {
     "gpt-4o-mini [Full]": openai_provider,
     "BM25": bm25_provider,
+    "gpt-4o-mini [RAG]": openai_rag_provider,
 }
 
 
