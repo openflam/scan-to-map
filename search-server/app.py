@@ -4,7 +4,12 @@ import json
 import sys
 from pathlib import Path
 from process_query import process_query
-from semantic_search import OpenAIProvider, BM25Provider, OpenAIRAGProvider
+from semantic_search import (
+    OpenAIProvider,
+    BM25Provider,
+    OpenAIRAGProvider,
+    CLIPProvider,
+)
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -50,9 +55,42 @@ bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 
 # Initialize providers
 print("Initializing search providers...")
+
+FAISS_INDEX_PATH = (
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "clip_embeddings.faiss"
+)
+EMBEDDINGS_NPZ_PATH = (
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "clip_embeddings.npz"
+)
+CLIP_STATS_PATH = (
+    Path(__file__).parent
+    / ".."
+    / "outputs"
+    / DATASET_NAME
+    / "clip_embedding_stats.json"
+)
+
+with open(CLIP_STATS_PATH, "r") as f:
+    clip_stats = json.load(f)
+
+clip_model_name = clip_stats.get("model_name", "ViT-B-32")
+clip_pretrained = clip_stats.get("pretrained", "laion2b_s34b_b79k")
+
+print(f"CLIP model configuration: {clip_model_name} ({clip_pretrained})")
+
 openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
 bm25_provider = BM25Provider(component_captions)
-openai_rag_provider = OpenAIRAGProvider(component_captions, model="gpt-4o-mini", bm25_top_k=20)
+openai_rag_provider = OpenAIRAGProvider(
+    component_captions, model="gpt-4o-mini", bm25_top_k=20
+)
+clip_provider = CLIPProvider(
+    faiss_index_path=str(FAISS_INDEX_PATH),
+    embeddings_npz_path=str(EMBEDDINGS_NPZ_PATH),
+    component_captions=component_captions,
+    model_name=clip_model_name,
+    pretrained=clip_pretrained,
+)
+
 print("Providers initialized successfully")
 
 # Map method names to providers
@@ -60,6 +98,7 @@ PROVIDERS = {
     "gpt-4o-mini [Full]": openai_provider,
     "BM25": bm25_provider,
     "gpt-4o-mini [RAG]": openai_rag_provider,
+    "CLIP ViT-H-14": clip_provider,
 }
 
 
@@ -129,4 +168,4 @@ def search():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=False, host="0.0.0.0", port=5000)
