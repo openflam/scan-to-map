@@ -10,7 +10,7 @@ interface SearchBarProps {
 
 function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [method, setMethod] = useState("gpt-4o-mini [Full]");
+  const [method, setMethod] = useState("CLIP ViT-H-14");
 
   const handleSearch = () => {
     if (searchTerm.trim()) {
@@ -32,9 +32,9 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
           onChange={(e) => setMethod(e.target.value)}
           style={{ maxWidth: "200px" }}
         >
+          <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
           <option value="gpt-4o-mini [Full]">gpt-4o-mini [Full]</option>
           <option value="gpt-4o-mini [RAG]">gpt-4o-mini [RAG]</option>
-          <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
           <option value="BM25">BM25</option>
         </Form.Select>
 

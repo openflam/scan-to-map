@@ -174,7 +174,7 @@ Respond with ONLY a JSON object containing:
 Example response format:
 {{"component_ids": "2,5,7", "reason": "Component 2 contains printers which directly match the query, followed by components 5 and 7 which also show printing equipment."}}
 
-If no components match well, return an empty string for component_ids."""
+If no components match well, return the best matching component ID anyway."""
 
         try:
             response = self.client.chat.completions.create(

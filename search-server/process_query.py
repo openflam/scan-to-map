@@ -53,7 +53,6 @@ def process_query(
         else:
             # Fallback to first bbox if component_id doesn't match
             valid_bboxes = [list(bbox_lookup.values())[0]]
-        reason = "Fallback: Using first available component due to invalid IDs."
     elif invalid_ids:
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
 
