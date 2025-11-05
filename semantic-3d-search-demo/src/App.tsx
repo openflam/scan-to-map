@@ -5,7 +5,7 @@ import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
 import SearchResult from "./SearchResult";
 import { query } from "./query";
-import type { BoundingBox } from "./types/global";
+import type { BoundingBox, SearchQuery } from "./types/global";
 
 function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
@@ -45,8 +45,8 @@ function App() {
       });
   }, []);
 
-  const handleSearch = async (searchTerm: string, method: string) => {
-    const result = await query(searchTerm, method);
+  const handleSearch = async (searchQuery: SearchQuery, method: string) => {
+    const result = await query(searchQuery, method);
     setBoundingBox(result.boundingBox);
     setSearchResult(result.reason);
     setSearchTime(result.searchTimeMs);

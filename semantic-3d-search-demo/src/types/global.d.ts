@@ -10,6 +10,14 @@ export interface BoundingBox {
   z_max: number;
 }
 
+// Define SearchQuery interface
+export interface SearchQueryItem {
+  type: "text" | "image";
+  value: string;
+}
+
+export type SearchQuery = SearchQueryItem[];
+
 // Define SearchResult interface
 export interface SearchResult {
   boundingBox: BoundingBox[];

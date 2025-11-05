@@ -1,11 +1,14 @@
 """CLIP-based semantic search provider using FAISS."""
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from pathlib import Path
 import numpy as np
 import faiss
 import torch
 import open_clip
+from PIL import Image
+import io
+import base64
 
 from .base import SemanticSearchProvider
 
@@ -97,14 +100,48 @@ class CLIPProvider(SemanticSearchProvider):
         # Convert to numpy and ensure float32
         return text_features.cpu().numpy().astype(np.float32)
 
+    def _encode_image(self, image_data: str) -> np.ndarray:
+        """
+        Encode image query using CLIP image encoder.
+
+        Args:
+            image_data: Base64 encoded image string (with or without data URI prefix)
+
+        Returns:
+            Normalized embedding as numpy array
+        """
+        # Remove data URI prefix if present
+        if "," in image_data:
+            image_data = image_data.split(",", 1)[1]
+
+        # Decode base64 to bytes
+        image_bytes = base64.b64decode(image_data)
+
+        # Convert to PIL Image
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+        # Preprocess image
+        image_tensor = self.preprocess(image).unsqueeze(0).to(self.device)
+
+        # Encode image
+        with torch.no_grad():
+            image_features = self.model.encode_image(image_tensor)
+            # Normalize embedding
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+        # Convert to numpy and ensure float32
+        return image_features.cpu().numpy().astype(np.float32)
+
     def match_components(
-        self, query: str, component_captions: Optional[Dict[int, Any]] = None
+        self, query: Dict[str, str], component_captions: Optional[Dict[int, Any]] = None
     ) -> Dict[str, Any]:
         """
         Match a search query to components using CLIP embeddings.
 
         Args:
-            query: The search query string
+            query: A dictionary with 'type' and 'value' keys
+                   For text: type='text', value=text string
+                   For images: type='image', value=base64 encoded image string
             component_captions: Not used (component captions are provided at initialization)
 
         Returns:
@@ -113,8 +150,17 @@ class CLIPProvider(SemanticSearchProvider):
                 - "reason": explanation for the choice with captions
         """
 
-        # Encode the query text
-        query_embedding = self._encode_text(query)
+        # Extract query type and value
+        query_type = query.get("type", "text")
+        query_value = query.get("value", "")
+
+        # Determine query type and encode accordingly
+        if query_type == "image":
+            query_embedding = self._encode_image(query_value)
+            query_display = f"[Image query]"
+        else:  # text
+            query_embedding = self._encode_text(query_value)
+            query_display = f"'{query_value}'"
 
         # Search in FAISS index
         # Note: FAISS uses L2 distance by default for IndexHNSWFlat
@@ -171,7 +217,7 @@ class CLIPProvider(SemanticSearchProvider):
         if len(matched_component_ids) > 0:
             reason = "[CLIP embedding similarity]\n\n" + "\n\n".join(caption_details)
         else:
-            reason = f"No matching components found for query: '{query}'"
+            reason = f"No matching components found for query: {query_display}"
 
         return {
             "component_ids": matched_component_ids,

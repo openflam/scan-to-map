@@ -102,7 +102,7 @@ PROVIDERS = {
 }
 
 
-@app.route("/search", methods=["GET", "POST"])
+@app.route("/search", methods=["POST"])
 def search():
     """
     Search endpoint that returns a bounding box.
@@ -117,18 +117,10 @@ def search():
     - z_max = bbox.max[0]
     """
     # Get search query and method
-    if request.method == "POST":
-        query = request.json.get("query", "") if request.json else ""
-        method = (
-            request.json.get("method", "gpt-4o-mini [Full]")
-            if request.json
-            else "gpt-4o-mini [Full]"
-        )
-    else:
-        query = request.args.get("query", "")
-        method = request.args.get("method", "gpt-4o-mini [Full]")
+    search_query = request.json.get("query")
+    method = request.json.get("method")
 
-    if not query:
+    if not search_query or len(search_query) == 0:
         return jsonify({"error": "No query provided"}), 400
 
     # Get the appropriate provider based on the method
@@ -136,10 +128,39 @@ def search():
     if provider is None:
         return jsonify({"error": f"Invalid method: {method}"}), 400
 
-    print(f"Processing query: '{query}' using method: '{method}'")
+    # Unpack the search query (assume only one entry for now)
+    query_item = search_query[0]
+    query_type = query_item.get("type")
+    query_value = query_item.get("value")
+
+    if not query_type or not query_value:
+        return jsonify({"error": "Invalid query format"}), 400
+
+    print(f"Processing query type '{query_type}' using method: '{method}'")
+
+    # Validate query type compatibility with provider
+    if query_type == "image" and method != "CLIP ViT-H-14":
+        return (
+            jsonify(
+                {"error": f"Image queries are only supported with CLIP ViT-H-14 method"}
+            ),
+            400,
+        )
+
+    # For CLIP, pass the entire query_item; for others, extract text value
+    if method == "CLIP ViT-H-14":
+        query_input = query_item
+    else:
+        # Non-CLIP providers only support text
+        if query_type != "text":
+            return (
+                jsonify({"error": f"Method {method} only supports text queries"}),
+                400,
+            )
+        query_input = query_value
 
     # Find the most relevant component bounding boxes and reason using the selected provider
-    result_data = process_query(query, component_captions, bbox_lookup, provider)
+    result_data = process_query(query_input, component_captions, bbox_lookup, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     reason = result_data["reason"]
     search_time_ms = result_data["search_time_ms"]

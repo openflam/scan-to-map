@@ -1,8 +1,9 @@
 import { InputGroup, FormControl, Button, Form } from "react-bootstrap";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import type { SearchQuery } from "./types/global";
 
 interface SearchBarProps {
-  onSearch: (searchTerm: string, method: string) => void;
+  onSearch: (searchQuery: SearchQuery, method: string) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
   searchTime?: number;
@@ -11,10 +12,30 @@ interface SearchBarProps {
 function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [method, setMethod] = useState("CLIP ViT-H-14");
+  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSearch = () => {
-    if (searchTerm.trim()) {
-      onSearch(searchTerm, method);
+    if (searchTerm.trim() || uploadedImage) {
+      const searchQuery: SearchQuery = [];
+      
+      if (searchTerm.trim()) {
+        searchQuery.push({ type: "text", value: searchTerm });
+      }
+      
+      if (uploadedImage) {
+        // Convert image to base64 for transmission
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          searchQuery.push({ type: "image", value: base64String });
+          onSearch(searchQuery, method);
+        };
+        reader.readAsDataURL(uploadedImage);
+        return;
+      }
+      
+      onSearch(searchQuery, method);
     }
   };
 
@@ -23,6 +44,33 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
       handleSearch();
     }
   };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadedImage(file);
+      setSearchTerm(""); // Clear text when image is uploaded
+    }
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+    if (e.target.value.trim() && uploadedImage) {
+      setUploadedImage(null); // Clear image when text is entered
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleClearImage = () => {
+    setUploadedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const isClipMethod = method === "CLIP ViT-H-14";
 
   return (
     <>
@@ -41,9 +89,41 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
         <FormControl
           placeholder="Search..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={handleTextChange}
           onKeyDown={handleKeyPress}
+          disabled={!!uploadedImage}
         />
+
+        {isClipMethod && (
+          <>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImageUpload}
+              accept="image/*"
+              style={{ display: "none" }}
+            />
+            <Button
+              variant={uploadedImage ? "success" : "outline-primary"}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!!searchTerm.trim()}
+              title="Upload image"
+            >
+              <i className="bi bi-image"></i> 
+              {!uploadedImage && " Upload Image"}
+              {uploadedImage && ` ${uploadedImage.name}`}
+            </Button>
+            {uploadedImage && (
+              <Button
+                variant="outline-danger"
+                onClick={handleClearImage}
+                title="Clear image"
+              >
+                <i className="bi bi-x-circle"></i>
+              </Button>
+            )}
+          </>
+        )}
 
         <Button variant="outline-primary" onClick={handleSearch}>
           Search

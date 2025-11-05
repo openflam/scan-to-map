@@ -1,12 +1,21 @@
-import type { SearchResult } from "./types/global";
+import type { SearchResult, SearchQuery } from "./types/global";
 
 const SEARCH_SERVER_URL = "http://172.26.101.175:5000";
 
-export async function query(searchTerm: string, method: string = "gpt-4o-mini [Full]"): Promise<SearchResult> {
-  console.log("Querying for:", searchTerm, "with method:", method);
+export async function query(searchQuery: SearchQuery, method: string = "gpt-4o-mini [Full]"): Promise<SearchResult> {
+  console.log("Querying with:", searchQuery, "using method:", method);
 
   try {
-    const response = await fetch(`${SEARCH_SERVER_URL}/search?query=${encodeURIComponent(searchTerm)}&method=${encodeURIComponent(method)}`);
+    const response = await fetch(`${SEARCH_SERVER_URL}/search`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: searchQuery,
+        method: method,
+      }),
+    });
 
     if (!response.ok) {
       throw new Error(`Search request failed: ${response.status} ${response.statusText}`);
