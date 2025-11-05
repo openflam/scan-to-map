@@ -18,6 +18,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
+import faiss
 
 
 class ComponentImageDataset(Dataset):
@@ -285,6 +286,28 @@ def generate_clip_embeddings_cli(
 
     print(f"Embeddings (numpy) saved to: {embeddings_np_path}")
 
+    # Save FAISS index
+    print(f"\nBuilding FAISS HNSW index...")
+    embedding_dimension = embeddings_array.shape[1]
+
+    # Create HNSW index
+    # M = 32 is a good default for HNSW (number of connections per layer)
+    # ef_construction = 200 controls index build time vs accuracy tradeoff
+    index = faiss.IndexHNSWFlat(embedding_dimension, 32)
+    index.hnsw.efConstruction = 200
+
+    # Add embeddings to index
+    index.add(embeddings_array.astype(np.float32))
+
+    # Save FAISS index
+    faiss_index_path = outputs_dir / "clip_embeddings.faiss"
+    faiss.write_index(index, str(faiss_index_path))
+
+    print(f"FAISS index saved to: {faiss_index_path}")
+    print(f"  Index type: HNSW")
+    print(f"  Total vectors: {index.ntotal}")
+    print(f"  Dimension: {embedding_dimension}")
+
     # Save statistics
     embedding_stats = {
         "total_embeddings_generated": len(all_embeddings),
@@ -298,6 +321,8 @@ def generate_clip_embeddings_cli(
         "total_runtime_seconds": total_runtime,
         "embeddings_per_second": embeddings_per_second,
         "time_per_embedding_seconds": time_per_embedding,
+        "faiss_index_type": "HNSW",
+        "faiss_index_path": str(faiss_index_path),
     }
 
     stats_output_path = outputs_dir / "clip_embedding_stats.json"

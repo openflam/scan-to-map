@@ -371,6 +371,7 @@ def run_pipeline(
         print("  ├── component_captions.json - VLM-generated captions")
         print("  ├── clip_embeddings.json    - CLIP embeddings (JSON)")
         print("  ├── clip_embeddings.npz     - CLIP embeddings (numpy)")
+        print("  ├── clip_embeddings.faiss   - FAISS HNSW index")
         print("  └── clip_embedding_stats.json")
 
     except KeyboardInterrupt:
