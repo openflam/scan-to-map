@@ -1,7 +1,7 @@
 // import "./App.css";
 import { useEffect, useRef } from "react";
 import { Viewer, CreateViewerForCanvas } from "@babylonjs/viewer";
-import { MeshBuilder, Color3, StandardMaterial, DynamicTexture, Mesh } from "@babylonjs/core";
+import { MeshBuilder, Color3, StandardMaterial, DynamicTexture, Mesh, ArcRotateCamera } from "@babylonjs/core";
 import type { BoundingBox } from "./types/global";
 
 function Model3DViewer(props: {
@@ -31,6 +31,27 @@ function Model3DViewer(props: {
 
       viewer.onModelChanged.add(() => {
         viewerRef.current = viewer;
+
+        const scene = sceneRef.current;
+        if (!scene) return;
+
+        const cam = scene.activeCamera as ArcRotateCamera | null;
+        if (!cam) return;
+
+        // // Stop percentage-based zoom so it doesn't approach 0 near the model
+        cam.wheelDeltaPercentage = 0;
+        cam.pinchDeltaPercentage = 0;
+
+        // Constant zoom step tuning (smaller numbers = faster)
+        cam.wheelPrecision = 0.5;   // try 1–2; raise if too fast
+        cam.pinchPrecision = 20;
+
+        // Let the camera get very close and avoid near-plane clipping
+        cam.lowerRadiusLimit = 0.00001;
+        cam.minZ = 0.001;
+
+        // Nice-to-have
+        cam.zoomToMouseLocation = true;
       });
     });
 
