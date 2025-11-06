@@ -53,6 +53,13 @@ def get_sam_checkpoint(config: Mapping[str, Any]) -> Path:
     return path
 
 
+def get_fastsam_checkpoint(config: Mapping[str, Any]) -> Path:
+    path = _resolve_path(config, "fastsam_ckpt")
+    # if not path.is_file():
+    #     raise FileNotFoundError(f"FastSAM checkpoint file not found: {path}")
+    return path
+
+
 def get_masks_dir(config: Mapping[str, Any]) -> Path:
     return _require_dir(config, "masks_dir", create=True)
 
@@ -116,6 +123,7 @@ __all__ = [
     "get_masks_images_dir",
     "get_outputs_dir",
     "get_sam_checkpoint",
+    "get_fastsam_checkpoint",
     "get_sam_model_type",
     "load_config",
 ]

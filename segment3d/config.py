@@ -41,6 +41,7 @@ def get_config(dataset_name: str) -> Dict[str, Any]:
         / "sfm_reconstruction",
         "sam_model_type": "vit_h",
         "sam_ckpt": checkpoints_dir / "sam_vit_h_4b8939.pth",
+        "fastsam_ckpt": checkpoints_dir / "FastSAM-x.pt",
         "masks_dir": outputs_base / dataset_name / "masks",
         "masks_images_dir": outputs_base / dataset_name / "masks_images",
         "associations_dir": outputs_base / dataset_name / "associations",

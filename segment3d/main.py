@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 
 from src.sam_runner import run_sam_on_images
+from src.fast_sam_runner import run_fastsam_on_images
 from src.associate2d3d import associate_all_images
 from src.mask_graph import build_mask_graph_cli
 from src.bbox_corners import get_all_bbox_corners_cli
@@ -52,6 +53,12 @@ def run_pipeline(
     skip_association: bool = False,
     skip_caption: bool = False,
     skip_clip: bool = False,
+    use_fastsam: bool = True,
+    fastsam_imgsz: int = 1024,
+    fastsam_conf: float = 0.4,
+    fastsam_iou: float = 0.7,
+    fastsam_batch_size: int = 32,
+    fastsam_num_workers: int = 4,
     K: int = 5,
     tau: float = 0.2,
     min_points_in_3D_segment: int = 100,
@@ -76,6 +83,12 @@ def run_pipeline(
         skip_association: Skip 2D-3D association step
         skip_caption: Skip VLM captioning step
         skip_clip: Skip CLIP embedding generation step
+        use_fastsam: Use FastSAM instead of SAM for segmentation
+        fastsam_imgsz: Input image size for FastSAM
+        fastsam_conf: Confidence threshold for FastSAM
+        fastsam_iou: IoU threshold for NMS in FastSAM
+        fastsam_batch_size: Batch size for FastSAM inference
+        fastsam_num_workers: Number of worker threads for parallel I/O
         K: Number of nearest neighbors for mask graph
         tau: Jaccard similarity threshold for mask graph
         percentile: Percentile threshold for bbox outlier removal
@@ -112,7 +125,15 @@ def run_pipeline(
 
     print("\nPipeline Parameters:")
     if skip_sam:
-        print("  SAM segmentation: SKIPPED")
+        print("  Segmentation: SKIPPED")
+    else:
+        print(f"  Segmentation model: {'FastSAM' if use_fastsam else 'SAM'}")
+        if use_fastsam:
+            print(f"  FastSAM imgsz: {fastsam_imgsz}")
+            print(f"  FastSAM conf: {fastsam_conf}")
+            print(f"  FastSAM iou: {fastsam_iou}")
+            print(f"  FastSAM batch_size: {fastsam_batch_size}")
+            print(f"  FastSAM num_workers: {fastsam_num_workers}")
     if skip_association:
         print("  2D-3D association: SKIPPED")
     if skip_caption:
@@ -166,27 +187,47 @@ def run_pipeline(
             "skip_association": skip_association,
             "skip_caption": skip_caption,
             "skip_clip": skip_clip,
+            "use_fastsam": use_fastsam,
+            "fastsam_imgsz": fastsam_imgsz,
+            "fastsam_conf": fastsam_conf,
+            "fastsam_iou": fastsam_iou,
+            "fastsam_batch_size": fastsam_batch_size,
+            "fastsam_num_workers": fastsam_num_workers,
         },
     }
 
     try:
-        # Step 1: Run SAM
+        # Step 1: Run SAM or FastSAM
         if not skip_sam:
             current_step += 1
-            print_step_header(current_step, total_steps, "Run SAM Segmentation")
+            if use_fastsam:
+                print_step_header(current_step, total_steps, "Run FastSAM Segmentation")
+            else:
+                print_step_header(current_step, total_steps, "Run SAM Segmentation")
             step_start = time.time()
 
-            run_sam_on_images(dataset_name=dataset_name)
+            if use_fastsam:
+                run_fastsam_on_images(
+                    dataset_name=dataset_name,
+                    imgsz=fastsam_imgsz,
+                    conf=fastsam_conf,
+                    iou=fastsam_iou,
+                    batch_size=fastsam_batch_size,
+                    num_workers=fastsam_num_workers,
+                )
+            else:
+                run_sam_on_images(dataset_name=dataset_name)
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["1_sam_segmentation"] = {
+            runtime_stats["steps"]["1_segmentation"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
+                "model": "FastSAM" if use_fastsam else "SAM",
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 1: SAM Segmentation (using existing masks)")
-            runtime_stats["steps"]["1_sam_segmentation"] = {
+            print("\nSkipping Step 1: Segmentation (using existing masks)")
+            runtime_stats["steps"]["1_segmentation"] = {
                 "duration_seconds": 0,
                 "status": "skipped",
             }
@@ -419,7 +460,7 @@ Configuration:
     parser.add_argument(
         "--skip-sam",
         action="store_true",
-        help="Skip SAM segmentation step (use existing masks)",
+        help="Skip SAM/FastSAM segmentation step (use existing masks)",
     )
     parser.add_argument(
         "--skip-association",
@@ -435,6 +476,41 @@ Configuration:
         "--skip-clip",
         action="store_true",
         help="Skip CLIP embedding generation step",
+    )
+    parser.add_argument(
+        "--use-fastsam",
+        action="store_true",
+        help="Use FastSAM instead of SAM for segmentation",
+    )
+    parser.add_argument(
+        "--fastsam-imgsz",
+        type=int,
+        default=1024,
+        help="Input image size for FastSAM (default: 1024)",
+    )
+    parser.add_argument(
+        "--fastsam-conf",
+        type=float,
+        default=0.4,
+        help="Confidence threshold for FastSAM (default: 0.4)",
+    )
+    parser.add_argument(
+        "--fastsam-iou",
+        type=float,
+        default=0.7,
+        help="IoU threshold for NMS in FastSAM (default: 0.7)",
+    )
+    parser.add_argument(
+        "--fastsam-batch-size",
+        type=int,
+        default=1,
+        help="Batch size for FastSAM inference (default: 1)",
+    )
+    parser.add_argument(
+        "--fastsam-num-workers",
+        type=int,
+        default=4,
+        help="Number of worker threads for parallel I/O in FastSAM (default: 4)",
     )
     parser.add_argument(
         "--K",
@@ -493,8 +569,8 @@ Configuration:
     parser.add_argument(
         "--caption-batch-size",
         type=int,
-        default=1024,
-        help="Batch size for captioning inference (default: 1024)",
+        default=512,
+        help="Batch size for captioning inference (default: 512)",
     )
     parser.add_argument(
         "--clip-model",
@@ -536,6 +612,16 @@ Configuration:
         parser.error("--caption-batch-size must be at least 1")
     if args.clip_batch_size < 1:
         parser.error("--clip-batch-size must be at least 1")
+    if args.fastsam_imgsz < 1:
+        parser.error("--fastsam-imgsz must be at least 1")
+    if args.fastsam_conf <= 0 or args.fastsam_conf > 1:
+        parser.error("--fastsam-conf must be between 0 and 1")
+    if args.fastsam_iou <= 0 or args.fastsam_iou > 1:
+        parser.error("--fastsam-iou must be between 0 and 1")
+    if args.fastsam_batch_size < 1:
+        parser.error("--fastsam-batch-size must be at least 1")
+    if args.fastsam_num_workers < 1:
+        parser.error("--fastsam-num-workers must be at least 1")
 
     # Run the pipeline with parsed arguments
     run_pipeline(
@@ -544,6 +630,12 @@ Configuration:
         skip_association=args.skip_association,
         skip_caption=args.skip_caption,
         skip_clip=args.skip_clip,
+        use_fastsam=args.use_fastsam,
+        fastsam_imgsz=args.fastsam_imgsz,
+        fastsam_conf=args.fastsam_conf,
+        fastsam_iou=args.fastsam_iou,
+        fastsam_batch_size=args.fastsam_batch_size,
+        fastsam_num_workers=args.fastsam_num_workers,
         K=args.K,
         tau=args.tau,
         min_points_in_3D_segment=args.min_points_in_3D_segment,
