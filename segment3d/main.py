@@ -53,11 +53,11 @@ def run_pipeline(
     skip_association: bool = False,
     skip_caption: bool = False,
     skip_clip: bool = False,
-    use_fastsam: bool = True,
+    use_full_sam: bool = False,
     fastsam_imgsz: int = 1024,
     fastsam_conf: float = 0.4,
     fastsam_iou: float = 0.7,
-    fastsam_batch_size: int = 32,
+    fastsam_batch_size: int = 64,
     fastsam_num_workers: int = 4,
     K: int = 5,
     tau: float = 0.2,
@@ -127,8 +127,8 @@ def run_pipeline(
     if skip_sam:
         print("  Segmentation: SKIPPED")
     else:
-        print(f"  Segmentation model: {'FastSAM' if use_fastsam else 'SAM'}")
-        if use_fastsam:
+        print(f"  Segmentation model: {'Full SAM' if use_full_sam else 'Fast SAM'}")
+        if not use_full_sam:
             print(f"  FastSAM imgsz: {fastsam_imgsz}")
             print(f"  FastSAM conf: {fastsam_conf}")
             print(f"  FastSAM iou: {fastsam_iou}")
@@ -187,7 +187,7 @@ def run_pipeline(
             "skip_association": skip_association,
             "skip_caption": skip_caption,
             "skip_clip": skip_clip,
-            "use_fastsam": use_fastsam,
+            "use_full_sam": use_full_sam,
             "fastsam_imgsz": fastsam_imgsz,
             "fastsam_conf": fastsam_conf,
             "fastsam_iou": fastsam_iou,
@@ -200,13 +200,15 @@ def run_pipeline(
         # Step 1: Run SAM or FastSAM
         if not skip_sam:
             current_step += 1
-            if use_fastsam:
+            if not use_full_sam:
                 print_step_header(current_step, total_steps, "Run FastSAM Segmentation")
             else:
                 print_step_header(current_step, total_steps, "Run SAM Segmentation")
             step_start = time.time()
 
-            if use_fastsam:
+            if use_full_sam:
+                run_sam_on_images(dataset_name=dataset_name)
+            else:
                 run_fastsam_on_images(
                     dataset_name=dataset_name,
                     imgsz=fastsam_imgsz,
@@ -215,14 +217,12 @@ def run_pipeline(
                     batch_size=fastsam_batch_size,
                     num_workers=fastsam_num_workers,
                 )
-            else:
-                run_sam_on_images(dataset_name=dataset_name)
 
             step_time = time.time() - step_start
             runtime_stats["steps"]["1_segmentation"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
-                "model": "FastSAM" if use_fastsam else "SAM",
+                "model": "SAM" if use_full_sam else "Fast SAM",
             }
             print_step_complete(step_time)
         else:
@@ -478,9 +478,9 @@ Configuration:
         help="Skip CLIP embedding generation step",
     )
     parser.add_argument(
-        "--use-fastsam",
+        "--use-full-sam",
         action="store_true",
-        help="Use FastSAM instead of SAM for segmentation",
+        help="Use Full SAM instead of Fast SAM for segmentation",
     )
     parser.add_argument(
         "--fastsam-imgsz",
@@ -503,8 +503,8 @@ Configuration:
     parser.add_argument(
         "--fastsam-batch-size",
         type=int,
-        default=1,
-        help="Batch size for FastSAM inference (default: 1)",
+        default=32,
+        help="Batch size for FastSAM inference (default: 32)",
     )
     parser.add_argument(
         "--fastsam-num-workers",
@@ -630,7 +630,7 @@ Configuration:
         skip_association=args.skip_association,
         skip_caption=args.skip_caption,
         skip_clip=args.skip_clip,
-        use_fastsam=args.use_fastsam,
+        use_full_sam=args.use_full_sam,
         fastsam_imgsz=args.fastsam_imgsz,
         fastsam_conf=args.fastsam_conf,
         fastsam_iou=args.fastsam_iou,

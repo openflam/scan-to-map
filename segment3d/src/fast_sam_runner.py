@@ -6,8 +6,15 @@ import argparse
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from threading import Lock
 
-import matplotlib.pyplot as plt
+import matplotlib
+
+matplotlib.use("Agg", force=True)
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
+_MPL_LOCK = Lock()  # guard Matplotlib rendering in multi-threaded code
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -25,7 +32,12 @@ from .io_paths import (
 )
 
 
-def show_anns_side_by_side(image, masks_np, output_path, figsize=(20, 20)):
+def show_anns_side_by_side(
+    image: np.ndarray,
+    masks_np: np.ndarray | None,
+    output_path: str | Path,
+    figsize: tuple[float, float] = (20, 20),
+) -> None:
     """
     Displays the original image on the left and the mask on the right.
     Saves the result to output_path.
@@ -36,42 +48,75 @@ def show_anns_side_by_side(image, masks_np, output_path, figsize=(20, 20)):
         output_path: Path to save the figure
         figsize: Figure size tuple
     """
-    # Create figure with 1 row, 2 columns
-    fig, axes = plt.subplots(1, 2, figsize=figsize)
+    # ---- Validate and prep IO path ----
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # ----- LEFT: Original image -----
-    axes[0].imshow(image)
-    axes[0].axis("off")
-    axes[0].set_title("Original Image")
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("`image` must be HxWx3 RGB array")
 
-    # ----- RIGHT: Mask -----
+    H, W = image.shape[:2]
+
+    # ---- Build overlay outside the Matplotlib lock ----
+    overlay = None
+    title_right = "Masks (0 segments)"
     if masks_np is not None and len(masks_np) > 0:
-        # Sort by area, largest first
-        areas = [m.sum() for m in masks_np]
-        sorted_indices = np.argsort(areas)[::-1]
+        # Ensure masks are HxW and aligned
+        if masks_np.ndim != 3 or masks_np.shape[1:] != (H, W):
+            raise ValueError("`masks_np` must be (N, H, W) matching image size")
 
-        h, w = masks_np[0].shape
+        # Sort masks by area (desc)
+        areas = [int(m.sum()) for m in masks_np]
+        order = np.argsort(areas)[::-1]
 
-        # Create transparent RGBA overlay
-        overlay = np.zeros((h, w, 4))
+        # Create transparent RGBA overlay [0,1]
+        overlay = np.zeros((H, W, 4), dtype=np.float32)
 
-        # Add masks with random colors
-        for idx in sorted_indices:
-            m = masks_np[idx]
-            color_mask = np.concatenate([np.random.random(3), [0.6]])  # RGB + alpha
-            overlay[m > 0] = color_mask
+        # Thread-local RNG (don’t share global np.random state across threads)
+        rng = np.random.default_rng()
 
-        # Plot masks
-        axes[1].imshow(overlay)
-        axes[1].set_title(f"Masks ({len(masks_np)} segments)")
+        for idx in order:
+            m = masks_np[idx].astype(bool, copy=False)
+            if not m.any():
+                continue
+            # Random RGB + fixed alpha
+            rgb = rng.random(3, dtype=np.float32)
+            color = np.concatenate([rgb, np.array([0.6], dtype=np.float32)])
+            overlay[m] = color
+
+        title_right = f"Masks ({len(masks_np)} segments)"
+
+    # ---- Create figure (OO API), render within a lock ----
+    fig = Figure(figsize=figsize, constrained_layout=True)
+    ax0, ax1 = fig.subplots(1, 2)
+
+    # Set figure size proportional to image dimensions
+    dpi = 100
+    fig.set_size_inches((2 * W) / dpi, H / dpi)  # width = 2 images side-by-side
+
+    # LEFT: original image
+    ax0.imshow(image)
+    ax0.axis("off")
+    ax0.set_title("Original Image")
+
+    # RIGHT: overlay (or empty)
+    if overlay is not None:
+        ax1.imshow(overlay)
     else:
-        axes[1].set_title("Masks (0 segments)")
+        # Show an empty axes with a title if no masks
+        ax1.imshow(np.zeros((H, W, 4), dtype=np.float32))
+    ax1.axis("off")
+    ax1.set_title(title_right)
 
-    axes[1].axis("off")
+    canvas = FigureCanvas(fig)
 
-    plt.tight_layout()
-    plt.savefig(output_path, format="jpg", dpi=100, bbox_inches="tight")
-    plt.close(fig)
+    # Matplotlib rendering/saving is not fully thread-safe → guard it
+    with _MPL_LOCK:
+        # Save as JPEG with bbox tightening similar to bbox_inches="tight"
+        canvas.print_jpg(str(output_path))
+
+    # Help GC
+    fig.clear()
 
 
 def postprocess_and_save(
@@ -145,7 +190,7 @@ def run_fastsam_on_images(
     imgsz: int = 1024,
     conf: float = 0.4,
     iou: float = 0.7,
-    batch_size: int = 32,
+    batch_size: int = 64,
     num_workers: int = 4,
 ) -> None:
     """Run FastSAM on all images and save masks in COCO format.
@@ -317,8 +362,8 @@ def main() -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
-        help="Batch size for FastSAM inference (default: 32)",
+        default=64,
+        help="Batch size for FastSAM inference (default: 64)",
     )
     parser.add_argument(
         "--num-workers",

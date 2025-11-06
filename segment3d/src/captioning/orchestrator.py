@@ -301,8 +301,8 @@ def main() -> None:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=16,
-        help="Number of components to process in each batch (default: 16)",
+        default=512,
+        help="Number of components to process in each batch (default: 512)",
     )
 
     args = parser.parse_args()
