@@ -9,6 +9,8 @@ from openai import OpenAI
 from .base import SemanticSearchProvider
 from .bm25_provider import BM25Provider
 
+from prompts import OPENAI_RAG_QUERY_REWRITE_PROMPT, OPENAI_RAG_RERANK_PROMPT
+
 # Load variables from .env into os.environ
 load_dotenv()
 
@@ -108,13 +110,7 @@ class OpenAIRAGProvider(SemanticSearchProvider):
         Returns:
             Rewritten query optimized for BM25 retrieval
         """
-        prompt = f"""Rewrite the following user query into a set of search terms suitable for BM25 retrieval.
-Extract key concepts, expand abbreviations, and include relevant synonyms.
-Focus on nouns and descriptive terms that would appear in object descriptions.
-
-User Query: "{query}"
-
-Respond with ONLY the rewritten search terms (no explanation needed)."""
+        prompt = OPENAI_RAG_QUERY_REWRITE_PROMPT.format(query=query)
 
         try:
             response = self.client.chat.completions.create(
@@ -156,25 +152,7 @@ Respond with ONLY the rewritten search terms (no explanation needed)."""
             caption = self.component_captions[comp_id].get("caption", "")
             candidates_text += f"{i+1}. Component {comp_id}: {caption}\n\n"
 
-        prompt = f"""Given the following search query and a list of candidate components retrieved by BM25, 
-select and rank the components that best match the query.
-
-Only return those components that contain the objects almost exclusively without unrelated objects.
-Return the components in order of relevance (most relevant first).
-
-Search Query: "{original_query}"
-
-Candidate Components:
-{candidates_text}
-
-Respond with ONLY a JSON object containing:
-1. "component_ids": a comma-separated string of integer IDs of the matching components in order of relevance (e.g., "2,5,7")
-2. "reason": a brief explanation of why these components were selected and their ranking
-
-Example response format:
-{{"component_ids": "2,5,7", "reason": "Component 2 contains printers which directly match the query, followed by components 5 and 7 which also show printing equipment."}}
-
-If no components match well, return the best matching component ID anyway."""
+        prompt = OPENAI_RAG_RERANK_PROMPT.format(original_query=original_query, candidates_text=candidates_text)
 
         try:
             response = self.client.chat.completions.create(

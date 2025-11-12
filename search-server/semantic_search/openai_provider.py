@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from .base import SemanticSearchProvider
-from .prompts import build_component_matching_prompt, SYSTEM_PROMPT
+
+from prompts import OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT
+from prompts import OPENAI_FULL_CONTEXT_SYSTEM_PROMPT
 
 # Load variables from .env into os.environ
 load_dotenv()
@@ -55,14 +57,15 @@ class OpenAIProvider(SemanticSearchProvider):
                 - "reason": explanation for the choice
         """
         # Build the prompt using pre-built components text
-        prompt = build_component_matching_prompt(query, self.components_text)
+        prompt = OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT\
+            .format(query=query, components_text=self.components_text)
 
         try:
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "system", "content": OPENAI_FULL_CONTEXT_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=self.temperature,
