@@ -113,9 +113,7 @@ def crop_all_images_cli(dataset_name: str) -> None:
     for comp_id, crop_list in all_crop_data.items():
         print(f"\nProcessing component {comp_id} ({len(crop_list)} crops)...")
 
-        # Create component directory
         comp_dir = crops_dir / f"component_{comp_id}"
-        comp_dir.mkdir(parents=True, exist_ok=True)
 
         component_crops = []
 
