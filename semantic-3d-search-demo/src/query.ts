@@ -1,6 +1,6 @@
 import type { SearchResult, SearchQuery } from "./types/global";
 
-const SEARCH_SERVER_URL = "http://172.26.101.175:5000";
+const SEARCH_SERVER_URL = "http://192.168.22.53:5000";
 
 export async function query(searchQuery: SearchQuery, method: string = "gpt-4o-mini [Full]"): Promise<SearchResult> {
   console.log("Querying with:", searchQuery, "using method:", method);
