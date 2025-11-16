@@ -271,8 +271,8 @@ def main() -> None:
     parser.add_argument(
         "--n-images",
         type=int,
-        default=2,
-        help="Number of top images to use per component (default: 2)",
+        default=1,
+        help="Number of top images to use per component (default: 1)",
     )
     parser.add_argument(
         "--captioner-type",

@@ -209,6 +209,12 @@ function createBoundingBoxMesh(
   }
 
   box.material = material;
+  
+  // Make the bounding box always render on top
+  box.renderingGroupId = 1;
+  if (edgeBox) {
+    edgeBox.renderingGroupId = 1;
+  }
 }
 
 // Function to create text label for bounding box

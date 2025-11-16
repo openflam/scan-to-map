@@ -187,17 +187,7 @@ class VLLMCaptioner:
                 component_id, top_images, crops_dir
             )
 
-            if vllm_input is None:
-                # No valid images for this component
-                results.append(
-                    CaptionResult(
-                        component_id=component_id,
-                        caption=f"[No valid crop images found for component {component_id}]",
-                        image_paths=[],
-                        error="No valid crop images found",
-                    )
-                )
-            else:
+            if vllm_input is not None:
                 vllm_inputs.append(vllm_input)
                 batch_component_ids.append(component_id)
                 batch_image_paths.append(image_paths)

@@ -64,7 +64,7 @@ def run_pipeline(
     min_points_in_3D_segment: int = 100,
     percentile: float = 95.0,
     min_fraction: float = 0.3,
-    caption_n_images: int = 5,
+    caption_n_images: int = 1,
     captioner_type: str = "vllm",
     caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     caption_device: int = 0,
