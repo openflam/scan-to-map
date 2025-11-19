@@ -10,6 +10,40 @@ from pathlib import Path
 from typing import Any, Dict
 
 
+# Default parameters for the scan-to-map pipeline
+DEFAULT_PARAMETERS = {
+    # Segmentation parameters
+    "use_full_sam": False,  # Use Full SAM instead of Fast SAM for segmentation
+    "fastsam_imgsz": 1024,  # Input image size for FastSAM
+    "fastsam_conf": 0.4,  # Confidence threshold for FastSAM
+    "fastsam_iou": 0.7,  # IoU threshold for NMS in FastSAM
+    "fastsam_batch_size": 32,  # Batch size for FastSAM inference
+    "fastsam_num_workers": 4,  # Number of worker threads for parallel I/O in FastSAM
+    
+    # Mask graph parameters
+    "K": 5,  # Number of nearest neighbors for mask graph
+    "tau": 0.2,  # Jaccard similarity threshold for mask graph
+    "min_points_in_3D_segment": 5,  # Minimum points in 3D segment for mask graph
+    
+    # Bounding box parameters
+    "percentile": 95.0,  # Percentile threshold for bbox outlier removal
+    "min_fraction": 0.3,  # Minimum fraction of visible points for projection
+    
+    # Captioning parameters
+    "caption_n_images": 1,  # Number of top images to use for captioning
+    "captioner_type": "vllm",  # Type of captioner to use
+    "caption_model": "Qwen/Qwen2.5-VL-7B-Instruct",  # VLM model to use for captioning
+    "caption_device": 0,  # GPU device ID for captioning
+    "caption_batch_size": 512,  # Batch size for captioning inference
+    
+    # CLIP embedding parameters
+    "clip_model": "ViT-H-14",  # OpenCLIP model name for embeddings
+    "clip_pretrained": "laion2b_s34b_b79k",  # Pretrained weights for CLIP model
+    "clip_batch_size": 32,  # Batch size for CLIP embedding generation
+    "clip_device": 0,  # GPU device ID for CLIP embeddings
+}
+
+
 def get_config(dataset_name: str) -> Dict[str, Any]:
     """
     Get configuration for a specific dataset.

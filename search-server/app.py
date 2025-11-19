@@ -73,8 +73,8 @@ CLIP_STATS_PATH = (
 with open(CLIP_STATS_PATH, "r") as f:
     clip_stats = json.load(f)
 
-clip_model_name = clip_stats.get("model_name", "ViT-B-32")
-clip_pretrained = clip_stats.get("pretrained", "laion2b_s34b_b79k")
+clip_model_name = clip_stats["model_name"]
+clip_pretrained = clip_stats["pretrained"]
 
 print(f"CLIP model configuration: {clip_model_name} ({clip_pretrained})")
 

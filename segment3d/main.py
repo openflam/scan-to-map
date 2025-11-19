@@ -31,7 +31,7 @@ from src.crop_images import crop_all_images_cli
 from src.captioning import caption_all_components_cli
 from src.clip_embed import generate_clip_embeddings_cli
 from src.io_paths import load_config
-from config import list_datasets
+from config import list_datasets, DEFAULT_PARAMETERS
 import os
 
 
@@ -480,121 +480,121 @@ Configuration:
     parser.add_argument(
         "--use-full-sam",
         action="store_true",
-        help="Use Full SAM instead of Fast SAM for segmentation",
+        help=f"Use Full SAM instead of Fast SAM for segmentation (default: {DEFAULT_PARAMETERS['use_full_sam']})",
     )
     parser.add_argument(
         "--fastsam-imgsz",
         type=int,
-        default=1024,
-        help="Input image size for FastSAM (default: 1024)",
+        default=DEFAULT_PARAMETERS["fastsam_imgsz"],
+        help=f"Input image size for FastSAM (default: {DEFAULT_PARAMETERS['fastsam_imgsz']})",
     )
     parser.add_argument(
         "--fastsam-conf",
         type=float,
-        default=0.4,
-        help="Confidence threshold for FastSAM (default: 0.4)",
+        default=DEFAULT_PARAMETERS["fastsam_conf"],
+        help=f"Confidence threshold for FastSAM (default: {DEFAULT_PARAMETERS['fastsam_conf']})",
     )
     parser.add_argument(
         "--fastsam-iou",
         type=float,
-        default=0.7,
-        help="IoU threshold for NMS in FastSAM (default: 0.7)",
+        default=DEFAULT_PARAMETERS["fastsam_iou"],
+        help=f"IoU threshold for NMS in FastSAM (default: {DEFAULT_PARAMETERS['fastsam_iou']})",
     )
     parser.add_argument(
         "--fastsam-batch-size",
         type=int,
-        default=32,
-        help="Batch size for FastSAM inference (default: 32)",
+        default=DEFAULT_PARAMETERS["fastsam_batch_size"],
+        help=f"Batch size for FastSAM inference (default: {DEFAULT_PARAMETERS['fastsam_batch_size']})",
     )
     parser.add_argument(
         "--fastsam-num-workers",
         type=int,
-        default=4,
-        help="Number of worker threads for parallel I/O in FastSAM (default: 4)",
+        default=DEFAULT_PARAMETERS["fastsam_num_workers"],
+        help=f"Number of worker threads for parallel I/O in FastSAM (default: {DEFAULT_PARAMETERS['fastsam_num_workers']})",
     )
     parser.add_argument(
         "--K",
         type=int,
-        default=5,
-        help="Number of nearest neighbors for mask graph (default: 5)",
+        default=DEFAULT_PARAMETERS["K"],
+        help=f"Number of nearest neighbors for mask graph (default: {DEFAULT_PARAMETERS['K']})",
     )
     parser.add_argument(
         "--tau",
         type=float,
-        default=0.2,
-        help="Jaccard similarity threshold for mask graph (default: 0.2)",
+        default=DEFAULT_PARAMETERS["tau"],
+        help=f"Jaccard similarity threshold for mask graph (default: {DEFAULT_PARAMETERS['tau']})",
     )
     parser.add_argument(
         "--min-points-in-3D-segment",
         type=int,
-        default=5,
-        help="Minimum points in 3D segment for mask graph (default: 5)",
+        default=DEFAULT_PARAMETERS["min_points_in_3D_segment"],
+        help=f"Minimum points in 3D segment for mask graph (default: {DEFAULT_PARAMETERS['min_points_in_3D_segment']})",
     )
     parser.add_argument(
         "--percentile",
         type=float,
-        default=95.0,
-        help="Percentile threshold for bbox outlier removal (default: 95.0)",
+        default=DEFAULT_PARAMETERS["percentile"],
+        help=f"Percentile threshold for bbox outlier removal (default: {DEFAULT_PARAMETERS['percentile']})",
     )
     parser.add_argument(
         "--min-fraction",
         type=float,
-        default=0.3,
-        help="Minimum fraction of visible points for projection (default: 0.3)",
+        default=DEFAULT_PARAMETERS["min_fraction"],
+        help=f"Minimum fraction of visible points for projection (default: {DEFAULT_PARAMETERS['min_fraction']})",
     )
     parser.add_argument(
         "--caption-n-images",
         type=int,
-        default=1,
-        help="Number of top images to use for captioning (default: 1)",
+        default=DEFAULT_PARAMETERS["caption_n_images"],
+        help=f"Number of top images to use for captioning (default: {DEFAULT_PARAMETERS['caption_n_images']})",
     )
     parser.add_argument(
         "--captioner-type",
         type=str,
-        default="vllm",
-        help="Type of captioner to use (default: vllm)",
+        default=DEFAULT_PARAMETERS["captioner_type"],
+        help=f"Type of captioner to use (default: {DEFAULT_PARAMETERS['captioner_type']})",
     )
     parser.add_argument(
         "--caption-model",
         type=str,
-        default="Qwen/Qwen2.5-VL-7B-Instruct",
-        help="VLM model to use for captioning (default: Qwen/Qwen2.5-VL-7B-Instruct)",
+        default=DEFAULT_PARAMETERS["caption_model"],
+        help=f"VLM model to use for captioning (default: {DEFAULT_PARAMETERS['caption_model']})",
     )
     parser.add_argument(
         "--caption-device",
         type=int,
-        default=0,
-        help="GPU device ID for captioning (default: 0)",
+        default=DEFAULT_PARAMETERS["caption_device"],
+        help=f"GPU device ID for captioning (default: {DEFAULT_PARAMETERS['caption_device']})",
     )
     parser.add_argument(
         "--caption-batch-size",
         type=int,
-        default=512,
-        help="Batch size for captioning inference (default: 512)",
+        default=DEFAULT_PARAMETERS["caption_batch_size"],
+        help=f"Batch size for captioning inference (default: {DEFAULT_PARAMETERS['caption_batch_size']})",
     )
     parser.add_argument(
         "--clip-model",
         type=str,
-        default="ViT-B-32",
-        help="OpenCLIP model name for embeddings (default: ViT-B-32)",
+        default=DEFAULT_PARAMETERS["clip_model"],
+        help=f"OpenCLIP model name for embeddings (default: {DEFAULT_PARAMETERS['clip_model']})",
     )
     parser.add_argument(
         "--clip-pretrained",
         type=str,
-        default="laion2b_s34b_b79k",
-        help="Pretrained weights for CLIP model (default: laion2b_s34b_b79k)",
+        default=DEFAULT_PARAMETERS["clip_pretrained"],
+        help=f"Pretrained weights for CLIP model (default: {DEFAULT_PARAMETERS['clip_pretrained']})",
     )
     parser.add_argument(
         "--clip-batch-size",
         type=int,
-        default=32,
-        help="Batch size for CLIP embedding generation (default: 32)",
+        default=DEFAULT_PARAMETERS["clip_batch_size"],
+        help=f"Batch size for CLIP embedding generation (default: {DEFAULT_PARAMETERS['clip_batch_size']})",
     )
     parser.add_argument(
         "--clip-device",
         type=int,
-        default=0,
-        help="GPU device ID for CLIP embeddings (default: 0)",
+        default=DEFAULT_PARAMETERS["clip_device"],
+        help=f"GPU device ID for CLIP embeddings (default: {DEFAULT_PARAMETERS['clip_device']})",
     )
 
     args = parser.parse_args()
