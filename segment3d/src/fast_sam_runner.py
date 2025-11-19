@@ -326,6 +326,10 @@ def run_fastsam_on_images(
             traceback.print_exc()
             continue
 
+    # Clean up the model to free GPU memory
+    del model
+    torch.cuda.empty_cache()
+
     print(f"\nCompleted processing all images.")
     print(f"Masks saved to: {masks_dir}")
     print(f"Visualizations saved to: {masks_images_dir}")
