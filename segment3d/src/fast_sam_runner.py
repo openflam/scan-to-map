@@ -264,35 +264,52 @@ def run_fastsam_on_images(
                 device=device,
             )
 
-            # Process each result in the batch
+            # Move all masks to CPU first to free GPU memory
+            cpu_masks_list = []
+            for res in results:
+                masks = res.masks.data if res.masks is not None else None
+                if masks is None or len(masks) == 0:
+                    cpu_masks_list.append(None)
+                else:
+                    # Move to CPU as numpy array
+                    masks_np = masks.cpu().numpy()
+                    cpu_masks_list.append(masks_np)
+
+            # Free GPU memory immediately after moving to CPU
+            del results
+            torch.cuda.empty_cache()
+
+            # Process each result in the batch on CPU
             # Use ThreadPoolExecutor for parallel I/O operations
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 futures = []
 
-                for idx, (image_path, res) in enumerate(zip(batch_paths, results)):
+                for idx, (image_path, masks_cpu) in enumerate(
+                    zip(batch_paths, cpu_masks_list)
+                ):
                     try:
                         # Load image to get dimensions
                         img_pil = Image.open(str(image_path)).convert("RGB")
                         img_np = np.array(img_pil)
                         H, W = img_np.shape[:2]
 
-                        masks = res.masks.data if res.masks is not None else None
-
-                        if masks is None or len(masks) == 0:
+                        if masks_cpu is None:
                             masks_np = None
                         else:
-                            # Ensure masks are float tensors
-                            masks = masks.float()
-                            _, h_prime, w_prime = masks.shape
-
                             # Resize masks to original image size if needed
+                            _, h_prime, w_prime = masks_cpu.shape
                             if (h_prime, w_prime) != (H, W):
-                                masks = F.interpolate(
-                                    masks.unsqueeze(1), size=(H, W), mode="nearest"
+                                # Convert to torch tensor for interpolation
+                                masks_tensor = torch.from_numpy(masks_cpu).float()
+                                masks_tensor = F.interpolate(
+                                    masks_tensor.unsqueeze(1),
+                                    size=(H, W),
+                                    mode="nearest",
                                 ).squeeze(1)
-
-                            # Convert to numpy
-                            masks_np = masks.cpu().numpy().astype(np.uint8)
+                                masks_np = masks_tensor.numpy().astype(np.uint8)
+                                del masks_tensor
+                            else:
+                                masks_np = masks_cpu.astype(np.uint8)
 
                         # Submit post-processing and saving to thread pool
                         future = executor.submit(

@@ -38,7 +38,7 @@ DEFAULT_PARAMETERS = {
     
     # CLIP embedding parameters
     "clip_model": "ViT-H-14",  # OpenCLIP model name for embeddings
-    "clip_pretrained": "laion2b_s34b_b79k",  # Pretrained weights for CLIP model
+    "clip_pretrained": "laion2B-s32B-b79K",  # Pretrained weights for CLIP model
     "clip_batch_size": 32,  # Batch size for CLIP embedding generation
     "clip_device": 0,  # GPU device ID for CLIP embeddings
 }

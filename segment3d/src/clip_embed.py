@@ -103,8 +103,8 @@ def get_top_image(
 
 def generate_clip_embeddings_cli(
     dataset_name: str,
-    model_name: str = "ViT-B-32",
-    pretrained: str = "laion2b_s34b_b79k",
+    model_name: str = "ViT-H-14",
+    pretrained: str = "laion2B-s32B-b79K",
     device: Optional[int] = None,
     batch_size: int = 32,
     max_components: Optional[int] = None,
@@ -362,14 +362,14 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="ViT-B-32",
-        help="OpenCLIP model name (default: ViT-B-32)",
+        default="ViT-H-14",
+        help="OpenCLIP model name (default: ViT-H-14)",
     )
     parser.add_argument(
         "--pretrained",
         type=str,
-        default="laion2b_s34b_b79k",
-        help="Pretrained weights to use (default: laion2b_s34b_b79k)",
+        default="laion2B-s32B-b79K",
+        help="Pretrained weights to use (default: laion2B-s32B-b79K)",
     )
     parser.add_argument(
         "--device",
