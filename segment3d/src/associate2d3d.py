@@ -1,129 +1,86 @@
-"""Associate 2D mask observations with 3D point IDs from COLMAP."""
+"""Associate 2D mask observations with 3D point IDs from COLMAP in parallel."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Tuple, Optional
 
 import numpy as np
 from pycocotools import mask as mask_utils
+from tqdm import tqdm  # Requires: pip install tqdm
+
+# Type aliases
+RLE = Dict[str, Any]
 
 
-def points_in_masks(
-    xys: np.ndarray, point3D_ids: np.ndarray, masks: List[np.ndarray], H: int, W: int
-) -> List[Set[int]]:
+def get_mask_bbox_areas(rle_list: List[RLE]) -> np.ndarray:
+    """Calculate the area of bounding boxes for a list of RLEs efficiently."""
+    bboxes = mask_utils.toBbox([ann["segmentation"] for ann in rle_list])
+    return bboxes[:, 2] * bboxes[:, 3]
+
+
+def build_id_map(rle_list: List[RLE], areas: np.ndarray, H: int, W: int) -> np.ndarray:
     """
-    Assign 3D point IDs to masks based on 2D observations.
-
-    For each 2D observation (x, y), add its point3D_id to the single
-    smallest-bbox mask that contains (x, y) if multiple masks contain it.
-
-    Args:
-        xys: Integer pixel coordinates of shape (N, 2) in format [x, y]
-        point3D_ids: Array of 3D point IDs of length N
-        masks: List of boolean H×W arrays (one per mask)
-        H: Image height
-        W: Image width
-
-    Returns:
-        List of sets, one set of 3D point IDs per mask
+    Painter's Algorithm: Paint mask indices onto the canvas (Large -> Small).
     """
-    # Initialize result: one set per mask
-    mask_point_sets: List[Set[int]] = [set() for _ in masks]
+    id_map = np.full((H, W), -1, dtype=np.int32)
+    sorted_indices = np.argsort(areas)[::-1]
 
-    if len(masks) == 0:
-        return mask_point_sets
+    for mask_idx in sorted_indices:
+        rle = rle_list[mask_idx]["segmentation"]
+        mask_bool = mask_utils.decode(rle).astype(bool)
 
-    # Precompute bounding box areas for each mask
-    mask_areas = []
-    for mask in masks:
-        pos = np.where(mask)
-        if len(pos[0]) == 0:
-            mask_areas.append(float("inf"))  # Empty mask
-        else:
-            y_min, y_max = pos[0].min(), pos[0].max()
-            x_min, x_max = pos[1].min(), pos[1].max()
-            area = (y_max - y_min + 1) * (x_max - x_min + 1)
-            mask_areas.append(area)
-
-    # Process each observation
-    for i in range(len(xys)):
-        point3D_id = int(point3D_ids[i])
-
-        # Ignore invalid 3D point IDs
-        if point3D_id == -1:
+        if mask_bool.shape[:2] != (H, W):
             continue
 
-        x, y = int(xys[i, 0]), int(xys[i, 1])
+        id_map[mask_bool] = mask_idx
 
-        # Check bounds
-        if not (0 <= x < W and 0 <= y < H):
-            continue
-
-        # Find all masks containing this point
-        containing_mask_indices = []
-        for mask_idx, mask in enumerate(masks):
-            if mask[y, x]:  # Note: mask indexing is [y, x]
-                containing_mask_indices.append(mask_idx)
-
-        # Assign to smallest-bbox mask if any contain this point
-        if containing_mask_indices:
-            # Find the mask with smallest area
-            smallest_idx = min(containing_mask_indices, key=lambda idx: mask_areas[idx])
-            mask_point_sets[smallest_idx].add(point3D_id)
-
-    return mask_point_sets
+    return id_map
 
 
-def decode_to_bool(rle_list: List[Dict[str, Any]], H: int, W: int) -> List[np.ndarray]:
-    """
-    Decode COCO RLE masks to boolean arrays.
+def points_in_masks_vectorized(
+    xys: np.ndarray, point3D_ids: np.ndarray, rle_list: List[RLE], H: int, W: int
+) -> List[List[int]]:
+    """Association of 3D points to masks."""
+    num_masks = len(rle_list)
+    mask_point_sets = [set() for _ in range(num_masks)]
 
-    Args:
-        rle_list: List of mask annotations with 'segmentation' field in COCO RLE format
-        H: Image height
-        W: Image width
+    if num_masks == 0 or len(xys) == 0:
+        return [[] for _ in range(num_masks)]
 
-    Returns:
-        List of boolean numpy arrays of shape (H, W)
-    """
-    bool_masks = []
+    areas = get_mask_bbox_areas(rle_list)
+    id_map = build_id_map(rle_list, areas, H, W)
 
-    for annotation in rle_list:
-        # Decode RLE to binary mask
-        rle = annotation["segmentation"]
-        mask = mask_utils.decode(rle)
+    valid_mask = point3D_ids != -1
+    valid_xys = xys[valid_mask].astype(int)
+    valid_p3d = point3D_ids[valid_mask]
 
-        # Convert to boolean
-        bool_mask = mask.astype(bool)
+    x, y = valid_xys[:, 0], valid_xys[:, 1]
 
-        # Verify dimensions
-        if bool_mask.shape != (H, W):
-            raise ValueError(
-                f"Mask shape {bool_mask.shape} does not match expected ({H}, {W})"
-            )
+    # Vectorized bounds check
+    bounds_mask = (x >= 0) & (x < W) & (y >= 0) & (y < H)
 
-        bool_masks.append(bool_mask)
+    final_x = x[bounds_mask]
+    final_y = y[bounds_mask]
+    final_p3d = valid_p3d[bounds_mask]
 
-    return bool_masks
+    # Advanced indexing to sample the ID map
+    associated_mask_indices = id_map[final_y, final_x]
+
+    for i, mask_idx in enumerate(associated_mask_indices):
+        if mask_idx != -1:
+            mask_point_sets[mask_idx].add(int(final_p3d[i]))
+
+    return [sorted(list(s)) for s in mask_point_sets]
 
 
-def load_masks_rle(path: Path) -> List[Dict[str, Any]]:
-    """
-    Load masks in COCO RLE format from a JSON file.
-
-    Args:
-        path: Path to JSON file containing masks in COCO RLE format
-
-    Returns:
-        List of mask annotation dictionaries
-    """
+def load_masks_file(path: Path) -> List[Dict[str, Any]]:
     with path.open("r", encoding="utf-8") as f:
         masks_data = json.load(f)
-
-    # Handle both list of annotations and dict with 'annotations' key
     if isinstance(masks_data, list):
         return masks_data
     elif isinstance(masks_data, dict) and "annotations" in masks_data:
@@ -132,143 +89,130 @@ def load_masks_rle(path: Path) -> List[Dict[str, Any]]:
         raise ValueError(f"Unexpected masks data format in {path}")
 
 
-def associate_all_images(dataset_name: str) -> None:
+# --- WORKER FUNCTION ---
+def process_single_image(
+    image_id: int,
+    image_name: str,
+    xys: np.ndarray,
+    point3D_ids: np.ndarray,
+    H: int,
+    W: int,
+    mask_path: Path,
+    output_path: Path,
+) -> Optional[str]:
     """
-    Associate 2D masks with 3D points for all COLMAP images.
+    Worker function to process a single image.
+    Returns the image name if successful, None if skipped/failed.
+    """
+    if not mask_path.exists():
+        return None  # Skip
 
-    For each COLMAP image:
-    1. Load the image's 2D observations (xys) and 3D point IDs
-    2. Load and decode the corresponding masks
-    3. Associate 3D point IDs to masks
-    4. Save the results as JSON
-    """
-    import cv2
+    try:
+        masks_rle = load_masks_file(mask_path)
+
+        # Heavy lifting happens here
+        mask_point_lists = points_in_masks_vectorized(xys, point3D_ids, masks_rle, H, W)
+
+        output_data = {
+            "image_id": image_id,
+            "image_name": image_name,
+            "mask_point3d_sets": mask_point_lists,
+            "H": H,
+            "W": W,
+        }
+
+        # Write inside the worker to distribute I/O load
+        with output_path.open("w", encoding="utf-8") as f:
+            json.dump(output_data, f, indent=2)
+
+        return image_name
+
+    except Exception as e:
+        print(f"[{image_id}] Error processing {image_name}: {e}")
+        return None
+
+
+def associate_all_images(dataset_name: str) -> None:
+    # Local imports to avoid global scope pollution in workers
     from .colmap_io import index_image_metadata, load_colmap_model
     from .io_paths import (
         get_colmap_model_dir,
-        get_images_dir,
         get_associations_dir,
         get_masks_dir,
         load_config,
     )
 
-    # Load configuration
     config = load_config(dataset_name)
-
-    images_dir = get_images_dir(config)
     masks_dir = get_masks_dir(config)
     associations_dir = get_associations_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
 
-    print(f"Images directory: {images_dir}")
-    print(f"Masks directory: {masks_dir}")
-    print(f"Associations directory: {associations_dir}")
-    print(f"COLMAP model directory: {colmap_model_dir}")
+    associations_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load COLMAP model
-    print("\nLoading COLMAP model...")
+    print("Loading COLMAP model...")
     cameras, images, points3D = load_colmap_model(str(colmap_model_dir))
     image_metadata = index_image_metadata(images)
 
-    print(f"Loaded {len(images)} images from COLMAP model")
+    # Prepare tasks
+    tasks = []
 
-    # Process each COLMAP image
+    print("Preparing tasks...")
+    for image_id, metadata in image_metadata.items():
+        image_name = metadata["name"]
+        camera_id = images[image_id].camera_id
+        camera = cameras[camera_id]
+
+        # Extract primitives
+        W, H = int(camera.width), int(camera.height)
+        image_stem = Path(image_name).stem
+        mask_path = masks_dir / f"{image_stem}_masks.json"
+        output_path = associations_dir / f"imageId_{image_id}.json"
+
+        # Pack arguments
+        tasks.append(
+            (
+                int(image_id),
+                image_name,
+                metadata["xys"],
+                metadata["point3D_ids"],
+                H,
+                W,
+                mask_path,
+                output_path,
+            )
+        )
+
+    # Determine workers - leave 1 or 2 cores free for OS responsiveness
+    max_workers = max(1, multiprocessing.cpu_count() - 1)
+
+    print(f"Starting processing on {max_workers} cores...")
+
     processed_count = 0
     skipped_count = 0
 
-    for image_id, metadata in image_metadata.items():
-        image_name = metadata["name"]
-        xys = metadata["xys"]
-        point3D_ids = metadata["point3D_ids"]
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all tasks
+        futures = [executor.submit(process_single_image, *t) for t in tasks]
 
-        # Check if mask file exists
-        image_stem = Path(image_name).stem
-        mask_path = masks_dir / f"{image_stem}_masks.json"
+        # Monitor with tqdm
+        for future in tqdm(as_completed(futures), total=len(futures), unit="img"):
+            result = future.result()
+            if result:
+                processed_count += 1
+            else:
+                skipped_count += 1
 
-        if not mask_path.exists():
-            print(
-                f"[{image_id}] Skipping {image_name}: mask file not found at {mask_path}"
-            )
-            skipped_count += 1
-            continue
-
-        # Get image dimensions
-        image_path = images_dir / image_name
-        if not image_path.exists():
-            print(f"[{image_id}] Skipping {image_name}: image file not found")
-            skipped_count += 1
-            continue
-
-        image = cv2.imread(str(image_path))
-        if image is None:
-            print(f"[{image_id}] Skipping {image_name}: could not read image")
-            skipped_count += 1
-            continue
-
-        H, W = image.shape[:2]
-
-        # Load and decode masks
-        try:
-            masks_rle = load_masks_rle(mask_path)
-            masks_bool = decode_to_bool(masks_rle, H, W)
-        except Exception as e:
-            print(f"[{image_id}] Error loading masks for {image_name}: {e}")
-            skipped_count += 1
-            continue
-
-        # Associate 3D points to masks
-        mask_point_sets = points_in_masks(xys, point3D_ids, masks_bool, H, W)
-
-        # Convert sets to lists for JSON serialization
-        mask_point3d_lists = [sorted(list(s)) for s in mask_point_sets]
-
-        # Prepare output data
-        output_data = {
-            "image_id": int(image_id),
-            "image_name": image_name,
-            "mask_point3d_sets": mask_point3d_lists,
-            "H": H,
-            "W": W,
-        }
-
-        # Save to associations directory
-        output_path = associations_dir / f"imageId_{image_id}.json"
-        with output_path.open("w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2)
-
-        # Print progress
-        total_points = sum(len(s) for s in mask_point_sets)
-        print(
-            f"[{image_id}] {image_name}: {len(masks_bool)} masks, {total_points} point associations → {output_path.name}"
-        )
-        processed_count += 1
-
-    print(f"\n{'='*60}")
-    print(f"Processing complete!")
-    print(f"Processed: {processed_count} images")
-    print(f"Skipped: {skipped_count} images")
-    print(f"Results saved to: {associations_dir}")
+    print(f"Done. Processed {processed_count}, Skipped {skipped_count}")
 
 
 def main() -> None:
-    """Main entry point for CLI."""
     parser = argparse.ArgumentParser(description="Associate 2D masks with 3D points")
-    parser.add_argument(
-        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
-    )
-
+    parser.add_argument("--dataset_name", type=str, required=True)
     args = parser.parse_args()
-
-    associate_all_images(args.dataset_name)
-    parser = argparse.ArgumentParser(description="Associate 2D masks with 3D points")
-    parser.add_argument(
-        "--dataset_name", type=str, required=True, help="Name of the dataset to process"
-    )
-
-    args = parser.parse_args()
-
     associate_all_images(args.dataset_name)
 
 
 if __name__ == "__main__":
+    # Ensure safe multiprocessing on Windows/macOS
+    multiprocessing.freeze_support()
     main()

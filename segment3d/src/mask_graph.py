@@ -2,81 +2,172 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import json
+import pickle
+from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 import networkx as nx
+import numpy as np
+from scipy import sparse
 
 
-def jaccard(a: Set[int], b: Set[int]) -> float:
+def load_single_association(
+    file_path: Path, min_points: int
+) -> List[Tuple[Tuple[int, int], Set[int]]]:
     """
-    Compute the Jaccard similarity between two sets.
+    Worker function to load a single JSON file.
+    Returns a list of ((image_id, mask_idx), point_set) tuples.
+    """
+    with file_path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
 
-    Jaccard(A, B) = |A ∩ B| / |A ∪ B|
+    image_id = data["image_id"]
+    mask_point3d_sets = data["mask_point3d_sets"]
+    results = []
+
+    for mask_idx, point3d_list in enumerate(mask_point3d_sets):
+        if len(point3d_list) < min_points:
+            continue
+        # Convert to set here to save main thread from doing it
+        results.append(((image_id, mask_idx), set(point3d_list)))
+
+    return results
+
+
+def load_associations_parallel(
+    associations_dir, min_points: int = 10
+) -> Dict[Tuple[int, int], Set[int]]:
+    """
+    Load all association files in parallel using ProcessPoolExecutor.
 
     Args:
-        a: First set
-        b: Second set
+        associations_dir: Directory containing imageId_*.json files
+        min_points: Minimum number of points required for a mask to be included
 
     Returns:
-        Jaccard similarity in range [0, 1]
+        Dictionary mapping (image_id, mask_idx) to set of 3D point IDs
     """
-    if len(a) == 0 and len(b) == 0:
-        return 0.0
+    associations_dir = Path(associations_dir)
+    per_image_sets: Dict[Tuple[int, int], Set[int]] = {}
 
-    intersection = len(a & b)
-    union = len(a | b)
+    # Find all association files
+    association_files = sorted(associations_dir.glob("imageId_*.json"))
 
-    if union == 0:
-        return 0.0
+    if not association_files:
+        raise ValueError(f"No association files found in {associations_dir}")
 
-    return intersection / union
+    print(f"Found {len(association_files)} association files. Loading in parallel...")
+
+    # Use ProcessPoolExecutor to parallelize JSON parsing and set construction
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        # Submit all tasks
+        futures = [
+            executor.submit(load_single_association, f, min_points)
+            for f in association_files
+        ]
+
+        # Gather results as they complete
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                results = future.result()
+                for node_key, point_set in results:
+                    per_image_sets[node_key] = point_set
+            except Exception as exc:
+                print(f"File loading generated an exception: {exc}")
+
+    return per_image_sets
 
 
-def build_edges(
+def build_edges_scipy(
     per_image_sets: Dict[Tuple[int, int], Set[int]], K: int = 5, tau: float = 0.2
 ) -> List[Tuple[Tuple[int, int], Tuple[int, int], Dict]]:
     """
-    Build edges between mask nodes based on shared 3D points.
-
-    For every pair of nodes from different images, compute the overlap size |S|
-    and Jaccard similarity J. If |S| ≥ K or J ≥ tau, add an edge with attributes.
+    Build edges using Scipy Sparse Matrices.
+    Performance: O(N_associations) + Matrix Multiplication (highly optimized).
 
     Args:
         per_image_sets: Dictionary mapping (image_id, mask_idx) to set of 3D point IDs
-        K: Minimum overlap size threshold (default: 5)
-        tau: Minimum Jaccard similarity threshold (default: 0.2)
+        K: Minimum overlap size threshold
+        tau: Minimum Jaccard similarity threshold
 
     Returns:
         List of edges as tuples: (node1, node2, attributes_dict)
-        where attributes_dict contains "overlap" and "jaccard" keys
     """
+    # 1. Mappings: Nodes -> Index and Points -> Index
+    nodes_list = list(per_image_sets.keys())
+    node_to_idx = {node: i for i, node in enumerate(nodes_list)}
+
+    # Collect all unique points efficiently
+    all_points = set()
+    total_associations = 0
+    for s in per_image_sets.values():
+        all_points.update(s)
+        total_associations += len(s)
+
+    point_to_idx = {pt: i for i, pt in enumerate(all_points)}
+
+    num_nodes = len(nodes_list)
+    num_points = len(all_points)
+
+    print(f"Constructing sparse matrix ({num_nodes} masks x {num_points} points)...")
+
+    # 2. Build Coordinate Arrays for Sparse Matrix
+    row_inds = np.zeros(total_associations, dtype=np.int32)
+    col_inds = np.zeros(total_associations, dtype=np.int32)
+
+    current_idx = 0
+    for node_idx, node in enumerate(nodes_list):
+        points = per_image_sets[node]
+        for pt in points:
+            row_inds[current_idx] = node_idx
+            col_inds[current_idx] = point_to_idx[pt]
+            current_idx += 1
+
+    # All values are 1 (binary association)
+    data = np.ones(total_associations, dtype=np.int32)
+
+    # Create CSR Matrix
+    M = sparse.csr_matrix((data, (row_inds, col_inds)), shape=(num_nodes, num_points))
+
+    # 3. Compute Intersections via Matrix Multiplication
+    # O[i, j] = dot(Row_i, Row_j) = number of shared points
+    print("Computing intersection matrix (M * M.T)...")
+    intersection_matrix = M.dot(M.T)
+
+    # 4. Pre-compute Set Sizes for Jaccard
+    # Row sum of M is the number of points in each mask
+    set_sizes = np.array(M.sum(axis=1)).flatten()
+
+    # 5. Extract Edges
+    # We only need the upper triangle to avoid duplicates and self-loops
+    print("Filtering edges and calculating Jaccard...")
+    upper_tri = sparse.triu(intersection_matrix, k=1).tocoo()
+
     edges = []
-    nodes = list(per_image_sets.keys())
 
-    # Compare all pairs of nodes from different images
-    for i in range(len(nodes)):
-        node1 = nodes[i]
-        image_id1, mask_idx1 = node1
-        set1 = per_image_sets[node1]
+    # Iterate strictly over non-zero overlaps
+    for i, j, overlap in zip(upper_tri.row, upper_tri.col, upper_tri.data):
+        node1 = nodes_list[i]
+        node2 = nodes_list[j]
 
-        for j in range(i + 1, len(nodes)):
-            node2 = nodes[j]
-            image_id2, mask_idx2 = node2
+        # Optimization: Skip masks from the same image
+        if node1[0] == node2[0]:
+            continue
 
-            # Only consider pairs from different images
-            if image_id1 == image_id2:
-                continue
+        # Jaccard Calculation: |A n B| / (|A| + |B| - |A n B|)
+        union_size = set_sizes[i] + set_sizes[j] - overlap
 
-            set2 = per_image_sets[node2]
+        if union_size == 0:
+            jaccard_sim = 0.0
+        else:
+            jaccard_sim = overlap / union_size
 
-            # Compute overlap and Jaccard similarity
-            overlap_size = len(set1 & set2)
-            jaccard_sim = jaccard(set1, set2)
-
-            # Add edge if threshold conditions are met
-            if overlap_size >= K or jaccard_sim >= tau:
-                edge_attrs = {"overlap": overlap_size, "jaccard": jaccard_sim}
-                edges.append((node1, node2, edge_attrs))
+        # Threshold Check
+        if overlap >= K or jaccard_sim >= tau:
+            edge_attrs = {"overlap": int(overlap), "jaccard": float(jaccard_sim)}
+            edges.append((node1, node2, edge_attrs))
 
     return edges
 
@@ -87,13 +178,6 @@ def to_networkx(
 ) -> nx.Graph:
     """
     Convert nodes and edges to a NetworkX graph.
-
-    Args:
-        nodes: List of node tuples (image_id, mask_idx)
-        edges: List of edge tuples (node1, node2, attributes_dict)
-
-    Returns:
-        NetworkX Graph with nodes and edges
     """
     G = nx.Graph()
 
@@ -109,64 +193,12 @@ def to_networkx(
     return G
 
 
-def load_associations(
-    associations_dir, min_points: int = 10
-) -> Dict[Tuple[int, int], Set[int]]:
-    """
-    Load all association files and build per-mask 3D point sets.
-
-    Args:
-        associations_dir: Directory containing imageId_*.json files
-        min_points: Minimum number of points required for a mask to be included
-
-    Returns:
-        Dictionary mapping (image_id, mask_idx) to set of 3D point IDs
-    """
-    import json
-    from pathlib import Path
-
-    associations_dir = Path(associations_dir)
-    per_image_sets: Dict[Tuple[int, int], Set[int]] = {}
-
-    # Find all association files
-    association_files = sorted(associations_dir.glob("imageId_*.json"))
-
-    if not association_files:
-        raise ValueError(f"No association files found in {associations_dir}")
-
-    print(f"Found {len(association_files)} association files")
-
-    # Load each file and build the mapping
-    for assoc_file in association_files:
-        with assoc_file.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        image_id = data["image_id"]
-        mask_point3d_sets = data["mask_point3d_sets"]
-
-        # Create a node for each mask
-        for mask_idx, point3d_list in enumerate(mask_point3d_sets):
-            if len(point3d_list) < min_points:
-                continue
-            node_key = (image_id, mask_idx)
-            per_image_sets[node_key] = set(point3d_list)
-
-    return per_image_sets
-
-
 def build_mask_graph_cli(
     dataset_name: str, K: int = 5, tau: float = 0.2, min_points_in_3D_segment: int = 100
 ) -> None:
     """
     Build a mask graph from association files.
-
-    Args:
-        K: Minimum overlap size threshold (default: 5)
-        tau: Minimum Jaccard similarity threshold (default: 0.2)
-        min_points_in_3D_segment: Minimum points in connected component (default: 100)
     """
-    import json
-    import pickle
     from .io_paths import get_associations_dir, get_outputs_dir, load_config
 
     # Load configuration
@@ -179,9 +211,9 @@ def build_mask_graph_cli(
     print(f"Outputs directory: {outputs_dir}")
     print(f"Parameters: K={K}, tau={tau}")
 
-    # Load associations
+    # Load associations (Parallelized)
     print("\nLoading associations...")
-    per_image_sets = load_associations(associations_dir)
+    per_image_sets = load_associations_parallel(associations_dir)
 
     # Count statistics
     total_nodes = len(per_image_sets)
@@ -196,8 +228,8 @@ def build_mask_graph_cli(
     )
 
     # Build edges
-    print("\nBuilding edges...")
-    edges = build_edges(per_image_sets, K=K, tau=tau)
+    print("\nBuilding edges (Scipy Sparse)...")
+    edges = build_edges_scipy(per_image_sets, K=K, tau=tau)
 
     print(f"Created {len(edges)} edges")
 

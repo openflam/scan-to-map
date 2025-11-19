@@ -215,7 +215,6 @@ def run_pipeline(
                     conf=fastsam_conf,
                     iou=fastsam_iou,
                     batch_size=fastsam_batch_size,
-                    num_workers=fastsam_num_workers,
                 )
 
             step_time = time.time() - step_start
