@@ -9,7 +9,12 @@ interface SearchBarProps {
   searchTime?: number;
 }
 
-function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }: SearchBarProps) {
+function SearchBar({
+  onSearch,
+  showAutoTags,
+  onShowAutoTagsChange,
+  searchTime,
+}: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [method, setMethod] = useState("CLIP ViT-H-14");
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
@@ -18,11 +23,11 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
   const handleSearch = () => {
     if (searchTerm.trim() || uploadedImage) {
       const searchQuery: SearchQuery = [];
-      
+
       if (searchTerm.trim()) {
         searchQuery.push({ type: "text", value: searchTerm });
       }
-      
+
       if (uploadedImage) {
         // Convert image to base64 for transmission
         const reader = new FileReader();
@@ -34,7 +39,7 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
         reader.readAsDataURL(uploadedImage);
         return;
       }
-      
+
       onSearch(searchQuery, method);
     }
   };
@@ -82,7 +87,7 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
         >
           <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
           <option value="gpt-4o-mini [Full]">gpt-4o-mini [Full]</option>
-          <option value="gpt-4o-mini [RAG]">gpt-4o-mini [RAG]</option>
+          <option value="gpt-5-mini [RAG]">gpt-5-mini [RAG]</option>
           <option value="BM25">BM25</option>
         </Form.Select>
 
@@ -109,7 +114,7 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
               disabled={!!searchTerm.trim()}
               title="Upload image"
             >
-              <i className="bi bi-image"></i> 
+              <i className="bi bi-image"></i>
               {!uploadedImage && " Upload Image"}
               {uploadedImage && ` ${uploadedImage.name}`}
             </Button>
@@ -137,9 +142,12 @@ function SearchBar({ onSearch, showAutoTags, onShowAutoTagsChange, searchTime }:
           checked={showAutoTags}
           onChange={(e) => onShowAutoTagsChange(e.target.checked)}
         />
-        <div className="d-flex align-items-center" style={{ fontSize: "1.1rem", fontWeight: "500" }}>
+        <div
+          className="d-flex align-items-center"
+          style={{ fontSize: "1.1rem", fontWeight: "500" }}
+        >
           <i className="bi bi-clock me-2"></i>
-          {searchTime !== undefined ? `${searchTime.toFixed(2)} ms` : '...'}
+          {searchTime !== undefined ? `${searchTime.toFixed(2)} ms` : "..."}
         </div>
       </div>
     </>

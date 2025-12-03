@@ -4,7 +4,7 @@ const SEARCH_SERVER_URL = "http://172.26.67.144:5000";
 
 export async function query(
   searchQuery: SearchQuery,
-  method: string = "gpt-4o-mini [Full]"
+  method: string
 ): Promise<SearchResult> {
   console.log("Querying with:", searchQuery, "using method:", method);
 

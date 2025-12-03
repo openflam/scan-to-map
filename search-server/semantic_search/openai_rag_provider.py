@@ -28,8 +28,7 @@ class OpenAIRAGProvider(SemanticSearchProvider):
     def __init__(
         self,
         component_captions: Dict[int, Any],
-        model: str = "gpt-4o-mini",
-        temperature: float = 0.0,
+        model: str = "gpt-5-mini",
         api_key: str = None,
         bm25_top_k: int = 20,
     ):
@@ -44,7 +43,6 @@ class OpenAIRAGProvider(SemanticSearchProvider):
             bm25_top_k: Number of candidates to retrieve from BM25 (default: 20)
         """
         self.model = model
-        self.temperature = temperature
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
         self.component_captions = component_captions
 
@@ -118,12 +116,10 @@ class OpenAIRAGProvider(SemanticSearchProvider):
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a helpful assistant that rewrites search queries to improve retrieval. Respond with only the rewritten query.",
+                        "content": "You are a spatial search assistant that is helping answer user queries about a room.",
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=self.temperature,
-                max_tokens=100,
             )
 
             rewritten = response.choices[0].message.content.strip()
@@ -152,7 +148,9 @@ class OpenAIRAGProvider(SemanticSearchProvider):
             caption = self.component_captions[comp_id].get("caption", "")
             candidates_text += f"{i+1}. Component {comp_id}: {caption}\n\n"
 
-        prompt = OPENAI_RAG_RERANK_PROMPT.format(original_query=original_query, candidates_text=candidates_text)
+        prompt = OPENAI_RAG_RERANK_PROMPT.format(
+            original_query=original_query, candidates_text=candidates_text
+        )
 
         try:
             response = self.client.chat.completions.create(
@@ -164,8 +162,6 @@ class OpenAIRAGProvider(SemanticSearchProvider):
                     },
                     {"role": "user", "content": prompt},
                 ],
-                temperature=self.temperature,
-                max_tokens=300,
                 response_format={"type": "json_object"},
             )
 

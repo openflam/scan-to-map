@@ -80,8 +80,8 @@ print(f"CLIP model configuration: {clip_model_name} ({clip_pretrained})")
 
 openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
 bm25_provider = BM25Provider(component_captions)
-openai_rag_provider = OpenAIRAGProvider(
-    component_captions, model="gpt-4o-mini", bm25_top_k=20
+openai_rag_provider_gpt_5_mini = OpenAIRAGProvider(
+    component_captions, model="gpt-5-mini", bm25_top_k=20
 )
 clip_provider = CLIPProvider(
     faiss_index_path=str(FAISS_INDEX_PATH),
@@ -97,7 +97,7 @@ print("Providers initialized successfully")
 PROVIDERS = {
     "gpt-4o-mini [Full]": openai_provider,
     "BM25": bm25_provider,
-    "gpt-4o-mini [RAG]": openai_rag_provider,
+    "gpt-5-mini [RAG]": openai_rag_provider_gpt_5_mini,
     "CLIP ViT-H-14": clip_provider,
 }
 
