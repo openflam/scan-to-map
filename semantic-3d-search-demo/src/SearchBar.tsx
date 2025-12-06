@@ -6,6 +6,8 @@ interface SearchBarProps {
   onSearch: (searchQuery: SearchQuery, method: string) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
+  showOccupancyGrid: boolean;
+  onShowOccupancyGridChange: (show: boolean) => void;
   searchTime?: number;
 }
 
@@ -13,6 +15,8 @@ function SearchBar({
   onSearch,
   showAutoTags,
   onShowAutoTagsChange,
+  showOccupancyGrid,
+  onShowOccupancyGridChange,
   searchTime,
 }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -136,12 +140,20 @@ function SearchBar({
       </InputGroup>
 
       <div className="d-flex align-items-center justify-content-between mb-3">
-        <Form.Check
-          type="checkbox"
-          label="Show Auto Tags"
-          checked={showAutoTags}
-          onChange={(e) => onShowAutoTagsChange(e.target.checked)}
-        />
+        <div>
+          <Form.Check
+            type="checkbox"
+            label="Show Auto Tags"
+            checked={showAutoTags}
+            onChange={(e) => onShowAutoTagsChange(e.target.checked)}
+          />
+          <Form.Check
+            type="checkbox"
+            label="Show Occupancy Grid"
+            checked={showOccupancyGrid}
+            onChange={(e) => onShowOccupancyGridChange(e.target.checked)}
+          />
+        </div>
         <div
           className="d-flex align-items-center"
           style={{ fontSize: "1.1rem", fontWeight: "500" }}

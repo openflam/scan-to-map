@@ -12,7 +12,8 @@ DATASET=$1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 SRC1="$SCRIPT_DIR/../outputs/$DATASET/bbox_corners.json"
-SRC2="$SCRIPT_DIR/../data/$DATASET/polycam_data/raw.glb"
+SRC2="$SCRIPT_DIR/../outputs/$DATASET/occupancy_bbox.json"
+SRC3="$SCRIPT_DIR/../data/$DATASET/polycam_data/raw.glb"
 DEST_DIR="$SCRIPT_DIR/public/data"
 
 mkdir -p "$DEST_DIR"
@@ -27,7 +28,13 @@ if [[ ! -f "$SRC2" ]]; then
     exit 4
 fi
 
+if [[ ! -f "$SRC3" ]]; then
+    echo "Source file not found: $SRC3" >&2
+    exit 4
+fi
+
 cp -v -- "$SRC1" "$DEST_DIR/"
 cp -v -- "$SRC2" "$DEST_DIR/"
+cp -v -- "$SRC3" "$DEST_DIR/"
 
 echo "Copied to $DEST_DIR"

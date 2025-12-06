@@ -10,7 +10,9 @@ import type { BoundingBox, SearchQuery } from "./types/global";
 function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [showAutoTags, setShowAutoTags] = useState(false);
+  const [showOccupancyGrid, setShowOccupancyGrid] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
+  const [occupancyGrid, setOccupancyGrid] = useState<BoundingBox[]>([]);
   const [annotations, setAnnotations] = useState<string[]>([]);
   const [searchResult, setSearchResult] = useState<string | undefined>(
     undefined
@@ -22,7 +24,7 @@ function App() {
     fetch("/data/bbox_corners.json")
       .then((response) => response.json())
       .then((data) => {
-        // Extract bounding boxes from the JSON data. 
+        // Extract bounding boxes from the JSON data.
         // Swap axes as needed -- results of trial and error.
         const bboxes: BoundingBox[] = data.map((item: any) => ({
           x_min: -item.bbox.min[1],
@@ -45,6 +47,28 @@ function App() {
       });
   }, []);
 
+  // Load occupancy_bbox.json on mount
+  useEffect(() => {
+    fetch("/data/occupancy_bbox.json")
+      .then((response) => response.json())
+      .then((data) => {
+        // Extract bounding boxes from the JSON data.
+        // Swap axes as needed -- results of trial and error.
+        const bboxes: BoundingBox[] = data.map((item: any) => ({
+          x_min: -item.bbox.min[1],
+          y_min: item.bbox.min[2],
+          z_min: item.bbox.min[0],
+          x_max: -item.bbox.max[1],
+          y_max: item.bbox.max[2],
+          z_max: item.bbox.max[0],
+        }));
+        setOccupancyGrid(bboxes);
+      })
+      .catch((error) => {
+        console.error("Error loading occupancy_bbox.json:", error);
+      });
+  }, []);
+
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     const result = await query(searchQuery, method);
     setBoundingBox(result.boundingBox);
@@ -59,6 +83,8 @@ function App() {
           onSearch={handleSearch}
           showAutoTags={showAutoTags}
           onShowAutoTagsChange={setShowAutoTags}
+          showOccupancyGrid={showOccupancyGrid}
+          onShowOccupancyGridChange={setShowOccupancyGrid}
           searchTime={searchTime}
         />
       </Row>
@@ -68,6 +94,8 @@ function App() {
           boundingBox={boundingBox}
           autoTagBBoxes={autoTagBBoxes}
           showAutoTags={showAutoTags}
+          occupancyGrid={occupancyGrid}
+          showOccupancyGrid={showOccupancyGrid}
           annotations={annotations}
         />
       </Row>

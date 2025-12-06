@@ -20,5 +20,8 @@ python main.py --dataset "$DATASET_NAME" --skip-caption
 # Step 2: Run captioning
 python -m src.captioning.orchestrator --dataset "$DATASET_NAME"
 
+# Step 3: Run floor detection
+bash run_floordetection.sh "$DATASET_NAME"
+
 echo "============================================"
 echo "All steps completed successfully for dataset: $DATASET_NAME"
