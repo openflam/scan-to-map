@@ -1,9 +1,11 @@
 import { InputGroup, FormControl, Button, Form } from "react-bootstrap";
 import { useState, useRef } from "react";
-import type { SearchQuery } from "./types/global";
+import type { SearchQuery, Route } from "./types/global";
+import { queryDirections } from "./query";
 
 interface SearchBarProps {
   onSearch: (searchQuery: SearchQuery, method: string) => void;
+  onDirections: (route: Route) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
   showOccupancyGrid: boolean;
@@ -13,6 +15,7 @@ interface SearchBarProps {
 
 function SearchBar({
   onSearch,
+  onDirections,
   showAutoTags,
   onShowAutoTagsChange,
   showOccupancyGrid,
@@ -23,8 +26,16 @@ function SearchBar({
   const [method, setMethod] = useState("CLIP ViT-H-14");
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showDirections, setShowDirections] = useState(false);
+  const [sourceTerm, setSourceTerm] = useState("");
+  const [destinationTerm, setDestinationTerm] = useState("");
 
   const handleSearch = () => {
+    if (showDirections) {
+      handleDirections();
+      return;
+    }
+
     if (searchTerm.trim() || uploadedImage) {
       const searchQuery: SearchQuery = [];
 
@@ -45,6 +56,35 @@ function SearchBar({
       }
 
       onSearch(searchQuery, method);
+    }
+  };
+
+  const handleDirections = async () => {
+    if (!sourceTerm.trim() || !destinationTerm.trim()) {
+      console.error("Both source and destination are required");
+      return;
+    }
+
+    try {
+      // Create SearchQuery for source and destination
+      const sourceQuery: SearchQuery = [{ type: "text", value: sourceTerm }];
+      const destinationQuery: SearchQuery = [
+        { type: "text", value: destinationTerm },
+      ];
+
+      const result = await queryDirections(
+        sourceQuery,
+        destinationQuery,
+        method
+      );
+      console.log("Route received:", result);
+      // Convert the path to Route format (array of tuples)
+      const route: Route = result.path.map(
+        (coord) => [coord[0], coord[1], coord[2]] as [number, number, number]
+      );
+      onDirections(route);
+    } catch (error) {
+      console.error("Failed to get directions:", error);
     }
   };
 
@@ -95,52 +135,74 @@ function SearchBar({
           <option value="BM25">BM25</option>
         </Form.Select>
 
-        <FormControl
-          placeholder="Search..."
-          value={searchTerm}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyPress}
-          disabled={!!uploadedImage}
-        />
-
-        {isClipMethod && (
+        {!showDirections ? (
           <>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-              accept="image/*"
-              style={{ display: "none" }}
+            <FormControl
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={handleTextChange}
+              onKeyDown={handleKeyPress}
+              disabled={!!uploadedImage}
             />
-            <Button
-              variant={uploadedImage ? "success" : "outline-primary"}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!!searchTerm.trim()}
-              title="Upload image"
-            >
-              <i className="bi bi-image"></i>
-              {!uploadedImage && " Upload Image"}
-              {uploadedImage && ` ${uploadedImage.name}`}
-            </Button>
-            {uploadedImage && (
-              <Button
-                variant="outline-danger"
-                onClick={handleClearImage}
-                title="Clear image"
-              >
-                <i className="bi bi-x-circle"></i>
-              </Button>
+
+            {isClipMethod && (
+              <>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageUpload}
+                  accept="image/*"
+                  style={{ display: "none" }}
+                />
+                <Button
+                  variant={uploadedImage ? "success" : "outline-primary"}
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!!searchTerm.trim()}
+                  title="Upload image"
+                >
+                  <i className="bi bi-image"></i>
+                  {!uploadedImage && " Upload Image"}
+                  {uploadedImage && ` ${uploadedImage.name}`}
+                </Button>
+                {uploadedImage && (
+                  <Button
+                    variant="outline-danger"
+                    onClick={handleClearImage}
+                    title="Clear image"
+                  >
+                    <i className="bi bi-x-circle"></i>
+                  </Button>
+                )}
+              </>
             )}
+
+            <Button variant="outline-primary" onClick={handleSearch}>
+              Search
+            </Button>
+          </>
+        ) : (
+          <>
+            <FormControl
+              placeholder="Source..."
+              value={sourceTerm}
+              onChange={(e) => setSourceTerm(e.target.value)}
+              onKeyDown={handleKeyPress}
+            />
+            <FormControl
+              placeholder="Destination..."
+              value={destinationTerm}
+              onChange={(e) => setDestinationTerm(e.target.value)}
+              onKeyDown={handleKeyPress}
+            />
+            <Button variant="outline-primary" onClick={handleSearch}>
+              Get Directions
+            </Button>
           </>
         )}
-
-        <Button variant="outline-primary" onClick={handleSearch}>
-          Search
-        </Button>
       </InputGroup>
 
       <div className="d-flex align-items-center justify-content-between mb-3">
-        <div>
+        <div className="d-flex align-items-center gap-3">
           <Form.Check
             type="checkbox"
             label="Show Auto Tags"
@@ -152,6 +214,12 @@ function SearchBar({
             label="Show Occupancy Grid"
             checked={showOccupancyGrid}
             onChange={(e) => onShowOccupancyGridChange(e.target.checked)}
+          />
+          <Form.Check
+            type="checkbox"
+            label="Directions"
+            checked={showDirections}
+            onChange={(e) => setShowDirections(e.target.checked)}
           />
         </div>
         <div

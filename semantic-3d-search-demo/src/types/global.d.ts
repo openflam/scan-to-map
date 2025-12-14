@@ -10,6 +10,9 @@ export interface BoundingBox {
   z_max: number;
 }
 
+// Define Route type - list of 3D coordinates
+export type Route = [number, number, number][];
+
 // Define SearchQuery interface
 export interface SearchQueryItem {
   type: "text" | "image";
@@ -43,4 +46,4 @@ declare global {
   }
 }
 
-export { };
+export {};

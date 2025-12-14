@@ -5,7 +5,7 @@ import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
 import SearchResult from "./SearchResult";
 import { query } from "./query";
-import type { BoundingBox, SearchQuery } from "./types/global";
+import type { BoundingBox, SearchQuery, Route } from "./types/global";
 
 function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
@@ -18,6 +18,7 @@ function App() {
     undefined
   );
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
+  const [route, setRoute] = useState<Route>([]);
 
   // Load bbox_corners.json on mount
   useEffect(() => {
@@ -76,11 +77,16 @@ function App() {
     setSearchTime(result.searchTimeMs);
   };
 
+  const handleDirections = (route: Route) => {
+    setRoute(route);
+  };
+
   return (
     <Container className="pt-3">
       <Row>
         <SearchBar
           onSearch={handleSearch}
+          onDirections={handleDirections}
           showAutoTags={showAutoTags}
           onShowAutoTagsChange={setShowAutoTags}
           showOccupancyGrid={showOccupancyGrid}
@@ -97,6 +103,7 @@ function App() {
           occupancyGrid={occupancyGrid}
           showOccupancyGrid={showOccupancyGrid}
           annotations={annotations}
+          route={route}
         />
       </Row>
       <Row>

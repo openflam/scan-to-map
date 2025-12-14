@@ -44,3 +44,45 @@ export async function query(
     throw error;
   }
 }
+
+export async function queryDirections(
+  source: SearchQuery,
+  destination: SearchQuery,
+  method: string
+): Promise<{ path: number[][] }> {
+  console.log(
+    "Querying directions from:",
+    source,
+    "to:",
+    destination,
+    "using method:",
+    method
+  );
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/get_route`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        source: source,
+        destination: destination,
+        method: method,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Directions request failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const data = await response.json();
+
+    return data;
+  } catch (error) {
+    console.error("Error querying directions:", error);
+    throw error;
+  }
+}

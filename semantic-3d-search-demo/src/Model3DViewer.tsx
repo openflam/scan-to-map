@@ -8,8 +8,9 @@ import {
   DynamicTexture,
   Mesh,
   ArcRotateCamera,
+  Vector3,
 } from "@babylonjs/core";
-import type { BoundingBox } from "./types/global";
+import type { BoundingBox, Route } from "./types/global";
 
 function Model3DViewer(props: {
   source: string | ArrayBufferView | File;
@@ -19,6 +20,7 @@ function Model3DViewer(props: {
   occupancyGrid?: BoundingBox[];
   showOccupancyGrid?: boolean;
   annotations?: string[];
+  route?: Route;
 }) {
   const canvasRef = useRef(null);
   const viewerRef = useRef<Viewer | null>(null);
@@ -237,6 +239,55 @@ function Model3DViewer(props: {
     }
   }, [props.occupancyGrid, props.showOccupancyGrid]); // Re-run when occupancy grid or visibility changes
 
+  // Update route separately
+  useEffect(() => {
+    if (!sceneRef.current || !viewerRef.current) return;
+
+    // Remove existing route meshes if they exist
+    const existingRouteMeshes = sceneRef.current.meshes.filter(
+      (mesh: any) => mesh.name && mesh.name.startsWith("routeSegment_")
+    );
+    existingRouteMeshes.forEach((mesh: any) => mesh.dispose());
+
+    // Create new route if provided
+    if (props.route && props.route.length > 1) {
+      console.log("Rendering route with", props.route.length, "points");
+
+      const blueColor = new Color3(0, 0, 1);
+
+      // Create cylinders connecting adjacent points
+      for (let i = 0; i < props.route.length - 1; i++) {
+        const start = props.route[i];
+        const end = props.route[i + 1];
+
+        createRouteCylinder(
+          start,
+          end,
+          sceneRef.current,
+          blueColor,
+          `routeSegment_${i}`
+        );
+      }
+
+      // Request a safe render through the viewer's engine
+      if (viewerRef.current && sceneRef.current) {
+        const engine = sceneRef.current.getEngine();
+        if (engine && !engine.isDisposed) {
+          requestAnimationFrame(() => {
+            if (engine && !engine.isDisposed) {
+              engine.stopRenderLoop();
+              engine.runRenderLoop(() => {
+                if (sceneRef.current && !engine.isDisposed) {
+                  sceneRef.current.render();
+                }
+              });
+            }
+          });
+        }
+      }
+    }
+  }, [props.route]); // Re-run when route changes
+
   return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 }
 
@@ -359,6 +410,98 @@ function createTextLabel(
   material.backFaceCulling = false;
 
   plane.material = material;
+}
+
+// Function to create a cylinder connecting two points for route visualization
+function createRouteCylinder(
+  start: [number, number, number],
+  end: [number, number, number],
+  sceneRef: any,
+  color: Color3 = Color3.Blue(),
+  name: string = "routeSegment"
+) {
+  const [x1, y1, z1] = start;
+  const [x2, y2, z2] = end;
+
+  // Calculate distance between points
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dz = z2 - z1;
+  const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+  // Create cylinder with small diameter (thin line)
+  const diameter = 0.1;
+  const cylinder = MeshBuilder.CreateCylinder(
+    name,
+    {
+      height: distance,
+      diameter: diameter,
+    },
+    sceneRef
+  );
+
+  // Position cylinder at midpoint
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  const midZ = (z1 + z2) / 2;
+  cylinder.position.set(midX, midY, midZ);
+
+  // Rotate cylinder to align with the direction vector
+  // Calculate rotation to align cylinder (default Y-axis) with direction vector
+  const direction = { x: dx, y: dy, z: dz };
+  const dirLength = distance;
+
+  if (dirLength > 0.0001) {
+    // Normalize direction
+    const dirNorm = {
+      x: direction.x / dirLength,
+      y: direction.y / dirLength,
+      z: direction.z / dirLength,
+    };
+
+    // Calculate rotation axis (cross product of Y-axis with direction)
+    const yAxis = { x: 0, y: 1, z: 0 };
+    const rotationAxis = {
+      x: yAxis.y * dirNorm.z - yAxis.z * dirNorm.y,
+      y: yAxis.z * dirNorm.x - yAxis.x * dirNorm.z,
+      z: yAxis.x * dirNorm.y - yAxis.y * dirNorm.x,
+    };
+
+    // Calculate rotation angle (dot product)
+    const dotProduct =
+      yAxis.x * dirNorm.x + yAxis.y * dirNorm.y + yAxis.z * dirNorm.z;
+    const angle = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+
+    // Apply rotation if needed
+    if (Math.abs(angle) > 0.0001) {
+      const axisLength = Math.sqrt(
+        rotationAxis.x * rotationAxis.x +
+          rotationAxis.y * rotationAxis.y +
+          rotationAxis.z * rotationAxis.z
+      );
+
+      if (axisLength > 0.0001) {
+        cylinder.rotate(
+          new Vector3(
+            rotationAxis.x / axisLength,
+            rotationAxis.y / axisLength,
+            rotationAxis.z / axisLength
+          ),
+          angle
+        );
+      }
+    }
+  }
+
+  // Create material
+  const material = new StandardMaterial(`${name}Material`, sceneRef);
+  material.diffuseColor = color;
+  material.emissiveColor = color;
+  material.alpha = 1.0;
+  material.backFaceCulling = false;
+
+  cylinder.material = material;
+  // cylinder.renderingGroupId = 1; // Render in front
 }
 
 export default Model3DViewer;

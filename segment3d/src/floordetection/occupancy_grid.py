@@ -277,6 +277,17 @@ def save_occupancy_grid(
         json.dump(bboxes, f, indent=2)
     print(f"Saved bounding boxes to: {bbox_file}")
 
+    # Save metadata as JSON
+    metadata_file = output_dir / "occupancy_grid_metadata.json"
+    with open(metadata_file, "w") as f:
+        json.dump(metadata, f, indent=2)
+    print(f"Saved metadata to: {metadata_file}")
+
+    # Save grid as npy
+    npy_file = output_dir / "occupancy_grid.npy"
+    np.save(npy_file, grid)
+    print(f"Saved grid to: {npy_file}")
+
 
 def _grid_to_bboxes(grid: np.ndarray, metadata: Dict, all_points: Dict) -> List[Dict]:
     """Convert occupancy grid to bounding box format.

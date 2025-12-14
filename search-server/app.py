@@ -3,6 +3,7 @@ from flask_cors import CORS
 import json
 import sys
 from pathlib import Path
+import numpy as np
 from process_query import process_query
 from semantic_search import (
     OpenAIProvider,
@@ -10,6 +11,7 @@ from semantic_search import (
     OpenAIRAGProvider,
     CLIPProvider,
 )
+from routing.path_calculation import calculate_route
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -78,6 +80,28 @@ clip_pretrained = clip_stats["pretrained"]
 
 print(f"CLIP model configuration: {clip_model_name} ({clip_pretrained})")
 
+# Load occupancy grid and metadata
+OCCUPANCY_GRID_PATH = (
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "occupancy_grid.npy"
+)
+OCCUPANCY_METADATA_PATH = (
+    Path(__file__).parent
+    / ".."
+    / "outputs"
+    / DATASET_NAME
+    / "occupancy_grid_metadata.json"
+)
+
+if OCCUPANCY_GRID_PATH.exists() and OCCUPANCY_METADATA_PATH.exists():
+    occupancy_grid = np.load(OCCUPANCY_GRID_PATH)
+    with open(OCCUPANCY_METADATA_PATH, "r") as f:
+        occupancy_metadata = json.load(f)
+    print(f"Loaded occupancy grid: {occupancy_grid.shape}")
+else:
+    occupancy_grid = None
+    occupancy_metadata = None
+    print("Warning: Occupancy grid not found. Routing will be disabled.")
+
 openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
 bm25_provider = BM25Provider(component_captions)
 openai_rag_provider_gpt_5_mini = OpenAIRAGProvider(
@@ -100,6 +124,39 @@ PROVIDERS = {
     "gpt-5-mini [RAG]": openai_rag_provider_gpt_5_mini,
     "CLIP ViT-H-14": clip_provider,
 }
+
+
+def transform_coordinates(coords):
+    """
+    Transform coordinates from COLMAP coordinate system to Model3DViewer coordinate system.
+
+    Args:
+        coords: List or tuple of [x, y, z] coordinates
+
+    Returns:
+        List of transformed [x, y, z] coordinates
+    """
+    return [-coords[1], coords[2], coords[0]]
+
+
+def transform_bbox(bbox):
+    """
+    Transform bounding box from COLMAP coordinate system to Model3DViewer coordinate system.
+
+    Args:
+        bbox: Bounding box dictionary with 'min' and 'max' keys
+
+    Returns:
+        Transformed bounding box dictionary with x_min, y_min, z_min, x_max, y_max, z_max
+    """
+    return {
+        "x_min": -bbox["min"][1],
+        "y_min": bbox["min"][2],
+        "z_min": bbox["min"][0],
+        "x_max": -bbox["max"][1],
+        "y_max": bbox["max"][2],
+        "z_max": bbox["max"][0],
+    }
 
 
 @app.route("/search", methods=["POST"])
@@ -167,17 +224,7 @@ def search():
 
     # Transform each bounding box to match the coordinate system
     # used in Model3DViewer (as seen in App.tsx)
-    transformed_bboxes = []
-    for bbox in bboxes:
-        transformed_bbox = {
-            "x_min": -bbox["min"][1],
-            "y_min": bbox["min"][2],
-            "z_min": bbox["min"][0],
-            "x_max": -bbox["max"][1],
-            "y_max": bbox["max"][2],
-            "z_max": bbox["max"][0],
-        }
-        transformed_bboxes.append(transformed_bbox)
+    transformed_bboxes = [transform_bbox(bbox) for bbox in bboxes]
 
     result = {
         "bbox": transformed_bboxes,
@@ -186,6 +233,86 @@ def search():
     }
 
     return jsonify(result)
+
+
+@app.route("/get_route", methods=["POST"])
+def get_route():
+    """
+    Route calculation endpoint.
+    Takes source and destination search terms and returns a path.
+    """
+    # Check if occupancy grid is loaded
+    if occupancy_grid is None or occupancy_metadata is None:
+        return jsonify({"error": "Occupancy grid not available"}), 503
+
+    # Get source, destination, and method from request
+    data = request.json
+    source = data.get("source")
+    destination = data.get("destination")
+    method = data.get("method")
+
+    if not source or not destination:
+        return jsonify({"error": "Both source and destination are required"}), 400
+
+    if not method:
+        return jsonify({"error": "Method is required"}), 400
+
+    # Get the appropriate provider based on the method
+    provider = PROVIDERS.get(method)
+    if provider is None:
+        return jsonify({"error": f"Invalid method: {method}"}), 400
+
+    # Assume source and destination are single queries
+    source = source[0] if isinstance(source, list) else source
+    destination = destination[0] if isinstance(destination, list) else destination
+
+    # For CLIP, pass the entire source/destination objects; for others, extract text value
+    if method == "CLIP ViT-H-14":
+        source_input = source
+        destination_input = destination
+    else:
+        # Non-CLIP providers only support text
+        source_input = source.get("value") if isinstance(source, dict) else source
+        destination_input = (
+            destination.get("value") if isinstance(destination, dict) else destination
+        )
+
+    print(
+        f"Processing route from '{source}' to '{destination}' using method: '{method}'"
+    )
+
+    # Process source query
+    source_result = process_query(
+        source_input, component_captions, bbox_lookup, provider
+    )
+    source_bboxes = source_result["bbox"]
+
+    # Process destination query
+    destination_result = process_query(
+        destination_input, component_captions, bbox_lookup, provider
+    )
+    destination_bboxes = destination_result["bbox"]
+
+    # Use the first bounding box from each result
+    if not source_bboxes or not destination_bboxes:
+        return jsonify({"error": "Could not find source or destination location"}), 404
+
+    source_bbox = source_bboxes[0]
+    destination_bbox = destination_bboxes[0]
+
+    # Calculate centers of bounding boxes
+    source_center = tuple(source_bbox["center"])
+    destination_center = tuple(destination_bbox["center"])
+
+    # Calculate route
+    path = calculate_route(
+        source_center, destination_center, occupancy_grid, occupancy_metadata
+    )
+
+    # Transform path coordinates to match the coordinate system used in Model3DViewer
+    transformed_path = [transform_coordinates(coord) for coord in path]
+
+    return jsonify({"path": transformed_path})
 
 
 if __name__ == "__main__":
