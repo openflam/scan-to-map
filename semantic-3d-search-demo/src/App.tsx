@@ -72,13 +72,25 @@ function App() {
 
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     const result = await query(searchQuery, method);
+    setRoute([]); // Clear any existing route
     setBoundingBox(result.boundingBox);
     setSearchResult(result.reason);
     setSearchTime(result.searchTimeMs);
   };
 
-  const handleDirections = (route: Route) => {
+  const handleDirections = (
+    route: Route,
+    sourceBBox: BoundingBox,
+    destinationBBox: BoundingBox,
+    sourceReason: string,
+    destinationReason: string
+  ) => {
     setRoute(route);
+    // Set the bounding boxes to display source and destination
+    setBoundingBox([sourceBBox, destinationBBox]);
+    // Combine the reasons
+    const combinedReason = `Source: ${sourceReason}\n\nDestination: ${destinationReason}`;
+    setSearchResult(combinedReason);
   };
 
   return (

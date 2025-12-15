@@ -312,7 +312,19 @@ def get_route():
     # Transform path coordinates to match the coordinate system used in Model3DViewer
     transformed_path = [transform_coordinates(coord) for coord in path]
 
-    return jsonify({"path": transformed_path})
+    # Transform source and destination bboxes to match the format expected by Model3DViewer
+    transformed_source_bbox = transform_bbox(source_bbox)
+    transformed_destination_bbox = transform_bbox(destination_bbox)
+
+    return jsonify(
+        {
+            "path": transformed_path,
+            "source_bbox": transformed_source_bbox,
+            "destination_bbox": transformed_destination_bbox,
+            "source_reason": source_result["reason"],
+            "destination_reason": destination_result["reason"],
+        }
+    )
 
 
 if __name__ == "__main__":

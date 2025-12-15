@@ -69,52 +69,6 @@ function Model3DViewer(props: {
     return () => {};
   }, [props.source]); // Only re-run when source changes
 
-  // Update bounding box separately
-  useEffect(() => {
-    if (!sceneRef.current || !viewerRef.current) return;
-
-    // Remove existing bounding box meshes if they exist
-    const existingBBoxMeshes = sceneRef.current.meshes.filter(
-      (mesh: any) =>
-        mesh.name &&
-        (mesh.name.startsWith("boundingBox") ||
-          mesh.name === "boundingBoxEdges")
-    );
-    existingBBoxMeshes.forEach((mesh: any) => mesh.dispose());
-
-    // Create new bounding box(es) if provided
-    if (props.boundingBox && props.boundingBox.length > 0) {
-      console.log("Updating bounding box(es):", props.boundingBox.length);
-
-      props.boundingBox.forEach((bbox, index) => {
-        const name =
-          props.boundingBox!.length > 1
-            ? `boundingBox_${index}`
-            : "boundingBox";
-        createBoundingBoxMesh(bbox, sceneRef.current, Color3.Red(), 0.3, name);
-      });
-
-      // Request a safe render through the viewer's engine
-      // This avoids the WebGPU destroyed texture error
-      if (viewerRef.current && sceneRef.current) {
-        const engine = sceneRef.current.getEngine();
-        if (engine && !engine.isDisposed) {
-          // Schedule render on next frame safely
-          requestAnimationFrame(() => {
-            if (engine && !engine.isDisposed) {
-              engine.stopRenderLoop();
-              engine.runRenderLoop(() => {
-                if (sceneRef.current && !engine.isDisposed) {
-                  sceneRef.current.render();
-                }
-              });
-            }
-          });
-        }
-      }
-    }
-  }, [props.boundingBox]); // Only re-run when bounding box changes
-
   // Update auto tag bounding boxes separately
   useEffect(() => {
     if (!sceneRef.current || !viewerRef.current) return;
@@ -268,25 +222,48 @@ function Model3DViewer(props: {
           `routeSegment_${i}`
         );
       }
+    }
 
-      // Request a safe render through the viewer's engine
-      if (viewerRef.current && sceneRef.current) {
-        const engine = sceneRef.current.getEngine();
-        if (engine && !engine.isDisposed) {
-          requestAnimationFrame(() => {
-            if (engine && !engine.isDisposed) {
-              engine.stopRenderLoop();
-              engine.runRenderLoop(() => {
-                if (sceneRef.current && !engine.isDisposed) {
-                  sceneRef.current.render();
-                }
-              });
-            }
-          });
-        }
+    // Also update bounding boxes when route changes
+    // Remove existing bounding box meshes
+    const existingBBoxMeshes = sceneRef.current.meshes.filter(
+      (mesh: any) =>
+        mesh.name &&
+        (mesh.name.startsWith("boundingBox") ||
+          mesh.name === "boundingBoxEdges")
+    );
+    existingBBoxMeshes.forEach((mesh: any) => mesh.dispose());
+
+    // Create new bounding box(es) if provided
+    if (props.boundingBox && props.boundingBox.length > 0) {
+      console.log("Updating bounding box(es):", props.boundingBox.length);
+
+      props.boundingBox.forEach((bbox, index) => {
+        const name =
+          props.boundingBox!.length > 1
+            ? `boundingBox_${index}`
+            : "boundingBox";
+        createBoundingBoxMesh(bbox, sceneRef.current, Color3.Red(), 0.3, name);
+      });
+    }
+
+    // Request a safe render through the viewer's engine
+    if (viewerRef.current && sceneRef.current) {
+      const engine = sceneRef.current.getEngine();
+      if (engine && !engine.isDisposed) {
+        requestAnimationFrame(() => {
+          if (engine && !engine.isDisposed) {
+            engine.stopRenderLoop();
+            engine.runRenderLoop(() => {
+              if (sceneRef.current && !engine.isDisposed) {
+                sceneRef.current.render();
+              }
+            });
+          }
+        });
       }
     }
-  }, [props.route]); // Re-run when route changes
+  }, [props.route, props.boundingBox]); // Re-run when route or bounding box changes
 
   return <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />;
 }

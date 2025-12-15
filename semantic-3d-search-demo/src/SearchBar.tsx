@@ -5,7 +5,13 @@ import { queryDirections } from "./query";
 
 interface SearchBarProps {
   onSearch: (searchQuery: SearchQuery, method: string) => void;
-  onDirections: (route: Route) => void;
+  onDirections: (
+    route: Route,
+    sourceBBox: any,
+    destinationBBox: any,
+    sourceReason: string,
+    destinationReason: string
+  ) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
   showOccupancyGrid: boolean;
@@ -82,7 +88,13 @@ function SearchBar({
       const route: Route = result.path.map(
         (coord) => [coord[0], coord[1], coord[2]] as [number, number, number]
       );
-      onDirections(route);
+      onDirections(
+        route,
+        result.source_bbox,
+        result.destination_bbox,
+        result.source_reason,
+        result.destination_reason
+      );
     } catch (error) {
       console.error("Failed to get directions:", error);
     }

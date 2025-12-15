@@ -49,7 +49,13 @@ export async function queryDirections(
   source: SearchQuery,
   destination: SearchQuery,
   method: string
-): Promise<{ path: number[][] }> {
+): Promise<{
+  path: number[][];
+  source_bbox: any;
+  destination_bbox: any;
+  source_reason: string;
+  destination_reason: string;
+}> {
   console.log(
     "Querying directions from:",
     source,
