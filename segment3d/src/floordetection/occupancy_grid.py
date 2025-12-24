@@ -272,7 +272,7 @@ def save_occupancy_grid(
 
     # Save as bounding boxes in JSON format
     bbox_file = output_dir / "occupancy_bbox.json"
-    bboxes = _grid_to_bboxes(grid, metadata, all_points)
+    bboxes, floor_height_data = _grid_to_bboxes(grid, metadata, all_points)
     with open(bbox_file, "w") as f:
         json.dump(bboxes, f, indent=2)
     print(f"Saved bounding boxes to: {bbox_file}")
@@ -288,8 +288,16 @@ def save_occupancy_grid(
     np.save(npy_file, grid)
     print(f"Saved grid to: {npy_file}")
 
+    # Save floor height
+    floor_height_file = output_dir / "floor_height.json"
+    with open(floor_height_file, "w") as f:
+        json.dump(floor_height_data, f, indent=2)
+    print(f"Saved floor height to: {floor_height_file}")
 
-def _grid_to_bboxes(grid: np.ndarray, metadata: Dict, all_points: Dict) -> List[Dict]:
+
+def _grid_to_bboxes(
+    grid: np.ndarray, metadata: Dict, all_points: Dict
+) -> Tuple[List[Dict], Dict]:
     """Convert occupancy grid to bounding box format.
 
     Args:
@@ -298,7 +306,9 @@ def _grid_to_bboxes(grid: np.ndarray, metadata: Dict, all_points: Dict) -> List[
         all_points: Dictionary of all 3D points from COLMAP
 
     Returns:
-        List of bounding box dictionaries in bbox_corners.json format
+        Tuple of (bboxes, floor_height_data) where:
+        - bboxes: List of bounding box dictionaries in bbox_corners.json format
+        - floor_height_data: Dictionary with floor height information
     """
     cell_size = metadata["cell_size"]
     origin = metadata["origin"]
@@ -306,10 +316,17 @@ def _grid_to_bboxes(grid: np.ndarray, metadata: Dict, all_points: Dict) -> List[
     y_axis_index = metadata["axes"]["y_axis_index"]
     up_axis_index = metadata["axes"]["up_axis_index"]
 
-    # Calculate floor height as 20th percentile of up-axis values
+    # Calculate floor height as 10th percentile of up-axis values
     all_coords = np.array([p["xyz"] for p in all_points.values()])
     height_values = all_coords[:, up_axis_index]
     floor_height = np.percentile(height_values, 10)
+
+    # Prepare floor height data for return
+    floor_height_data = {
+        "floor_height": float(floor_height),
+        "up_axis_index": up_axis_index,
+        "percentile": 10,
+    }
 
     # Fixed height for boxes
     box_height = 0.1
@@ -387,7 +404,7 @@ def _grid_to_bboxes(grid: np.ndarray, metadata: Dict, all_points: Dict) -> List[
             bboxes.append(bbox_dict)
             cell_id += 1
 
-    return bboxes
+    return bboxes, floor_height_data
 
 
 def main() -> None:
@@ -408,14 +425,14 @@ def main() -> None:
     parser.add_argument(
         "--cell-size",
         type=float,
-        default=0.1,
-        help="Size of each grid cell in meters (default: 0.1)",
+        default=0.3,
+        help="Size of each grid cell in meters (default: 0.3)",
     )
     parser.add_argument(
         "--floor-threshold",
         type=float,
-        default=0.5,
-        help="Fraction of floor points to mark cell as floor (default: 0.5)",
+        default=0.7,
+        help="Fraction of floor points to mark cell as floor (default: 0.7)",
     )
 
     args = parser.parse_args()

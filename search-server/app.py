@@ -91,15 +91,26 @@ OCCUPANCY_METADATA_PATH = (
     / DATASET_NAME
     / "occupancy_grid_metadata.json"
 )
+FLOOR_HEIGHT_PATH = (
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "floor_height.json"
+)
 
 if OCCUPANCY_GRID_PATH.exists() and OCCUPANCY_METADATA_PATH.exists():
     occupancy_grid = np.load(OCCUPANCY_GRID_PATH)
     with open(OCCUPANCY_METADATA_PATH, "r") as f:
         occupancy_metadata = json.load(f)
     print(f"Loaded occupancy grid: {occupancy_grid.shape}")
+
+    # Load floor height if available
+    floor_height_file = str(FLOOR_HEIGHT_PATH) if FLOOR_HEIGHT_PATH.exists() else None
+    if floor_height_file:
+        print(f"Loaded floor height file: {FLOOR_HEIGHT_PATH}")
+    else:
+        print("Warning: Floor height file not found. Using default z-coordinates.")
 else:
     occupancy_grid = None
     occupancy_metadata = None
+    floor_height_file = None
     print("Warning: Occupancy grid not found. Routing will be disabled.")
 
 openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
@@ -306,7 +317,11 @@ def get_route():
 
     # Calculate route
     path = calculate_route(
-        source_center, destination_center, occupancy_grid, occupancy_metadata
+        source_center,
+        destination_center,
+        occupancy_grid,
+        occupancy_metadata,
+        floor_height_file,
     )
 
     # Transform path coordinates to match the coordinate system used in Model3DViewer

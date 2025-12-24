@@ -4,6 +4,7 @@ from typing import List, Tuple, Optional
 import numpy as np
 import heapq
 from pathlib import Path
+import json
 
 
 def world_to_grid(
@@ -226,6 +227,7 @@ def calculate_route(
     destination: Tuple[float, float, float],
     occupancy_grid: np.ndarray,
     metadata: dict,
+    floor_height_file: Optional[str] = None,
 ) -> List[Tuple[float, float, float]]:
     """
     Calculate a route from source to destination using the occupancy grid.
@@ -241,6 +243,8 @@ def calculate_route(
                  - origin: [x, y] origin coordinates
                  - cell_size: size of each grid cell
                  - grid_shape: [rows, cols] shape of the grid
+        floor_height_file: Optional path to floor_height.json file.
+                          If provided, uses the floor height from the file for z-coordinates.
 
     Returns:
         List of coordinates representing the path from source to destination.
@@ -249,6 +253,16 @@ def calculate_route(
     # Extract metadata
     origin = metadata["origin"]
     cell_size = metadata["cell_size"]
+
+    # Load floor height if file is provided
+    floor_height = None
+    if floor_height_file:
+        try:
+            with open(floor_height_file, "r") as f:
+                floor_height_data = json.load(f)
+                floor_height = floor_height_data.get("floor_height")
+        except (FileNotFoundError, json.JSONDecodeError, KeyError):
+            pass  # Fall back to using source z-coordinate
 
     # Convert world coordinates to grid indices
     start_grid = world_to_grid(source[0], source[1], origin, cell_size)
@@ -265,9 +279,8 @@ def calculate_route(
     world_path = []
     for row, col in grid_path:
         x, y = grid_to_world(row, col, origin, cell_size)
-        # Use the z-coordinate from source (assuming flat floor)
-        # Could interpolate between source and destination z if needed
-        z = source[2]
+        # Use floor height if available, otherwise use source z-coordinate
+        z = floor_height if floor_height is not None else source[2]
         world_path.append((x, y, z))
 
     return world_path
