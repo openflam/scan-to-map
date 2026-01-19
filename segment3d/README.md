@@ -2,7 +2,15 @@
 
 This directory contains the main pipeline script.
 
-## Main Pipeline Script
+## Run pipeline shell script
+
+The `run.sh` script runs the whole pipeline. It runs all the steps excluding the captioning to free up GPU VRAM for captioning.
+
+```bash
+./run.sh <datasetname>
+```
+
+## Main Python Pipeline Script
 
 **`main.py`** - Runs the complete scan-to-map pipeline sequentially.
 
@@ -29,21 +37,25 @@ python main.py
 ### Examples
 
 Run the complete pipeline with default parameters:
+
 ```bash
 python main.py
 ```
 
 Run with custom parameters:
+
 ```bash
 python main.py --K 10 --tau 0.3 --percentile 90 --min-fraction 0.5
 ```
 
 Skip SAM if masks already exist:
+
 ```bash
 python main.py --skip-sam
 ```
 
 Skip SAM and associations:
+
 ```bash
 python main.py --skip-sam --skip-association
 ```
@@ -53,7 +65,7 @@ python main.py --skip-sam --skip-association
 The script runs these steps in order:
 
 1. **SAM Segmentation** - Generate masks for all images
-2. **2D-3D Association** - Map masks to COLMAP 3D points  
+2. **2D-3D Association** - Map masks to COLMAP 3D points
 3. **Mask Graph** - Build connectivity graph and extract components
 4. **Bounding Boxes** - Compute 3D bboxes for each component
 5. **Projection** - Project 3D bboxes to 2D image coordinates
@@ -66,3 +78,9 @@ The script runs these steps in order:
 - COLMAP reconstruction must be available
 
 See `CLI_REFERENCE.md` for more details on individual steps.
+
+## Run floor detection
+
+```bash
+./run_floordetection.sh <datasetname>
+```
