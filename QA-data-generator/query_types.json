@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Spatial Relationship Queries",
+    "description": "Queries that reason about objects using spatial relationships such as proximity, containment, or relative position.",
+    "example": "What tools are near the workbench?"
+  },
+  {
+    "name": "Constraint-Based Queries",
+    "description": "Queries that impose constraints such as safety, noise, power source, or user limitations on the results.",
+    "example": "What tools can drill wood without electricity?"
+  },
+  {
+    "name": "Hypothetical Queries",
+    "description": "Queries that explore alternative scenarios or reason about changes to the space or available objects.",
+    "example": "What could I use to drill wood if the drill were unavailable?"
+  }
+]
