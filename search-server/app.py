@@ -147,7 +147,7 @@ def transform_coordinates(coords):
     Returns:
         List of transformed [x, y, z] coordinates
     """
-    return [-coords[1], coords[2], coords[0]]
+    return [coords[1], coords[2], coords[0]]
 
 
 def transform_bbox(bbox):
@@ -161,10 +161,10 @@ def transform_bbox(bbox):
         Transformed bounding box dictionary with x_min, y_min, z_min, x_max, y_max, z_max
     """
     return {
-        "x_min": -bbox["min"][1],
+        "x_min": bbox["min"][1],
         "y_min": bbox["min"][2],
         "z_min": bbox["min"][0],
-        "x_max": -bbox["max"][1],
+        "x_max": bbox["max"][1],
         "y_max": bbox["max"][2],
         "z_max": bbox["max"][0],
     }

@@ -166,8 +166,9 @@ function SearchBar({
                   accept="image/*"
                   style={{ display: "none" }}
                 />
+                {/* @ts-ignore */}
                 <Button
-                  variant={uploadedImage ? "success" : "outline-primary"}
+                  variant={(uploadedImage ? "success" : "outline-primary") as any}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!!searchTerm.trim()}
                   title="Upload image"
