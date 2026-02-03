@@ -1,4 +1,4 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   OrbitControls,
   useGLTF,
@@ -6,6 +6,8 @@ import {
   Line,
   Edges,
   Billboard,
+  KeyboardControls,
+  useKeyboardControls,
 } from "@react-three/drei";
 import { Suspense, useMemo } from "react";
 import * as THREE from "three";
@@ -91,6 +93,49 @@ function RoutePath({ route }: { route: Route }) {
   return <Line points={points} color="blue" lineWidth={3} />;
 }
 
+function CameraController() {
+  const [, get] = useKeyboardControls();
+  const { camera } = useThree();
+
+  useFrame((state, delta) => {
+    // Prevent movement if the user is typing in a form element
+    const activeElement = document.activeElement;
+    if (
+      activeElement &&
+      (activeElement.tagName === "INPUT" ||
+        activeElement.tagName === "TEXTAREA" ||
+        activeElement.tagName === "SELECT")
+    ) {
+      return;
+    }
+
+    const { forward, backward, left, right } = get();
+    if (!forward && !backward && !left && !right) return;
+
+    const speed = 5 * delta;
+    const direction = new THREE.Vector3();
+
+    if (forward) direction.z -= 1;
+    if (backward) direction.z += 1;
+    if (left) direction.x -= 1;
+    if (right) direction.x += 1;
+
+    if (direction.lengthSq() === 0) return;
+
+    direction.normalize().multiplyScalar(speed).applyQuaternion(camera.quaternion);
+
+    camera.position.add(direction);
+
+    // Update OrbitControls target to maintain relative position/rotation pivot
+    const controls = state.controls as any;
+    if (controls) {
+      controls.target.add(direction);
+    }
+  });
+
+  return null;
+}
+
 export default function Model3DViewer({
   source,
   boundingBox,
@@ -101,54 +146,71 @@ export default function Model3DViewer({
   annotations,
   route,
 }: Model3DViewerProps) {
+  const map = useMemo(
+    () => [
+      { name: "forward", keys: ["ArrowUp", "KeyW"] },
+      { name: "backward", keys: ["ArrowDown", "KeyS"] },
+      { name: "left", keys: ["ArrowLeft", "KeyA"] },
+      { name: "right", keys: ["ArrowRight", "KeyD"] },
+    ],
+    []
+  );
+
   return (
     <div style={{ width: "100%", height: "100%" }}>
-      <Canvas camera={{ position: [5, 5, 5] }}>
-        <ambientLight intensity={2.0} />
-        <pointLight position={[10, 10, 10]} intensity={2.0} />
-        <OrbitControls makeDefault />
+      <KeyboardControls map={map}>
+        <Canvas camera={{ position: [5, 5, 5] }}>
+          <ambientLight intensity={2.0} />
+          <pointLight position={[10, 10, 10]} intensity={2.0} />
+          <OrbitControls makeDefault />
+          <CameraController />
 
-        <Suspense fallback={null}>
-          <Model url={source} />
-        </Suspense>
+          <Suspense fallback={null}>
+            <Model url={source} />
+          </Suspense>
 
-        {/* User Search Bounding Boxes */}
-        {boundingBox?.map((bbox, i) => (
-          <BoundingBoxMesh
-            key={`bbox-${i}`}
-            bbox={bbox}
-            color="red"
-            opacity={0.3}
-          />
-        ))}
-
-        {/* Auto Tag Bounding Boxes */}
-        {showAutoTags &&
-          autoTagBBoxes?.map((bbox, i) => (
+          {/* User Search Bounding Boxes */}
+          {boundingBox?.map((bbox, i) => (
             <BoundingBoxMesh
-              key={`autotag-${i}`}
+              key={`bbox-${i}`}
               bbox={bbox}
-              // Use deterministic color based on index to avoid flickering on re-renders
-              color={new THREE.Color().setHSL((i * 0.618033988749895) % 1, 0.8, 0.5)}
-              label={annotations?.[i]}
-              opacity={0.1}
+              color="red"
+              opacity={0.3}
             />
           ))}
 
-        {/* Occupancy Grid */}
-        {showOccupancyGrid &&
-          occupancyGrid?.map((bbox, i) => (
-            <BoundingBoxMesh
-              key={`occupancy-${i}`}
-              bbox={bbox}
-              color="green"
-              opacity={0.1}
-            />
-          ))}
+          {/* Auto Tag Bounding Boxes */}
+          {showAutoTags &&
+            autoTagBBoxes?.map((bbox, i) => (
+              <BoundingBoxMesh
+                key={`autotag-${i}`}
+                bbox={bbox}
+                // Use deterministic color based on index to avoid flickering on re-renders
+                color={new THREE.Color().setHSL(
+                  (i * 0.618033988749895) % 1,
+                  0.8,
+                  0.5
+                )}
+                label={annotations?.[i]}
+                opacity={0.1}
+              />
+            ))}
 
-        {/* Route */}
-        {route && <RoutePath route={route} />}
-      </Canvas>
+          {/* Occupancy Grid */}
+          {showOccupancyGrid &&
+            occupancyGrid?.map((bbox, i) => (
+              <BoundingBoxMesh
+                key={`occupancy-${i}`}
+                bbox={bbox}
+                color="green"
+                opacity={0.1}
+              />
+            ))}
+
+          {/* Route */}
+          {route && <RoutePath route={route} />}
+        </Canvas>
+      </KeyboardControls>
     </div>
   );
 }
