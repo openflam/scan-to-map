@@ -321,6 +321,9 @@ export default function Model3DViewer({
   const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
     null,
   );
+  const [selectedAutoTagId, setSelectedAutoTagId] = useState<string | null>(
+    null,
+  );
   const [isEditing, setIsEditing] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [componentImage, setComponentImage] = useState<string | null>(null);
@@ -328,7 +331,24 @@ export default function Model3DViewer({
 
   useEffect(() => {
     const fetchComponentInfo = async () => {
-      if (selectedBBoxIndex !== null && componentIds) {
+      // Handle autotag selection
+      if (selectedAutoTagId !== null) {
+        setIsLoadingComponent(true);
+        try {
+          const { getComponentInfo } = await import("./query");
+          const info = await getComponentInfo(selectedAutoTagId);
+          setEditedCaption(info.caption || "");
+          setComponentImage(info.image_base64);
+        } catch (error) {
+          console.error("Error fetching component info:", error);
+          setEditedCaption("Error loading component information");
+          setComponentImage(null);
+        } finally {
+          setIsLoadingComponent(false);
+        }
+      }
+      // Handle search result selection
+      else if (selectedBBoxIndex !== null && componentIds) {
         const componentId = componentIds[selectedBBoxIndex];
         if (componentId) {
           setIsLoadingComponent(true);
@@ -356,7 +376,7 @@ export default function Model3DViewer({
     };
 
     fetchComponentInfo();
-  }, [selectedBBoxIndex, captions, componentIds]);
+  }, [selectedBBoxIndex, selectedAutoTagId, captions, componentIds]);
 
   const map = useMemo(
     () => [
@@ -381,13 +401,16 @@ export default function Model3DViewer({
     >
       <KeyboardControls map={map}>
         {/* --- HTML OVERLAY --- */}
-        {selectedBBoxIndex !== null && (
+        {(selectedBBoxIndex !== null || selectedAutoTagId !== null) && (
           <ComponentDetails
             editedCaption={editedCaption}
             setEditedCaption={setEditedCaption}
             isEditing={isEditing}
             setIsEditing={setIsEditing}
-            onDismiss={() => setSelectedBBoxIndex(null)}
+            onDismiss={() => {
+              setSelectedBBoxIndex(null);
+              setSelectedAutoTagId(null);
+            }}
             imageBase64={componentImage}
             isLoading={isLoadingComponent}
           />
@@ -403,7 +426,12 @@ export default function Model3DViewer({
           <OrbitControls makeDefault />
           <CameraController />
           {/* Preserved Esc Key logic here */}
-          <GlobalInputHandler onExit={() => setSelectedBBoxIndex(null)} />
+          <GlobalInputHandler
+            onExit={() => {
+              setSelectedBBoxIndex(null);
+              setSelectedAutoTagId(null);
+            }}
+          />
 
           <Suspense fallback={null}>
             <Model url={source} />
@@ -415,9 +443,15 @@ export default function Model3DViewer({
               bbox={bbox}
               color="red"
               opacity={0.3}
-              onClick={() => setSelectedBBoxIndex(i)}
-              isSelected={selectedBBoxIndex === i}
-              isDimmed={selectedBBoxIndex !== null && selectedBBoxIndex !== i}
+              onClick={() => {
+                setSelectedBBoxIndex(i);
+                setSelectedAutoTagId(null);
+              }}
+              isSelected={selectedBBoxIndex === i && selectedAutoTagId === null}
+              isDimmed={
+                (selectedBBoxIndex !== null && selectedBBoxIndex !== i) ||
+                selectedAutoTagId !== null
+              }
             />
           ))}
 
@@ -429,7 +463,18 @@ export default function Model3DViewer({
                 color={new THREE.Color().setHSL((i * 0.618) % 1, 0.8, 0.5)}
                 label={annotations?.[i]}
                 opacity={0.1}
-                isDimmed={selectedBBoxIndex !== null}
+                onClick={() => {
+                  if (annotations?.[i]) {
+                    setSelectedAutoTagId(annotations[i]);
+                    setSelectedBBoxIndex(null);
+                  }
+                }}
+                isSelected={selectedAutoTagId === annotations?.[i]}
+                isDimmed={
+                  selectedBBoxIndex !== null ||
+                  (selectedAutoTagId !== null &&
+                    selectedAutoTagId !== annotations?.[i])
+                }
               />
             ))}
 
