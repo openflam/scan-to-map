@@ -10,6 +10,7 @@ import type { BoundingBox, SearchQuery, Route } from "./types/global";
 function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [captions, setCaptions] = useState<string[]>([]);
+  const [componentIds, setComponentIds] = useState<string[]>([]);
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [showOccupancyGrid, setShowOccupancyGrid] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
@@ -74,9 +75,10 @@ function App() {
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     const result = await query(searchQuery, method);
     setRoute([]); // Clear any existing route
-    // Extract bounding boxes and captions from components
+    // Extract bounding boxes, captions, and component IDs from components
     setBoundingBox(result.components.map((c) => c.bbox));
     setCaptions(result.components.map((c) => c.caption));
+    setComponentIds(result.components.map((c) => c.component_id));
     setSearchResult(result.reason);
     setSearchTime(result.search_time_ms);
   };
@@ -92,6 +94,7 @@ function App() {
     // Set the bounding boxes to display source and destination
     setBoundingBox([sourceBBox, destinationBBox]);
     setCaptions(["Source", "Destination"]);
+    setComponentIds([]); // Clear component IDs for directions mode
     // Combine the reasons
     const combinedReason = `Source: ${sourceReason}\n\nDestination: ${destinationReason}`;
     setSearchResult(combinedReason);
@@ -115,6 +118,7 @@ function App() {
           source="/data/raw.glb"
           boundingBox={boundingBox}
           captions={captions}
+          componentIds={componentIds}
           autoTagBBoxes={autoTagBBoxes}
           showAutoTags={showAutoTags}
           occupancyGrid={occupancyGrid}

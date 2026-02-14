@@ -85,3 +85,38 @@ export async function queryDirections(
     throw error;
   }
 }
+
+export async function getComponentInfo(componentId: string): Promise<{
+  component_id: string;
+  caption: string;
+  image_name: string;
+  image_base64: string | null;
+  fraction_visible: number;
+  image_width: number;
+  image_height: number;
+}> {
+  console.log("Fetching component info for:", componentId);
+
+  try {
+    const response = await fetch(
+      `${SEARCH_SERVER_URL}/get_component_info?component_id=${encodeURIComponent(componentId)}`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Component info request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Received component info:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error fetching component info:", error);
+    throw error;
+  }
+}

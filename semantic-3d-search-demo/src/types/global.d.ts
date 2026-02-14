@@ -25,6 +25,7 @@ export type SearchQuery = SearchQueryItem[];
 export interface Component {
   bbox: BoundingBox;
   caption: string;
+  component_id: string;
 }
 
 // Define SearchResult interface (matches API response)
