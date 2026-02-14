@@ -56,21 +56,17 @@ component_captions = {item["component_id"]: item for item in captions_list}
 # Create bbox lookup dictionary keyed by component_id
 bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 
-# Load image_crop_coordinates.json on startup
-IMAGE_CROP_COORDS_PATH = (
-    Path(__file__).parent
-    / ".."
-    / "outputs"
-    / DATASET_NAME
-    / "image_crop_coordinates.json"
+# Load manifest.json on startup
+MANIFEST_PATH = (
+    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "crops" / "manifest.json"
 )
 
-if not IMAGE_CROP_COORDS_PATH.exists():
-    print(f"Error: image_crop_coordinates.json not found at {IMAGE_CROP_COORDS_PATH}")
+if not MANIFEST_PATH.exists():
+    print(f"Error: manifest.json not found at {MANIFEST_PATH}")
     sys.exit(1)
 
-with open(IMAGE_CROP_COORDS_PATH, "r") as f:
-    image_crop_coordinates = json.load(f)
+with open(MANIFEST_PATH, "r") as f:
+    manifest_data = json.load(f)
 
 # Initialize providers
 print("Initializing search providers...")
@@ -370,7 +366,7 @@ def get_route():
 def get_component_info():
     """
     Get component information endpoint.
-    Returns the caption and corresponding image with highest fraction_visible for a given component ID.
+    Returns the caption and corresponding crop image with highest fraction_visible for a given component ID.
     """
     component_id = request.args.get("component_id")
 
@@ -391,42 +387,42 @@ def get_component_info():
 
     caption = component_captions[component_key].get("caption", "No caption available")
 
-    # Get images for this component (image_crop_coordinates uses string keys)
-    if component_id not in image_crop_coordinates:
+    # Get crops for this component from manifest (manifest uses string keys)
+    if component_id not in manifest_data:
         return jsonify(
             {
                 "component_id": component_id,
                 "caption": caption,
                 "image": None,
-                "message": "No images available for this component",
+                "message": "No crops available for this component",
             }
         )
 
-    images = image_crop_coordinates[component_id]
+    component_crops = manifest_data[component_id].get("crops", [])
 
-    if not images or len(images) == 0:
+    if not component_crops or len(component_crops) == 0:
         return jsonify(
             {
                 "component_id": component_id,
                 "caption": caption,
                 "image": None,
-                "message": "No images available for this component",
+                "message": "No crops available for this component",
             }
         )
 
-    # Find image with highest fraction_visible
-    best_image = max(images, key=lambda x: x.get("fraction_visible", 0))
+    # Find crop with highest fraction_visible
+    best_crop = max(component_crops, key=lambda x: x.get("fraction_visible", 0))
 
-    # Read the image file and encode as base64
-    image_name = best_image.get("image_name")
+    # Read the crop image file and encode as base64
+    crop_filename = best_crop.get("crop_filename")
     image_path = (
         Path(__file__).parent
         / ".."
-        / "data"
+        / "outputs"
         / DATASET_NAME
-        / "ns_data"
-        / "images_2"
-        / image_name
+        / "crops"
+        / f"component_{component_id}"
+        / crop_filename
     )
 
     image_base64 = None
@@ -436,19 +432,19 @@ def get_component_info():
                 image_data = img_file.read()
                 image_base64 = base64.b64encode(image_data).decode("utf-8")
         except Exception as e:
-            print(f"Error reading image {image_path}: {e}")
+            print(f"Error reading crop image {image_path}: {e}")
     else:
-        print(f"Warning: Image not found at {image_path}")
+        print(f"Warning: Crop image not found at {image_path}")
 
     return jsonify(
         {
             "component_id": component_id,
             "caption": caption,
-            "image_name": image_name,
+            "crop_filename": crop_filename,
             "image_base64": image_base64,
-            "fraction_visible": best_image.get("fraction_visible"),
-            "image_width": best_image.get("image_width"),
-            "image_height": best_image.get("image_height"),
+            "fraction_visible": best_crop.get("fraction_visible"),
+            "source_image": best_crop.get("source_image"),
+            "crop_coordinates": best_crop.get("crop_coordinates"),
         }
     )
 
