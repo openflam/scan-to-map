@@ -15,7 +15,7 @@ function App() {
   const [occupancyGrid, setOccupancyGrid] = useState<BoundingBox[]>([]);
   const [annotations, setAnnotations] = useState<string[]>([]);
   const [searchResult, setSearchResult] = useState<string | undefined>(
-    undefined
+    undefined,
   );
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
   const [route, setRoute] = useState<Route>([]);
@@ -39,7 +39,7 @@ function App() {
 
         // Extract annotations (connected_comp_id)
         const annotationList: string[] = data.map((item: any) =>
-          item.connected_comp_id.toString()
+          item.connected_comp_id.toString(),
         );
         setAnnotations(annotationList);
       })
@@ -83,7 +83,7 @@ function App() {
     sourceBBox: BoundingBox,
     destinationBBox: BoundingBox,
     sourceReason: string,
-    destinationReason: string
+    destinationReason: string,
   ) => {
     setRoute(route);
     // Set the bounding boxes to display source and destination

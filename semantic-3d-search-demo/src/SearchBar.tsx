@@ -10,7 +10,7 @@ interface SearchBarProps {
     sourceBBox: any,
     destinationBBox: any,
     sourceReason: string,
-    destinationReason: string
+    destinationReason: string,
   ) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
@@ -81,19 +81,19 @@ function SearchBar({
       const result = await queryDirections(
         sourceQuery,
         destinationQuery,
-        method
+        method,
       );
       console.log("Route received:", result);
       // Convert the path to Route format (array of tuples)
       const route: Route = result.path.map(
-        (coord) => [coord[0], coord[1], coord[2]] as [number, number, number]
+        (coord) => [coord[0], coord[1], coord[2]] as [number, number, number],
       );
       onDirections(
         route,
         result.source_bbox,
         result.destination_bbox,
         result.source_reason,
-        result.destination_reason
+        result.destination_reason,
       );
     } catch (error) {
       console.error("Failed to get directions:", error);
@@ -168,7 +168,9 @@ function SearchBar({
                 />
                 {/* @ts-ignore */}
                 <Button
-                  variant={(uploadedImage ? "success" : "outline-primary") as any}
+                  variant={
+                    (uploadedImage ? "success" : "outline-primary") as any
+                  }
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!!searchTerm.trim()}
                   title="Upload image"

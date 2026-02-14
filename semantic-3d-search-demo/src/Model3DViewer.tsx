@@ -122,7 +122,10 @@ function CameraController() {
 
     if (direction.lengthSq() === 0) return;
 
-    direction.normalize().multiplyScalar(speed).applyQuaternion(camera.quaternion);
+    direction
+      .normalize()
+      .multiplyScalar(speed)
+      .applyQuaternion(camera.quaternion);
 
     camera.position.add(direction);
 
@@ -153,7 +156,7 @@ export default function Model3DViewer({
       { name: "left", keys: ["ArrowLeft", "KeyA"] },
       { name: "right", keys: ["ArrowRight", "KeyD"] },
     ],
-    []
+    [],
   );
 
   return (
@@ -189,7 +192,7 @@ export default function Model3DViewer({
                 color={new THREE.Color().setHSL(
                   (i * 0.618033988749895) % 1,
                   0.8,
-                  0.5
+                  0.5,
                 )}
                 label={annotations?.[i]}
                 opacity={0.1}

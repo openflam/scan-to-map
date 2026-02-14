@@ -1,10 +1,10 @@
 import type { SearchResult, SearchQuery } from "./types/global";
 
-const SEARCH_SERVER_URL = "http://172.26.67.144:5000";
+const SEARCH_SERVER_URL = "http://172.26.112.246:5000";
 
 export async function query(
   searchQuery: SearchQuery,
-  method: string
+  method: string,
 ): Promise<SearchResult> {
   console.log("Querying with:", searchQuery, "using method:", method);
 
@@ -22,7 +22,7 @@ export async function query(
 
     if (!response.ok) {
       throw new Error(
-        `Search request failed: ${response.status} ${response.statusText}`
+        `Search request failed: ${response.status} ${response.statusText}`,
       );
     }
 
@@ -48,7 +48,7 @@ export async function query(
 export async function queryDirections(
   source: SearchQuery,
   destination: SearchQuery,
-  method: string
+  method: string,
 ): Promise<{
   path: number[][];
   source_bbox: any;
@@ -62,7 +62,7 @@ export async function queryDirections(
     "to:",
     destination,
     "using method:",
-    method
+    method,
   );
 
   try {
@@ -80,7 +80,7 @@ export async function queryDirections(
 
     if (!response.ok) {
       throw new Error(
-        `Directions request failed: ${response.status} ${response.statusText}`
+        `Directions request failed: ${response.status} ${response.statusText}`,
       );
     }
 

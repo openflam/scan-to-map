@@ -29,11 +29,10 @@ export interface SearchResult {
 }
 
 // Define custom attributes for babylon-viewer element
-interface HTML3DElementAttributes
-  extends React.DetailedHTMLProps<
-    React.HTMLAttributes<HTMLElement>,
-    HTMLElement
-  > {
+interface HTML3DElementAttributes extends React.DetailedHTMLProps<
+  React.HTMLAttributes<HTMLElement>,
+  HTMLElement
+> {
   source?: string;
   environment?: string;
 }
