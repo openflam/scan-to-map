@@ -9,12 +9,12 @@ import {
   KeyboardControls,
   useKeyboardControls,
 } from "@react-three/drei";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
 
 interface Model3DViewerProps {
-  source: string; // Restricting to string for useGLTF for now, as App.tsx passes string
+  source: string;
   boundingBox?: BoundingBox[];
   captions?: string[];
   autoTagBBoxes?: BoundingBox[];
@@ -36,43 +36,51 @@ function BoundingBoxMesh({
   label,
   opacity = 0.1,
   onClick,
-  caption,
-  showCaption,
+  isSelected = false,
+  isDimmed = false,
 }: {
   bbox: BoundingBox;
   color: string | THREE.Color;
   label?: string;
   opacity?: number;
-  onClick?: () => void;
-  caption?: string;
-  showCaption?: boolean;
+  onClick?: (e: any) => void;
+  isSelected?: boolean;
+  isDimmed?: boolean;
 }) {
   const { x_min, y_min, z_min, x_max, y_max, z_max } = bbox;
-
   const width = Math.abs(x_max - x_min);
   const height = Math.abs(y_max - y_min);
   const depth = Math.abs(z_max - z_min);
-
   const position: [number, number, number] = [
     (x_min + x_max) / 2,
     (y_min + y_max) / 2,
     (z_min + z_max) / 2,
   ];
 
+  const finalOpacity = isDimmed ? 0.05 : isSelected ? 0.6 : opacity;
+  const finalColor = isSelected ? "#3b82f6" : color;
+
   return (
     <group position={position}>
-      <mesh onClick={onClick}>
+      <mesh
+        onClick={(e) => {
+          if (e.button === 0) {
+            e.stopPropagation();
+            if (onClick) onClick(e);
+          }
+        }}
+      >
         <boxGeometry args={[width, height, depth]} />
         <meshStandardMaterial
-          color={color}
+          color={finalColor}
           transparent
-          opacity={opacity}
-          depthWrite={false} // Similar to backFaceCulling=false often implies transparency handling
+          opacity={finalOpacity}
+          depthWrite={false}
           side={THREE.DoubleSide}
         />
-        <Edges color={new THREE.Color(color).multiplyScalar(0.45)} />
+        <Edges color={new THREE.Color(finalColor).multiplyScalar(0.5)} />
       </mesh>
-      {label && (
+      {label && !isDimmed && (
         <Billboard position={[0, height / 2 + 0.1, 0]}>
           <Text
             fontSize={0.1}
@@ -86,97 +94,42 @@ function BoundingBoxMesh({
           </Text>
         </Billboard>
       )}
-      {showCaption && caption && (
-        <Billboard position={[0, height / 2 + 0.2, 0]}>
-          <group>
-            {/* White background board - dynamically sized to fit text */}
-            <mesh position={[0, 0, -0.01]} renderOrder={999}>
-              <planeGeometry
-                args={[
-                  Math.min(Math.max(caption.length * 0.09, 1), 4) + 0.4,
-                  0.35 + Math.ceil(caption.length / 35) * 0.2,
-                ]}
-              />
-              <meshBasicMaterial
-                color="white"
-                side={THREE.DoubleSide}
-                depthTest={false}
-                transparent={true}
-                opacity={0.95}
-              />
-            </mesh>
-            {/* Black text on white background */}
-            <Text
-              fontSize={0.15}
-              color="black"
-              anchorX="center"
-              anchorY="middle"
-              maxWidth={3.6}
-              renderOrder={1000}
-              material-depthTest={false}
-            >
-              {caption}
-            </Text>
-          </group>
-        </Billboard>
-      )}
     </group>
   );
-}
-
-function RoutePath({ route }: { route: Route }) {
-  if (!route || route.length < 2) return null;
-
-  const points = useMemo(() => {
-    return route.map((pt) => new THREE.Vector3(pt[0], pt[1], pt[2]));
-  }, [route]);
-
-  return <Line points={points} color="blue" lineWidth={3} />;
 }
 
 function CameraController() {
   const [, get] = useKeyboardControls();
   const { camera } = useThree();
-
   useFrame((state, delta) => {
-    // Prevent movement if the user is typing in a form element
     const activeElement = document.activeElement;
-    if (
-      activeElement &&
-      (activeElement.tagName === "INPUT" ||
-        activeElement.tagName === "TEXTAREA" ||
-        activeElement.tagName === "SELECT")
-    ) {
+    if (activeElement && ["INPUT", "TEXTAREA"].includes(activeElement.tagName))
       return;
-    }
-
     const { forward, backward, left, right } = get();
     if (!forward && !backward && !left && !right) return;
-
     const speed = 5 * delta;
     const direction = new THREE.Vector3();
-
     if (forward) direction.z -= 1;
     if (backward) direction.z += 1;
     if (left) direction.x -= 1;
     if (right) direction.x += 1;
-
     if (direction.lengthSq() === 0) return;
-
     direction
       .normalize()
       .multiplyScalar(speed)
       .applyQuaternion(camera.quaternion);
-
     camera.position.add(direction);
-
-    // Update OrbitControls target to maintain relative position/rotation pivot
     const controls = state.controls as any;
-    if (controls) {
-      controls.target.add(direction);
-    }
+    if (controls) controls.target.add(direction);
   });
+  return null;
+}
 
+function GlobalInputHandler({ onExit }: { onExit: () => void }) {
+  const [, get] = useKeyboardControls();
+  useFrame(() => {
+    if (get().escape) onExit();
+  });
   return null;
 }
 
@@ -194,6 +147,15 @@ export default function Model3DViewer({
   const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
     null,
   );
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedCaption, setEditedCaption] = useState("");
+
+  useEffect(() => {
+    if (selectedBBoxIndex !== null && captions) {
+      setEditedCaption(captions[selectedBBoxIndex] || "");
+    }
+    setIsEditing(false);
+  }, [selectedBBoxIndex, captions]);
 
   const map = useMemo(
     () => [
@@ -201,56 +163,179 @@ export default function Model3DViewer({
       { name: "backward", keys: ["ArrowDown", "KeyS"] },
       { name: "left", keys: ["ArrowLeft", "KeyA"] },
       { name: "right", keys: ["ArrowRight", "KeyD"] },
+      { name: "escape", keys: ["Escape"] },
     ],
     [],
   );
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        overflow: "hidden",
+        fontFamily: "sans-serif",
+      }}
+    >
       <KeyboardControls map={map}>
-        <Canvas camera={{ position: [5, 5, 5] }}>
+        {/* --- HTML OVERLAY --- */}
+        {selectedBBoxIndex !== null && (
+          <div
+            style={{
+              position: "absolute",
+              top: "20px",
+              right: "20px",
+              width: "300px",
+              zIndex: 10,
+              backgroundColor: "rgba(255, 255, 255, 0.95)",
+              padding: "20px",
+              borderRadius: "8px",
+              boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+              border: "1px solid #eee",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              backdropFilter: "blur(4px)",
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "12px",
+                color: "#888",
+                letterSpacing: "1px",
+                textTransform: "uppercase",
+              }}
+            >
+              Annotation Detail
+            </h3>
+
+            {isEditing ? (
+              <textarea
+                value={editedCaption}
+                onChange={(e) => setEditedCaption(e.target.value)}
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "2px solid #3b82f6",
+                  fontSize: "14px",
+                  outline: "none",
+                  resize: "none",
+                }}
+                autoFocus
+              />
+            ) : (
+              <div style={{ minHeight: "60px" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "16px",
+                    color: "#1f2937",
+                    lineHeight: "1.5",
+                  }}
+                >
+                  {editedCaption || "No caption available."}
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setIsEditing(!isEditing)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  cursor: "pointer",
+                  backgroundColor: isEditing ? "#fee2e2" : "#f3f4f6",
+                  color: isEditing ? "#ef4444" : "#374151",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  transition: "all 0.2s",
+                }}
+              >
+                {isEditing ? "Cancel" : "Edit"}
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  cursor: "pointer",
+                  backgroundColor: "#3b82f6",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  transition: "background-color 0.2s",
+                }}
+              >
+                Save
+              </button>
+            </div>
+            {/* THIS BUTTON AND THE ESC KEY ARE NOW THE ONLY WAYS TO DESELECT */}
+            <button
+              onClick={() => setSelectedBBoxIndex(null)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#9ca3af",
+                fontSize: "12px",
+                cursor: "pointer",
+                alignSelf: "center",
+                marginTop: "4px",
+              }}
+            >
+              Dismiss (Esc)
+            </button>
+          </div>
+        )}
+
+        {/* --- 3D SCENE --- */}
+        <Canvas
+          camera={{ position: [5, 5, 5] }}
+          /* Removed onPointerMissed to prevent deselection on background click */
+        >
           <ambientLight intensity={2.0} />
           <pointLight position={[10, 10, 10]} intensity={2.0} />
           <OrbitControls makeDefault />
           <CameraController />
+          {/* Preserved Esc Key logic here */}
+          <GlobalInputHandler onExit={() => setSelectedBBoxIndex(null)} />
 
           <Suspense fallback={null}>
             <Model url={source} />
           </Suspense>
 
-          {/* User Search Bounding Boxes */}
           {boundingBox?.map((bbox, i) => (
             <BoundingBoxMesh
               key={`bbox-${i}`}
               bbox={bbox}
               color="red"
               opacity={0.3}
-              onClick={() =>
-                setSelectedBBoxIndex(selectedBBoxIndex === i ? null : i)
-              }
-              caption={captions?.[i]}
-              showCaption={selectedBBoxIndex === i}
+              onClick={() => setSelectedBBoxIndex(i)}
+              isSelected={selectedBBoxIndex === i}
+              isDimmed={selectedBBoxIndex !== null && selectedBBoxIndex !== i}
             />
           ))}
 
-          {/* Auto Tag Bounding Boxes */}
           {showAutoTags &&
             autoTagBBoxes?.map((bbox, i) => (
               <BoundingBoxMesh
                 key={`autotag-${i}`}
                 bbox={bbox}
-                // Use deterministic color based on index to avoid flickering on re-renders
-                color={new THREE.Color().setHSL(
-                  (i * 0.618033988749895) % 1,
-                  0.8,
-                  0.5,
-                )}
+                color={new THREE.Color().setHSL((i * 0.618) % 1, 0.8, 0.5)}
                 label={annotations?.[i]}
                 opacity={0.1}
+                isDimmed={selectedBBoxIndex !== null}
               />
             ))}
 
-          {/* Occupancy Grid */}
           {showOccupancyGrid &&
             occupancyGrid?.map((bbox, i) => (
               <BoundingBoxMesh
@@ -258,13 +343,22 @@ export default function Model3DViewer({
                 bbox={bbox}
                 color="green"
                 opacity={0.1}
+                isDimmed={selectedBBoxIndex !== null}
               />
             ))}
 
-          {/* Route */}
           {route && <RoutePath route={route} />}
         </Canvas>
       </KeyboardControls>
     </div>
   );
+}
+
+function RoutePath({ route }: { route: Route }) {
+  if (!route || route.length < 2) return null;
+  const points = useMemo(
+    () => route.map((pt) => new THREE.Vector3(pt[0], pt[1], pt[2])),
+    [route],
+  );
+  return <Line points={points} color="blue" lineWidth={3} />;
 }
