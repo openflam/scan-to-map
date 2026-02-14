@@ -9,13 +9,14 @@ import {
   KeyboardControls,
   useKeyboardControls,
 } from "@react-three/drei";
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
 import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
 
 interface Model3DViewerProps {
   source: string; // Restricting to string for useGLTF for now, as App.tsx passes string
   boundingBox?: BoundingBox[];
+  captions?: string[];
   autoTagBBoxes?: BoundingBox[];
   showAutoTags?: boolean;
   occupancyGrid?: BoundingBox[];
@@ -34,11 +35,17 @@ function BoundingBoxMesh({
   color,
   label,
   opacity = 0.1,
+  onClick,
+  caption,
+  showCaption,
 }: {
   bbox: BoundingBox;
   color: string | THREE.Color;
   label?: string;
   opacity?: number;
+  onClick?: () => void;
+  caption?: string;
+  showCaption?: boolean;
 }) {
   const { x_min, y_min, z_min, x_max, y_max, z_max } = bbox;
 
@@ -54,7 +61,7 @@ function BoundingBoxMesh({
 
   return (
     <group position={position}>
-      <mesh>
+      <mesh onClick={onClick}>
         <boxGeometry args={[width, height, depth]} />
         <meshStandardMaterial
           color={color}
@@ -77,6 +84,40 @@ function BoundingBoxMesh({
           >
             {label}
           </Text>
+        </Billboard>
+      )}
+      {showCaption && caption && (
+        <Billboard position={[0, height / 2 + 0.2, 0]}>
+          <group>
+            {/* White background board - dynamically sized to fit text */}
+            <mesh position={[0, 0, -0.01]} renderOrder={999}>
+              <planeGeometry
+                args={[
+                  Math.min(Math.max(caption.length * 0.09, 1), 4) + 0.4,
+                  0.35 + Math.ceil(caption.length / 35) * 0.2,
+                ]}
+              />
+              <meshBasicMaterial
+                color="white"
+                side={THREE.DoubleSide}
+                depthTest={false}
+                transparent={true}
+                opacity={0.95}
+              />
+            </mesh>
+            {/* Black text on white background */}
+            <Text
+              fontSize={0.15}
+              color="black"
+              anchorX="center"
+              anchorY="middle"
+              maxWidth={3.6}
+              renderOrder={1000}
+              material-depthTest={false}
+            >
+              {caption}
+            </Text>
+          </group>
         </Billboard>
       )}
     </group>
@@ -142,6 +183,7 @@ function CameraController() {
 export default function Model3DViewer({
   source,
   boundingBox,
+  captions,
   autoTagBBoxes,
   showAutoTags,
   occupancyGrid,
@@ -149,6 +191,10 @@ export default function Model3DViewer({
   annotations,
   route,
 }: Model3DViewerProps) {
+  const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
+    null,
+  );
+
   const map = useMemo(
     () => [
       { name: "forward", keys: ["ArrowUp", "KeyW"] },
@@ -179,6 +225,11 @@ export default function Model3DViewer({
               bbox={bbox}
               color="red"
               opacity={0.3}
+              onClick={() =>
+                setSelectedBBoxIndex(selectedBBoxIndex === i ? null : i)
+              }
+              caption={captions?.[i]}
+              showCaption={selectedBBoxIndex === i}
             />
           ))}
 

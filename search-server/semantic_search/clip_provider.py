@@ -191,31 +191,17 @@ class CLIPProvider(SemanticSearchProvider):
 
             keep.append(i)
 
-        # Extract component IDs and build reason with captions
+        # Extract component IDs
         matched_component_ids = []
-        caption_details = []
 
         for i in keep:
             idx = indices[0, i]
             comp_id = self.component_ids[idx]
-            similarity = similarities[i]
-
             matched_component_ids.append(comp_id)
 
-            # Get caption if available
-            caption = "No caption available"
-            if comp_id in self.component_captions:
-                caption = self.component_captions[comp_id].get(
-                    "caption", "No caption available"
-                )
-
-            caption_details.append(
-                f"Component {comp_id} (similarity: {similarity:.3f}): {caption}"
-            )
-
-        # Create reason with matched component captions
+        # Create concise reason
         if len(matched_component_ids) > 0:
-            reason = "[CLIP embedding similarity]\n\n" + "\n\n".join(caption_details)
+            reason = f"Found {len(matched_component_ids)} matching component(s) using CLIP embedding similarity."
         else:
             reason = f"No matching components found for query: {query_display}"
 

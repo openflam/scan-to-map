@@ -83,17 +83,8 @@ class OpenAIProvider(SemanticSearchProvider):
             # Parse comma-separated component IDs
             component_ids = self._parse_component_ids(component_ids_str)
 
-            # Build detailed reason with captions
-            caption_details = [f"[OpenAI {self.model} Response]", llm_reason]
-            for comp_id in component_ids:
-                caption = self.component_captions[comp_id].get(
-                    "caption", "No caption available"
-                )
-                caption_details.append(f"Component {comp_id}: {caption}")
-
-            detailed_reason = "\n\n".join(caption_details)
-
-            return {"component_ids": component_ids, "reason": detailed_reason}
+            # Use the LLM's reasoning as the reason
+            return {"component_ids": component_ids, "reason": llm_reason}
 
         except Exception as e:
             print(f"Error processing query with OpenAI: {e}")
@@ -129,8 +120,4 @@ class OpenAIProvider(SemanticSearchProvider):
     def _get_fallback_result(self, reason: str) -> Dict[str, Any]:
         """Get fallback result with first component."""
         first_component_id = list(self.component_captions.keys())[0]
-        first_caption = self.component_captions[first_component_id].get(
-            "caption", "No caption available"
-        )
-        detailed_reason = f"[OpenAI Fallback]\n\n{reason}\n\nComponent {first_component_id}: {first_caption}"
-        return {"component_ids": [first_component_id], "reason": detailed_reason}
+        return {"component_ids": [first_component_id], "reason": f"Fallback: {reason}"}

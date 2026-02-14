@@ -36,11 +36,13 @@ def process_query(
 
     # Collect bounding boxes for the matched components
     valid_bboxes = []
+    valid_component_ids = []
     invalid_ids = []
 
     for component_id in component_ids:
         if component_id in component_captions and component_id in bbox_lookup:
             valid_bboxes.append(bbox_lookup[component_id])
+            valid_component_ids.append(component_id)
         else:
             invalid_ids.append(component_id)
 
@@ -50,11 +52,18 @@ def process_query(
         first_component_id = list(component_captions.keys())[0]
         if first_component_id in bbox_lookup:
             valid_bboxes = [bbox_lookup[first_component_id]]
+            valid_component_ids = [first_component_id]
         else:
             # Fallback to first bbox if component_id doesn't match
             valid_bboxes = [list(bbox_lookup.values())[0]]
+            valid_component_ids = [list(component_captions.keys())[0]]
     elif invalid_ids:
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
 
-    # Return the list of bounding boxes, reason, and search time
-    return {"bbox": valid_bboxes, "reason": reason, "search_time_ms": search_time_ms}
+    # Return the list of bounding boxes, component IDs, reason, and search time
+    return {
+        "bbox": valid_bboxes,
+        "component_ids": valid_component_ids,
+        "reason": reason,
+        "search_time_ms": search_time_ms,
+    }

@@ -187,37 +187,25 @@ class OpenAIRAGProvider(SemanticSearchProvider):
             else:
                 valid_ids = []
 
-            # Build detailed reason with captions
+            # Use the LLM's reasoning
             if valid_ids:
-                caption_details = []
-                for comp_id in valid_ids:
-                    caption = self.component_captions[comp_id].get("caption", "")
-                    caption_details.append(f"Component {comp_id}: {caption}")
-
-                detailed_reason = f"{reason}\n\n" + "\n\n".join(caption_details)
+                return {
+                    "component_ids": valid_ids,
+                    "reason": reason,
+                }
             else:
-                detailed_reason = (
-                    "No components matched the search criteria after re-ranking."
-                )
-
-            return {
-                "component_ids": valid_ids,
-                "reason": detailed_reason,
-            }
+                return {
+                    "component_ids": valid_ids,
+                    "reason": "No components matched the search criteria after re-ranking.",
+                }
 
         except Exception as e:
             print(f"Error re-ranking with LLM: {e}")
             # Fallback: return first few candidates
             fallback_ids = candidate_ids[:3]
-            caption_details = []
-            for comp_id in fallback_ids:
-                caption = self.component_captions[comp_id].get("caption", "")
-                caption_details.append(f"Component {comp_id}: {caption}")
-
             return {
                 "component_ids": fallback_ids,
-                "reason": f"Using BM25 results (re-ranking failed: {e})\n\n"
-                + "\n\n".join(caption_details),
+                "reason": f"Using top BM25 results (re-ranking failed: {e})",
             }
 
     def _get_fallback_result(self, reason: str) -> Dict[str, Any]:

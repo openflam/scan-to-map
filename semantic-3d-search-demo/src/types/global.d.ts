@@ -21,11 +21,17 @@ export interface SearchQueryItem {
 
 export type SearchQuery = SearchQueryItem[];
 
-// Define SearchResult interface
+// Define Component interface (matches API response)
+export interface Component {
+  bbox: BoundingBox;
+  caption: string;
+}
+
+// Define SearchResult interface (matches API response)
 export interface SearchResult {
-  boundingBox: BoundingBox[];
   reason: string;
-  searchTimeMs: number;
+  search_time_ms: number;
+  components: Component[];
 }
 
 // Define custom attributes for babylon-viewer element

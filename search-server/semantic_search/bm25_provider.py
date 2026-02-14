@@ -94,24 +94,17 @@ class BM25Provider(SemanticSearchProvider):
 
             keep.append(i)
 
-        # Extract component IDs for the kept results and build reason with captions
+        # Extract component IDs for the kept results
         matched_component_ids = []
-        caption_details = ["[BM25 Top Matches]"]
 
         for i in keep:
             doc_idx = results[0, i]
             comp_id = self.component_ids[doc_idx]
-            caption = self.corpus[doc_idx]
-            score = scores[0, i]
-
             matched_component_ids.append(comp_id)
-            caption_details.append(
-                f"Component {comp_id} (score: {score:.2f}): {caption}"
-            )
 
-        # Create reason with matched component captions
+        # Create concise reason
         if len(matched_component_ids) > 0:
-            reason = "\n\n".join(caption_details)
+            reason = f"Found {len(matched_component_ids)} matching component(s) using BM25 ranked search."
         else:
             reason = "No matching components found."
 

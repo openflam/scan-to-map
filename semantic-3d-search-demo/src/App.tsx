@@ -9,6 +9,7 @@ import type { BoundingBox, SearchQuery, Route } from "./types/global";
 
 function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
+  const [captions, setCaptions] = useState<string[]>([]);
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [showOccupancyGrid, setShowOccupancyGrid] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
@@ -73,9 +74,11 @@ function App() {
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     const result = await query(searchQuery, method);
     setRoute([]); // Clear any existing route
-    setBoundingBox(result.boundingBox);
+    // Extract bounding boxes and captions from components
+    setBoundingBox(result.components.map((c) => c.bbox));
+    setCaptions(result.components.map((c) => c.caption));
     setSearchResult(result.reason);
-    setSearchTime(result.searchTimeMs);
+    setSearchTime(result.search_time_ms);
   };
 
   const handleDirections = (
@@ -88,6 +91,7 @@ function App() {
     setRoute(route);
     // Set the bounding boxes to display source and destination
     setBoundingBox([sourceBBox, destinationBBox]);
+    setCaptions(["Source", "Destination"]);
     // Combine the reasons
     const combinedReason = `Source: ${sourceReason}\n\nDestination: ${destinationReason}`;
     setSearchResult(combinedReason);
@@ -108,8 +112,9 @@ function App() {
       </Row>
       <Row style={{ height: "80vh" }}>
         <Model3DViewer
-          source={"/data/raw.glb"}
+          source="/data/raw.glb"
           boundingBox={boundingBox}
+          captions={captions}
           autoTagBBoxes={autoTagBBoxes}
           showAutoTags={showAutoTags}
           occupancyGrid={occupancyGrid}

@@ -230,17 +230,21 @@ def search():
     # Find the most relevant component bounding boxes and reason using the selected provider
     result_data = process_query(query_input, component_captions, bbox_lookup, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
+    component_ids = result_data["component_ids"]  # List of component IDs
     reason = result_data["reason"]
     search_time_ms = result_data["search_time_ms"]
 
-    # Transform each bounding box to match the coordinate system
-    # used in Model3DViewer (as seen in App.tsx)
-    transformed_bboxes = [transform_bbox(bbox) for bbox in bboxes]
+    # Build components array with transformed bboxes and captions
+    components = []
+    for bbox, comp_id in zip(bboxes, component_ids):
+        transformed_bbox = transform_bbox(bbox)
+        caption = component_captions[comp_id].get("caption", "No caption available")
+        components.append({"bbox": transformed_bbox, "caption": caption})
 
     result = {
-        "bbox": transformed_bboxes,
         "reason": reason,
         "search_time_ms": search_time_ms,
+        "components": components,
     }
 
     return jsonify(result)

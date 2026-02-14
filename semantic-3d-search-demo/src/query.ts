@@ -29,16 +29,9 @@ export async function query(
     const data = await response.json();
     console.log("Received response:", data);
 
-    // Extract bounding box, reason, and search time from the response
-    // Server returns: {"bbox": {...}, "reason": "...", "search_time_ms": ...}
-    // Wrap single bbox in array for consistency
-    const bboxArray = Array.isArray(data.bbox) ? data.bbox : [data.bbox];
-
-    return {
-      boundingBox: bboxArray,
-      reason: data.reason,
-      searchTimeMs: data.search_time_ms,
-    };
+    // Return the data as-is from the API
+    // Server returns: {"reason": "...", "search_time_ms": ..., "components": [{bbox: {...}, caption: "..."}]}
+    return data as SearchResult;
   } catch (error) {
     console.error("Error querying search server:", error);
     throw error;
