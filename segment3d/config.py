@@ -19,23 +19,19 @@ DEFAULT_PARAMETERS = {
     "fastsam_iou": 0.7,  # IoU threshold for NMS in FastSAM
     "fastsam_batch_size": 32,  # Batch size for FastSAM inference
     "fastsam_num_workers": 4,  # Number of worker threads for parallel I/O in FastSAM
-    
     # Mask graph parameters
     "K": 5,  # Number of nearest neighbors for mask graph
     "tau": 0.2,  # Jaccard similarity threshold for mask graph
     "min_points_in_3D_segment": 5,  # Minimum points in 3D segment for mask graph
-    
     # Bounding box parameters
     "percentile": 95.0,  # Percentile threshold for bbox outlier removal
     "min_fraction": 0.3,  # Minimum fraction of visible points for projection
-    
     # Captioning parameters
     "caption_n_images": 1,  # Number of top images to use for captioning
     "captioner_type": "vllm",  # Type of captioner to use
     "caption_model": "Qwen/Qwen2.5-VL-7B-Instruct",  # VLM model to use for captioning
     "caption_device": 0,  # GPU device ID for captioning
     "caption_batch_size": 512,  # Batch size for captioning inference
-    
     # CLIP embedding parameters
     "clip_model": "ViT-H-14",  # OpenCLIP model name for embeddings
     "clip_pretrained": "laion2B-s32B-b79K",  # Pretrained weights for CLIP model
@@ -67,12 +63,17 @@ def get_config(dataset_name: str) -> Dict[str, Any]:
     outputs_base = base_dir / "outputs"
 
     # Generate paths based on dataset name using consistent structure
+    _transformed_colmap = (
+        data_dir / dataset_name / "alignment" / "sfm_reconstruction_transformed"
+    )
+    _default_colmap = data_dir / dataset_name / "hloc_data" / "sfm_reconstruction"
+    colmap_model_dir = (
+        _transformed_colmap if _transformed_colmap.is_dir() else _default_colmap
+    )
+
     config = {
         "images_dir": data_dir / dataset_name / "ns_data" / "images",
-        "colmap_model_dir": data_dir
-        / dataset_name
-        / "hloc_data"
-        / "sfm_reconstruction",
+        "colmap_model_dir": colmap_model_dir,
         "sam_model_type": "vit_h",
         "sam_ckpt": checkpoints_dir / "sam_vit_h_4b8939.pth",
         "fastsam_ckpt": checkpoints_dir / "FastSAM-x.pt",

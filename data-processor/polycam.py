@@ -29,7 +29,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_REPO_ROOT / "segment3d" / "src" / "utils"))
 sys.path.insert(0, str(_REPO_ROOT / "segment3d"))
 
-from read_write_model import read_model  # noqa: E402 (late import after sys.path fix)
+from read_write_model import (
+    read_model,
+    write_model,
+    qvec2rotmat,
+    rotmat2qvec,
+)  # noqa: E402
 from config import get_config  # noqa: E402
 
 
@@ -265,7 +270,7 @@ def align_point_clouds(
     sampled_pc: o3d.geometry.PointCloud,
     voxel_size: float | None = None,
     num_ransac_restarts: int = 5,
-) -> tuple[np.ndarray, o3d.geometry.PointCloud]:
+) -> tuple[np.ndarray, np.ndarray, o3d.geometry.PointCloud]:
     """Coarse global registration of *sampled_pc* onto *colmap_pc*.
 
     Strategy:
@@ -282,8 +287,12 @@ def align_point_clouds(
         num_ransac_restarts:  Independent RANSAC runs per voxel scale.
 
     Returns:
-        ``(T_global, aligned_pc)`` – the 4×4 rigid transform that maps
-        *sampled_pc* to *colmap_pc*, and the transformed source cloud.
+        ``(T_sampled_to_colmap, T_colmap_to_sampled, aligned_pc)`` –
+        * ``T_sampled_to_colmap``: 4×4 rigid transform that maps *sampled_pc*
+          coordinates into the COLMAP world frame.
+        * ``T_colmap_to_sampled``: its inverse – maps COLMAP world coordinates
+          into the sampled (GLB mesh) frame.
+        * ``aligned_pc``: *sampled_pc* after applying ``T_sampled_to_colmap``.
     """
     reg = o3d.pipelines.registration  # convenience alias
 
@@ -410,7 +419,76 @@ def align_point_clouds(
     aligned_pc = o3d.geometry.PointCloud(sampled_pc)
     aligned_pc.transform(T_global)
 
-    return T_global, aligned_pc
+    T_colmap_to_sampled = np.linalg.inv(T_global)
+    return T_global, T_colmap_to_sampled, aligned_pc
+
+
+# ---------------------------------------------------------------------------
+# COLMAP model transformation
+# ---------------------------------------------------------------------------
+
+
+def transform_colmap_model(
+    colmap_dir: str | Path,
+    T: np.ndarray,
+    output_dir: str | Path,
+) -> None:
+    """Apply a rigid transform to a COLMAP sparse model and write the result.
+
+    Transforms every 3-D point and every camera pose by *T*.  Pass
+    ``T_colmap_to_gltf`` (= ``T_fix_inv @ T_colmap_to_sampled``) to produce a
+    model whose coordinates are in the glTF Y-up frame so that it aligns with
+    the raw GLB when both are loaded in Blender.
+
+    Args:
+        colmap_dir: Path to the COLMAP sparse model (contains cameras.bin / .txt,
+                    images.bin / .txt, points3D.bin / .txt).  Accepts either the
+                    sparse-model directory directly or a COLMAP workspace root
+                    whose ``sparse/0/`` subdirectory holds the model.
+        T: 4×4 rigid transform to apply to every point and camera pose.
+        output_dir: Directory where the transformed model will be written.
+                    Created automatically if it does not exist.
+    """
+    colmap_dir = Path(colmap_dir)
+    output_dir = Path(output_dir)
+
+    # Accept workspace root or direct model directory
+    if (colmap_dir / "cameras.bin").is_file() or (colmap_dir / "cameras.txt").is_file():
+        sparse_dir = colmap_dir
+    else:
+        sparse_dir = colmap_dir / "sparse" / "0"
+    if not sparse_dir.is_dir():
+        raise NotADirectoryError(f"Expected COLMAP sparse model in: {sparse_dir}")
+
+    cameras, images, points3D = read_model(path=str(sparse_dir), ext="")
+
+    R_c2s = T[:3, :3]
+    t_c2s = T[:3, 3]
+
+    # --- Transform 3-D points -------------------------------------------------
+    new_points3D = {}
+    for pid, pt in points3D.items():
+        new_xyz = R_c2s @ pt.xyz + t_c2s
+        new_points3D[pid] = pt._replace(xyz=new_xyz)
+
+    # --- Transform camera poses -----------------------------------------------
+    # COLMAP convention:  p_camera = R_img * p_world + t_img
+    # After applying T_colmap_to_sampled to the world:
+    #   p_world = R_c2s^T * (p_sampled - t_c2s)
+    # So the new pose that satisfies p_camera = R_new * p_sampled + t_new is:
+    #   R_new = R_img * R_c2s^T
+    #   t_new = t_img - R_new * t_c2s
+    new_images = {}
+    for iid, img in images.items():
+        R_img = qvec2rotmat(img.qvec)
+        R_new = R_img @ R_c2s.T
+        t_new = img.tvec - R_new @ t_c2s
+        new_qvec = rotmat2qvec(R_new)
+        new_images[iid] = img._replace(qvec=new_qvec, tvec=t_new)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_model(cameras, new_images, new_points3D, path=str(output_dir), ext=".bin")
+    print(f"[COLMAP] Transformed model written to: {output_dir}")
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +548,7 @@ def main() -> None:
     # Resolve paths via config
     cfg = get_config(args.dataset)
     data_dir = _REPO_ROOT / "data" / args.dataset
-    colmap_dir = Path(cfg["colmap_model_dir"])
+    colmap_dir = _REPO_ROOT / "data" / args.dataset / "hloc_data" / "sfm_reconstruction"
     mesh_path = data_dir / "polycam_data" / "raw.glb"
 
     print(f"Dataset     : {args.dataset}")
@@ -492,8 +570,11 @@ def main() -> None:
     print_pcd_stats("GLB sampled point cloud", sampled_pc)
 
     # --- Coarse global registration -------------------------------------------
-    T_global, aligned_pc = align_point_clouds(colmap_pc, sampled_pc)
-    print(f"\n[align] Final T_global (sampled → COLMAP):\n{T_global}")
+    T_global, T_colmap_to_sampled, aligned_pc = align_point_clouds(
+        colmap_pc, sampled_pc
+    )
+    print(f"\n[align] Final T_sampled_to_colmap:\n{T_global}")
+    print(f"\n[align] Final T_colmap_to_sampled:\n{T_colmap_to_sampled}")
     print_pcd_stats("Globally aligned GLB point cloud", aligned_pc)
 
     # --- Save to disk ----------------------------------------------------------
@@ -510,6 +591,26 @@ def main() -> None:
     o3d.io.write_point_cloud(str(aligned_out), aligned_pc)
     transform_glb(mesh_path, T_global, transformed_glb_out)
 
+    # --- Transform COLMAP model into the sampled (Z-up) frame ----------------
+    # When Blender imports the raw GLB it auto-rotates Y-up → Z-up, so the
+    # scene lands in the same Z-up "sampled" frame that sample_glb_mesh uses.
+    # COLMAP models loaded via a Blender addon are placed directly in Blender's
+    # Z-up world space with no extra conversion.  Therefore storing the
+    # transformed COLMAP model in T_colmap_to_sampled (Z-up) is the correct
+    # target frame — no additional T_fix_inv step is needed.
+    #
+    # Additionally apply a +90° rotation about Z to align with the raw GLB in
+    # Blender (hardcoded correction).
+    T_z_pos90 = np.array(
+        [[0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], dtype=np.float64
+    )
+    T_colmap_to_sampled_rotated = T_z_pos90 @ T_colmap_to_sampled
+
+    colmap_transformed_out = out_dir / "sfm_reconstruction_transformed"
+    transform_colmap_model(
+        colmap_dir, T_colmap_to_sampled_rotated, colmap_transformed_out
+    )
+
     # --- Apply an additional -90° rotation about Y to the transformed GLB -----
     transformed_rotated_glb_out = out_dir / "transformed_rotated.glb"
     _rotated = trimesh.load(str(transformed_glb_out), force="mesh")
@@ -524,6 +625,7 @@ def main() -> None:
     print(f"Saved sampled point cloud        → {sampled_out}")
     print(f"Saved globally aligned cloud     → {aligned_out}")
     print(f"Saved transformed GLB mesh       → {transformed_glb_out}")
+    print(f"Saved transformed COLMAP model   → {colmap_transformed_out}")
 
 
 if __name__ == "__main__":
