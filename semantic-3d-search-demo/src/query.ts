@@ -122,36 +122,33 @@ export async function getComponentInfo(componentId: string): Promise<{
   }
 }
 
-export async function updateComponentCaption(
+export async function updateComponent(
   componentId: string,
-  caption: string,
-): Promise<{ component_id: string; caption: string }> {
-  console.log("Updating caption for component:", componentId);
+  updates: { caption?: string; bbox?: { min: number[]; max: number[] } },
+): Promise<{ component_id: string; caption?: string; bbox?: object }> {
+  console.log("Updating component:", componentId, updates);
 
   try {
-    const response = await fetch(
-      `${SEARCH_SERVER_URL}/update_component_caption`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ component_id: componentId, caption }),
+    const response = await fetch(`${SEARCH_SERVER_URL}/update_component`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ component_id: componentId, ...updates }),
+    });
 
     if (!response.ok) {
       throw new Error(
-        `Update caption request failed: ${response.status} ${response.statusText}`,
+        `Update component request failed: ${response.status} ${response.statusText}`,
       );
     }
 
     const data = await response.json();
-    console.log("Updated caption:", data);
+    console.log("Updated component:", data);
 
     return data;
   } catch (error) {
-    console.error("Error updating component caption:", error);
+    console.error("Error updating component:", error);
     throw error;
   }
 }

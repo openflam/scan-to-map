@@ -8,10 +8,20 @@ import {
   Billboard,
   KeyboardControls,
   useKeyboardControls,
+  TransformControls,
 } from "@react-three/drei";
-import { Suspense, useMemo, useState, useEffect } from "react";
+import {
+  Suspense,
+  useMemo,
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
+import ComponentDetails from "./ComponentDetails";
+import type { GizmoMode } from "./ComponentDetails";
 
 interface Model3DViewerProps {
   source: string;
@@ -134,189 +144,98 @@ function GlobalInputHandler({ onExit }: { onExit: () => void }) {
   return null;
 }
 
-function ComponentDetails({
-  editedCaption,
-  setEditedCaption,
-  isEditing,
-  setIsEditing,
-  onDismiss,
-  componentId,
-  imageBase64,
-  isLoading,
+function BBoxTransformGizmo({
+  initialBBox,
+  mode,
+  onCommit,
 }: {
-  editedCaption: string;
-  setEditedCaption: (value: string) => void;
-  isEditing: boolean;
-  setIsEditing: (value: boolean) => void;
-  onDismiss: () => void;
-  componentId: string | null;
-  imageBase64?: string | null;
-  isLoading?: boolean;
+  initialBBox: BoundingBox;
+  mode: GizmoMode;
+  onCommit: (bbox: BoundingBox) => void;
 }) {
-  const handleSave = async () => {
-    setIsEditing(false);
-    if (!componentId) return;
-    try {
-      const { updateComponentCaption } = await import("./query");
-      await updateComponentCaption(componentId, editedCaption);
-    } catch (error) {
-      console.error("Error saving caption:", error);
-    }
-  };
+  const meshRef = useRef<THREE.Mesh>(null);
+  const tcRef = useRef<any>(null);
+  // Track live transforms in a ref – no React state updates during drag
+  const liveBBoxRef = useRef<BoundingBox>(initialBBox);
+
+  // Position/scale the mesh imperatively before the first Three.js frame so the
+  // gizmo spawns at the bbox center. useLayoutEffect fires synchronously after
+  // the R3F reconciler commits but before the canvas draws.
+  useLayoutEffect(() => {
+    const m = meshRef.current;
+    if (!m) return;
+    const { x_min, y_min, z_min, x_max, y_max, z_max } = initialBBox;
+    m.position.set(
+      (x_min + x_max) / 2,
+      (y_min + y_max) / 2,
+      (z_min + z_max) / 2,
+    );
+    m.scale.set(
+      Math.abs(x_max - x_min),
+      Math.abs(y_max - y_min),
+      Math.abs(z_max - z_min),
+    );
+    m.updateMatrixWorld(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
+  // Wire raw Three.js events so drag tracking never triggers React re-renders
+  useEffect(() => {
+    const tc = tcRef.current;
+    if (!tc) return;
+
+    const onObjectChange = () => {
+      const m = meshRef.current;
+      if (!m) return;
+      liveBBoxRef.current = {
+        x_min: m.position.x - m.scale.x / 2,
+        x_max: m.position.x + m.scale.x / 2,
+        y_min: m.position.y - m.scale.y / 2,
+        y_max: m.position.y + m.scale.y / 2,
+        z_min: m.position.z - m.scale.z / 2,
+        z_max: m.position.z + m.scale.z / 2,
+      };
+    };
+
+    const onDraggingChanged = (e: any) => {
+      if (!e.value) onCommit(liveBBoxRef.current);
+    };
+
+    tc.addEventListener("objectChange", onObjectChange);
+    tc.addEventListener("dragging-changed", onDraggingChanged);
+    return () => {
+      tc.removeEventListener("objectChange", onObjectChange);
+      tc.removeEventListener("dragging-changed", onDraggingChanged);
+    };
+  }, [onCommit]);
+
+  // Render the mesh and TransformControls as siblings.
+  // Using the `object` prop (instead of children wrapping) makes TransformControls
+  // attach() directly to the mesh, so the gizmo lives at the mesh's world position
+  // and moves with it. The children-wrapper approach puts kids inside an internal
+  // group at origin, causing the gizmo to appear at (0,0,0).
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: "20px",
-        right: "20px",
-        width: "300px",
-        maxHeight: "calc(100% - 40px)",
-        overflowY: "auto",
-        zIndex: 10,
-        backgroundColor: "rgba(255, 255, 255, 0.95)",
-        padding: "20px",
-        borderRadius: "8px",
-        boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-        border: "1px solid #eee",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <h3
-        style={{
-          margin: 0,
-          fontSize: "12px",
-          color: "#888",
-          letterSpacing: "1px",
-          textTransform: "uppercase",
-        }}
-      >
-        Annotation Detail
-      </h3>
-
-      {isLoading ? (
-        <div style={{ textAlign: "center", padding: "20px" }}>
-          <p style={{ color: "#6b7280" }}>Loading...</p>
-        </div>
-      ) : (
-        <>
-          {imageBase64 && (
-            <div
-              style={{
-                width: "100%",
-                borderRadius: "6px",
-                overflow: "hidden",
-                marginBottom: "8px",
-              }}
-            >
-              <img
-                src={`data:image/jpeg;base64,${imageBase64}`}
-                alt="Component view"
-                style={{
-                  width: "100%",
-                  height: "auto",
-                  display: "block",
-                }}
-              />
-            </div>
-          )}
-
-          {isEditing ? (
-            <textarea
-              value={editedCaption}
-              onChange={(e) => setEditedCaption(e.target.value)}
-              style={{
-                width: "100%",
-                height: "240px",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "2px solid #3b82f6",
-                fontSize: "14px",
-                outline: "none",
-                resize: "none",
-                overflowY: "auto",
-              }}
-              autoFocus
-            />
-          ) : (
-            <div
-              style={{
-                minHeight: "60px",
-                maxHeight: "240px",
-                overflowY: "auto",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "16px",
-                  color: "#1f2937",
-                  lineHeight: "1.5",
-                }}
-              >
-                {editedCaption || "No caption available."}
-              </p>
-            </div>
-          )}
-        </>
-      )}
-
-      <div style={{ display: "flex", gap: "10px" }}>
-        <button
-          onClick={() => setIsEditing(!isEditing)}
-          style={{
-            flex: 1,
-            padding: "10px",
-            cursor: "pointer",
-            backgroundColor: isEditing ? "#fee2e2" : "#f3f4f6",
-            color: isEditing ? "#ef4444" : "#374151",
-            border: "1px solid #d1d5db",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: "600",
-            transition: "all 0.2s",
-          }}
-        >
-          {isEditing ? "Cancel" : "Edit"}
-        </button>
-        <button
-          onClick={handleSave}
-          style={{
-            flex: 1,
-            padding: "10px",
-            cursor: "pointer",
-            backgroundColor: "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: "600",
-            transition: "background-color 0.2s",
-          }}
-        >
-          Save
-        </button>
-      </div>
-      <button
-        onClick={onDismiss}
-        style={{
-          background: "none",
-          border: "none",
-          color: "#9ca3af",
-          fontSize: "12px",
-          cursor: "pointer",
-          alignSelf: "center",
-          marginTop: "4px",
-        }}
-      >
-        Dismiss (Esc)
-      </button>
-    </div>
+    <>
+      {/* No position/scale JSX props – set imperatively above so re-renders
+          from onCommit → setEditedBBox never reset the Three.js transform */}
+      <mesh ref={meshRef}>
+        <boxGeometry args={[1, 1, 1]} />
+        <meshStandardMaterial
+          color="#3b82f6"
+          transparent
+          opacity={0.35}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+        />
+        <Edges color="#1d4ed8" />
+      </mesh>
+      <TransformControls
+        ref={tcRef}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        object={meshRef as any}
+        mode={mode}
+      />
+    </>
   );
 }
 
@@ -342,6 +261,95 @@ export default function Model3DViewer({
   const [editedCaption, setEditedCaption] = useState("");
   const [componentImage, setComponentImage] = useState<string | null>(null);
   const [isLoadingComponent, setIsLoadingComponent] = useState(false);
+  const [editedBBox, setEditedBBox] = useState<BoundingBox | null>(null);
+  const [gizmoMode, setGizmoMode] = useState<GizmoMode>("translate");
+  // savedBBoxMap stores saved positions keyed by component ID so the box
+  // stays in its new position even after the panel is dismissed/deselected.
+  const [savedBBoxMap, setSavedBBoxMap] = useState<Map<string, BoundingBox>>(
+    new Map(),
+  );
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  // Disable OrbitControls as soon as the gizmo is visible so it never
+  // interferes with pointer events intended for TransformControls.
+  const orbitEnabled = !(isEditing && editedBBox !== null);
+
+  // Derive the bbox of whichever item is currently selected, preferring any
+  // previously saved position so the gizmo starts from the right place if
+  // the user opens edit mode again after a save.
+  const selectedBBoxData: BoundingBox | null = useMemo(() => {
+    let rawBBox: BoundingBox | null = null;
+    let key: string | null = null;
+    if (selectedBBoxIndex !== null && boundingBox) {
+      rawBBox = boundingBox[selectedBBoxIndex] ?? null;
+      key = componentIds?.[selectedBBoxIndex] ?? null;
+    } else if (selectedAutoTagId !== null && annotations && autoTagBBoxes) {
+      const idx = annotations.indexOf(selectedAutoTagId);
+      rawBBox = idx >= 0 ? (autoTagBBoxes[idx] ?? null) : null;
+      key = selectedAutoTagId;
+    }
+    if (key && savedBBoxMap.has(key)) return savedBBoxMap.get(key)!;
+    return rawBBox;
+  }, [
+    selectedBBoxIndex,
+    selectedAutoTagId,
+    boundingBox,
+    annotations,
+    autoTagBBoxes,
+    componentIds,
+    savedBBoxMap,
+  ]);
+
+  // Initialise editedBBox when entering edit mode
+  useEffect(() => {
+    if (isEditing) {
+      setEditedBBox(selectedBBoxData);
+    } else {
+      setEditedBBox(null);
+    }
+  }, [isEditing, selectedBBoxData]);
+
+  // Clear the save warning whenever the selection changes
+  useEffect(() => {
+    setSaveWarning(null);
+  }, [selectedBBoxIndex, selectedAutoTagId]);
+
+  const handleSave = async () => {
+    // Capture before setIsEditing(false) clears editedBBox via useEffect
+    const bboxToSave = editedBBox;
+    const captionToSave = editedCaption;
+    // Persist the new position immediately so the box doesn't snap back when
+    // isEditing → false unmounts the gizmo and restores the BoundingBoxMesh.
+    if (bboxToSave && currentComponentId) {
+      setSavedBBoxMap((prev) =>
+        new Map(prev).set(currentComponentId, bboxToSave),
+      );
+    }
+    setIsEditing(false);
+    if (!currentComponentId) return;
+    try {
+      const { updateComponent } = await import("./query");
+      const updates: {
+        caption: string;
+        bbox?: { min: number[]; max: number[] };
+      } = {
+        caption: captionToSave,
+      };
+      if (bboxToSave) {
+        // Invert the axis swap applied in App.tsx when loading from the server:
+        //   viewer.x = server[1], viewer.y = server[2], viewer.z = server[0]
+        // → server[0] = viewer.z, server[1] = viewer.x, server[2] = viewer.y
+        updates.bbox = {
+          min: [bboxToSave.z_min, bboxToSave.x_min, bboxToSave.y_min],
+          max: [bboxToSave.z_max, bboxToSave.x_max, bboxToSave.y_max],
+        };
+      }
+      await updateComponent(currentComponentId, updates);
+      setSaveWarning(null);
+    } catch (error) {
+      console.error("Error saving component:", error);
+      setSaveWarning("Save failed — changes may not have been persisted.");
+    }
+  };
 
   const currentComponentId: string | null = useMemo(() => {
     if (selectedAutoTagId !== null) return selectedAutoTagId;
@@ -432,9 +440,14 @@ export default function Model3DViewer({
               setSelectedBBoxIndex(null);
               setSelectedAutoTagId(null);
             }}
+            onSave={handleSave}
+            saveWarning={saveWarning}
             componentId={currentComponentId}
             imageBase64={componentImage}
             isLoading={isLoadingComponent}
+            editedBBox={editedBBox}
+            gizmoMode={gizmoMode}
+            onGizmoModeChange={setGizmoMode}
           />
         )}
 
@@ -445,7 +458,7 @@ export default function Model3DViewer({
         >
           <ambientLight intensity={2.0} />
           <pointLight position={[10, 10, 10]} intensity={2.0} />
-          <OrbitControls makeDefault />
+          <OrbitControls makeDefault enabled={orbitEnabled} />
           <CameraController />
           {/* Preserved Esc Key logic here */}
           <GlobalInputHandler
@@ -459,46 +472,65 @@ export default function Model3DViewer({
             <Model url={source} />
           </Suspense>
 
-          {boundingBox?.map((bbox, i) => (
-            <BoundingBoxMesh
-              key={`bbox-${i}`}
-              bbox={bbox}
-              color="red"
-              opacity={0.3}
-              onClick={() => {
-                setSelectedBBoxIndex(i);
-                setSelectedAutoTagId(null);
-              }}
-              isSelected={selectedBBoxIndex === i && selectedAutoTagId === null}
-              isDimmed={
-                (selectedBBoxIndex !== null && selectedBBoxIndex !== i) ||
-                selectedAutoTagId !== null
-              }
-            />
-          ))}
-
-          {showAutoTags &&
-            autoTagBBoxes?.map((bbox, i) => (
+          {boundingBox?.map((bbox, i) => {
+            const isThisSelected =
+              selectedBBoxIndex === i && selectedAutoTagId === null;
+            if (isThisSelected && isEditing) return null;
+            const savedId = componentIds?.[i] ?? null;
+            const displayBBox =
+              savedId && savedBBoxMap.has(savedId)
+                ? savedBBoxMap.get(savedId)!
+                : bbox;
+            return (
               <BoundingBoxMesh
-                key={`autotag-${i}`}
-                bbox={bbox}
-                color={new THREE.Color().setHSL((i * 0.618) % 1, 0.8, 0.5)}
-                label={annotations?.[i]}
-                opacity={0.1}
+                key={`bbox-${i}`}
+                bbox={displayBBox}
+                color="red"
+                opacity={0.3}
                 onClick={() => {
-                  if (annotations?.[i]) {
-                    setSelectedAutoTagId(annotations[i]);
-                    setSelectedBBoxIndex(null);
-                  }
+                  setSelectedBBoxIndex(i);
+                  setSelectedAutoTagId(null);
                 }}
-                isSelected={selectedAutoTagId === annotations?.[i]}
+                isSelected={isThisSelected}
                 isDimmed={
-                  selectedBBoxIndex !== null ||
-                  (selectedAutoTagId !== null &&
-                    selectedAutoTagId !== annotations?.[i])
+                  (selectedBBoxIndex !== null && selectedBBoxIndex !== i) ||
+                  selectedAutoTagId !== null
                 }
               />
-            ))}
+            );
+          })}
+
+          {showAutoTags &&
+            autoTagBBoxes?.map((bbox, i) => {
+              const isThisSelected = selectedAutoTagId === annotations?.[i];
+              if (isThisSelected && isEditing) return null;
+              const annotId = annotations?.[i] ?? null;
+              const displayBBox =
+                annotId && savedBBoxMap.has(annotId)
+                  ? savedBBoxMap.get(annotId)!
+                  : bbox;
+              return (
+                <BoundingBoxMesh
+                  key={`autotag-${i}`}
+                  bbox={displayBBox}
+                  color={new THREE.Color().setHSL((i * 0.618) % 1, 0.8, 0.5)}
+                  label={annotations?.[i]}
+                  opacity={0.1}
+                  onClick={() => {
+                    if (annotations?.[i]) {
+                      setSelectedAutoTagId(annotations[i]);
+                      setSelectedBBoxIndex(null);
+                    }
+                  }}
+                  isSelected={isThisSelected}
+                  isDimmed={
+                    selectedBBoxIndex !== null ||
+                    (selectedAutoTagId !== null &&
+                      selectedAutoTagId !== annotations?.[i])
+                  }
+                />
+              );
+            })}
 
           {showOccupancyGrid &&
             occupancyGrid?.map((bbox, i) => (
@@ -512,6 +544,15 @@ export default function Model3DViewer({
             ))}
 
           {route && <RoutePath route={route} />}
+
+          {isEditing && editedBBox && (
+            <BBoxTransformGizmo
+              key="bbox-gizmo"
+              initialBBox={editedBBox}
+              mode={gizmoMode}
+              onCommit={setEditedBBox}
+            />
+          )}
         </Canvas>
       </KeyboardControls>
     </div>

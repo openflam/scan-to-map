@@ -373,33 +373,51 @@ def get_route():
     )
 
 
-@app.route("/update_component_caption", methods=["POST"])
-def update_component_caption():
+@app.route("/update_component", methods=["POST"])
+def update_component():
     """
-    Update component caption endpoint.
-    Updates the caption for a given component ID in the database.
+    Update component endpoint.
+    Updates the caption and/or bounding box for a given component ID in the database.
+    At least one of 'caption' or 'bbox' must be provided.
+    bbox must be in the format: {"min": [x, y, z], "max": [x, y, z]}
     """
     data = request.json
     component_id = data.get("component_id")
     new_caption = data.get("caption")
+    new_bbox = data.get("bbox")
 
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
 
-    if new_caption is None:
-        return jsonify({"error": "No caption provided"}), 400
+    if new_caption is None and new_bbox is None:
+        return (
+            jsonify({"error": "At least one of 'caption' or 'bbox' must be provided"}),
+            400,
+        )
+
+    if new_bbox is not None and ("min" not in new_bbox or "max" not in new_bbox):
+        return jsonify({"error": "bbox must have 'min' and 'max' keys"}), 400
 
     try:
         comp_id_int = int(component_id)
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
 
+    fields, params = [], []
+    if new_caption is not None:
+        fields.append("caption = ?")
+        params.append(new_caption)
+    if new_bbox is not None:
+        fields.append("bbox_json = ?")
+        params.append(json.dumps(new_bbox))
+    params.append(comp_id_int)
+
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute(
-        "UPDATE components SET caption = ? WHERE component_id = ?",
-        (new_caption, comp_id_int),
+        f"UPDATE components SET {', '.join(fields)} WHERE component_id = ?",
+        params,
     )
     con.commit()
     updated = cur.rowcount
@@ -408,7 +426,12 @@ def update_component_caption():
     if updated == 0:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
 
-    return jsonify({"component_id": component_id, "caption": new_caption})
+    result = {"component_id": component_id}
+    if new_caption is not None:
+        result["caption"] = new_caption
+    if new_bbox is not None:
+        result["bbox"] = new_bbox
+    return jsonify(result)
 
 
 @app.route("/get_component_info", methods=["GET"])
