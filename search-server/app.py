@@ -125,7 +125,7 @@ else:
     floor_height_file = None
     print("Warning: Occupancy grid not found. Routing will be disabled.")
 
-openai_provider = OpenAIProvider(str(DB_PATH), model="gpt-4o-mini")
+openai_provider = OpenAIProvider(str(DB_PATH), model="gpt-5-mini")
 bm25_provider = BM25Provider(str(DB_PATH))
 openai_rag_provider_gpt_5_mini = OpenAIRAGProvider(
     str(DB_PATH), model="gpt-5-mini", bm25_top_k=20
@@ -142,7 +142,7 @@ print("Providers initialized successfully")
 
 # Map method names to providers
 PROVIDERS = {
-    "gpt-4o-mini [Full]": openai_provider,
+    "gpt-5-mini [Full]": openai_provider,
     "BM25": bm25_provider,
     "gpt-5-mini [RAG]": openai_rag_provider_gpt_5_mini,
     "CLIP ViT-H-14": clip_provider,

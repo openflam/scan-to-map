@@ -19,6 +19,7 @@ function App() {
   const [searchResult, setSearchResult] = useState<string | undefined>(
     undefined,
   );
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
   const [route, setRoute] = useState<Route>([]);
 
@@ -73,6 +74,8 @@ function App() {
   }, []);
 
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
+    setIsLoading(true);
+    setSearchResult(undefined);
     const result = await query(searchQuery, method);
     setRoute([]); // Clear any existing route
     // Extract bounding boxes, captions, and component IDs from components
@@ -81,6 +84,7 @@ function App() {
     setComponentIds(result.components.map((c) => c.component_id));
     setSearchResult(result.reason);
     setSearchTime(result.search_time_ms);
+    setIsLoading(false);
   };
 
   const handleDirections = (
@@ -128,7 +132,7 @@ function App() {
         />
       </Row>
       <Row>
-        <SearchResult result={searchResult} />
+        <SearchResult result={searchResult} isLoading={isLoading} />
       </Row>
     </Container>
   );

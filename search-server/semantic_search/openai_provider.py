@@ -22,9 +22,8 @@ class OpenAIProvider(SemanticSearchProvider):
     def __init__(
         self,
         db_path: str,
-        model: str = "gpt-4o-mini",
-        temperature: float = 0.0,
-        max_tokens: int = 100,
+        model: str = "gpt-5-mini",
+        max_completion_tokens: int = 1000,
         api_key: str = None,
     ):
         """
@@ -33,14 +32,12 @@ class OpenAIProvider(SemanticSearchProvider):
         Args:
             db_path: Path to the SQLite components database
             model: The OpenAI model to use
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens in response
+            max_completion_tokens: Maximum tokens in response
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env variable)
         """
         self.db_path = db_path
         self.model = model
-        self.temperature = temperature
-        self.max_tokens = max_tokens
+        self.max_completion_tokens = max_completion_tokens
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
     def _load_components(self) -> Tuple[str, set]:
@@ -97,13 +94,15 @@ class OpenAIProvider(SemanticSearchProvider):
                     {"role": "system", "content": OPENAI_FULL_CONTEXT_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                max_completion_tokens=self.max_completion_tokens,
                 response_format={"type": "json_object"},
             )
 
             # Extract and parse the response
-            result = response.choices[0].message.content.strip()
+            raw_content = response.choices[0].message.content
+            if not raw_content or not raw_content.strip():
+                raise ValueError("Empty response from OpenAI")
+            result = raw_content.strip()
             parsed_result = json.loads(result)
 
             component_ids_str = parsed_result.get("component_ids", "")

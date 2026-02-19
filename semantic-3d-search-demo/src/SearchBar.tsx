@@ -29,7 +29,7 @@ function SearchBar({
   searchTime,
 }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [method, setMethod] = useState("CLIP ViT-H-14");
+  const [method, setMethod] = useState("gpt-5-mini [Full]");
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDirections, setShowDirections] = useState(false);
@@ -141,10 +141,10 @@ function SearchBar({
           onChange={(e) => setMethod(e.target.value)}
           style={{ maxWidth: "200px" }}
         >
-          <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
-          <option value="gpt-4o-mini [Full]">gpt-4o-mini [Full]</option>
+          <option value="gpt-5-mini [Full]">gpt-5-mini [Full]</option>
           <option value="gpt-5-mini [RAG]">gpt-5-mini [RAG]</option>
           <option value="BM25">BM25</option>
+          <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
         </Form.Select>
 
         {!showDirections ? (
