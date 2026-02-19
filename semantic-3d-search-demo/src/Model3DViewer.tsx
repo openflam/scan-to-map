@@ -441,6 +441,20 @@ export default function Model3DViewer({
               setSelectedAutoTagId(null);
             }}
             onSave={handleSave}
+            onDelete={
+              currentComponentId
+                ? async () => {
+                    try {
+                      const { deleteComponent } = await import("./query");
+                      await deleteComponent(currentComponentId);
+                      setSelectedBBoxIndex(null);
+                      setSelectedAutoTagId(null);
+                    } catch (error) {
+                      console.error("Error deleting component:", error);
+                    }
+                  }
+                : undefined
+            }
             saveWarning={saveWarning}
             componentId={currentComponentId}
             imageBase64={componentImage}

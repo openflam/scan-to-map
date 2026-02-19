@@ -122,6 +122,36 @@ export async function getComponentInfo(componentId: string): Promise<{
   }
 }
 
+export async function deleteComponent(
+  componentId: string,
+): Promise<{ component_id: string; deleted: boolean }> {
+  console.log("Deleting component:", componentId);
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/delete_component`, {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ component_id: componentId }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Delete component request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Deleted component:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error deleting component:", error);
+    throw error;
+  }
+}
+
 export async function updateComponent(
   componentId: string,
   updates: { caption?: string; bbox?: { min: number[]; max: number[] } },

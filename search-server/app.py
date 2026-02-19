@@ -16,7 +16,7 @@ from semantic_search import (
 from routing.path_calculation import calculate_route
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, methods=["GET", "POST", "DELETE", "OPTIONS"])  # Enable CORS for all routes
 
 # Get dataset name from command line argument
 if len(sys.argv) < 2:
@@ -432,6 +432,36 @@ def update_component():
     if new_bbox is not None:
         result["bbox"] = new_bbox
     return jsonify(result)
+
+
+@app.route("/delete_component", methods=["DELETE"])
+def delete_component():
+    """
+    Delete component endpoint.
+    Deletes the component with the given component ID from the database.
+    """
+    data = request.json
+    component_id = data.get("component_id")
+
+    if not component_id:
+        return jsonify({"error": "No component_id provided"}), 400
+
+    try:
+        comp_id_int = int(component_id)
+    except (ValueError, TypeError):
+        return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
+
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute("DELETE FROM components WHERE component_id = ?", (comp_id_int,))
+    con.commit()
+    deleted = cur.rowcount
+    con.close()
+
+    if deleted == 0:
+        return jsonify({"error": f"Component ID {component_id} not found"}), 404
+
+    return jsonify({"component_id": component_id, "deleted": True})
 
 
 @app.route("/get_component_info", methods=["GET"])
