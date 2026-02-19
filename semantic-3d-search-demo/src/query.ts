@@ -121,3 +121,37 @@ export async function getComponentInfo(componentId: string): Promise<{
     throw error;
   }
 }
+
+export async function updateComponentCaption(
+  componentId: string,
+  caption: string,
+): Promise<{ component_id: string; caption: string }> {
+  console.log("Updating caption for component:", componentId);
+
+  try {
+    const response = await fetch(
+      `${SEARCH_SERVER_URL}/update_component_caption`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ component_id: componentId, caption }),
+      },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Update caption request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Updated caption:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error updating component caption:", error);
+    throw error;
+  }
+}

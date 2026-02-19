@@ -140,6 +140,7 @@ function ComponentDetails({
   isEditing,
   setIsEditing,
   onDismiss,
+  componentId,
   imageBase64,
   isLoading,
 }: {
@@ -148,9 +149,20 @@ function ComponentDetails({
   isEditing: boolean;
   setIsEditing: (value: boolean) => void;
   onDismiss: () => void;
+  componentId: string | null;
   imageBase64?: string | null;
   isLoading?: boolean;
 }) {
+  const handleSave = async () => {
+    setIsEditing(false);
+    if (!componentId) return;
+    try {
+      const { updateComponentCaption } = await import("./query");
+      await updateComponentCaption(componentId, editedCaption);
+    } catch (error) {
+      console.error("Error saving caption:", error);
+    }
+  };
   return (
     <div
       style={{
@@ -158,6 +170,8 @@ function ComponentDetails({
         top: "20px",
         right: "20px",
         width: "300px",
+        maxHeight: "calc(100% - 40px)",
+        overflowY: "auto",
         zIndex: 10,
         backgroundColor: "rgba(255, 255, 255, 0.95)",
         padding: "20px",
@@ -271,7 +285,7 @@ function ComponentDetails({
           {isEditing ? "Cancel" : "Edit"}
         </button>
         <button
-          onClick={() => setIsEditing(false)}
+          onClick={handleSave}
           style={{
             flex: 1,
             padding: "10px",
@@ -328,6 +342,13 @@ export default function Model3DViewer({
   const [editedCaption, setEditedCaption] = useState("");
   const [componentImage, setComponentImage] = useState<string | null>(null);
   const [isLoadingComponent, setIsLoadingComponent] = useState(false);
+
+  const currentComponentId: string | null = useMemo(() => {
+    if (selectedAutoTagId !== null) return selectedAutoTagId;
+    if (selectedBBoxIndex !== null && componentIds)
+      return componentIds[selectedBBoxIndex] ?? null;
+    return null;
+  }, [selectedAutoTagId, selectedBBoxIndex, componentIds]);
 
   useEffect(() => {
     const fetchComponentInfo = async () => {
@@ -411,6 +432,7 @@ export default function Model3DViewer({
               setSelectedBBoxIndex(null);
               setSelectedAutoTagId(null);
             }}
+            componentId={currentComponentId}
             imageBase64={componentImage}
             isLoading={isLoadingComponent}
           />
