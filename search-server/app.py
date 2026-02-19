@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
+import sqlite3
 import sys
 from pathlib import Path
 import numpy as np
@@ -26,35 +27,33 @@ if len(sys.argv) < 2:
 DATASET_NAME = sys.argv[1]
 print(f"Loading data for dataset: {DATASET_NAME}")
 
-# Load bbox_corners.json on startup
-BBOX_DATA_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "bbox_corners.json"
-)
+# Load component data from SQLite database
+DB_PATH = Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "components.db"
 
-if not BBOX_DATA_PATH.exists():
-    print(f"Error: bbox_corners.json not found at {BBOX_DATA_PATH}")
+if not DB_PATH.exists():
+    print(f"Error: components.db not found at {DB_PATH}")
+    print(f"Run: python create_database.py {DATASET_NAME}")
     sys.exit(1)
 
-with open(BBOX_DATA_PATH, "r") as f:
-    bbox_data = json.load(f)
+con = sqlite3.connect(DB_PATH)
+con.row_factory = sqlite3.Row
+cur = con.cursor()
+cur.execute("SELECT component_id, caption, bbox_json FROM components")
+rows = cur.fetchall()
+con.close()
 
-# Load component_captions.json on startup
-CAPTIONS_DATA_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "component_captions.json"
-)
+# Build component_captions dict for the CLIP provider (which still uses an in-memory dict)
+component_captions = {}
+for row in rows:
+    comp_id = row["component_id"]
+    bbox = json.loads(row["bbox_json"])
+    component_captions[comp_id] = {
+        "component_id": comp_id,
+        "caption": row["caption"],
+        "bbox": bbox,
+    }
 
-if not CAPTIONS_DATA_PATH.exists():
-    print(f"Error: component_captions.json not found at {CAPTIONS_DATA_PATH}")
-    sys.exit(1)
-
-with open(CAPTIONS_DATA_PATH, "r") as f:
-    captions_list = json.load(f)
-
-# Convert captions list to dictionary keyed by component_id
-component_captions = {item["component_id"]: item for item in captions_list}
-
-# Create bbox lookup dictionary keyed by component_id
-bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
+print(f"Loaded {len(component_captions)} components from database")
 
 # Load manifest.json on startup
 MANIFEST_PATH = (
@@ -126,10 +125,10 @@ else:
     floor_height_file = None
     print("Warning: Occupancy grid not found. Routing will be disabled.")
 
-openai_provider = OpenAIProvider(component_captions, model="gpt-4o-mini")
-bm25_provider = BM25Provider(component_captions)
+openai_provider = OpenAIProvider(str(DB_PATH), model="gpt-4o-mini")
+bm25_provider = BM25Provider(str(DB_PATH))
 openai_rag_provider_gpt_5_mini = OpenAIRAGProvider(
-    component_captions, model="gpt-5-mini", bm25_top_k=20
+    str(DB_PATH), model="gpt-5-mini", bm25_top_k=20
 )
 clip_provider = CLIPProvider(
     faiss_index_path=str(FAISS_INDEX_PATH),
@@ -241,17 +240,33 @@ def search():
         query_input = query_value
 
     # Find the most relevant component bounding boxes and reason using the selected provider
-    result_data = process_query(query_input, component_captions, bbox_lookup, provider)
+    result_data = process_query(query_input, str(DB_PATH), provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     component_ids = result_data["component_ids"]  # List of component IDs
     reason = result_data["reason"]
     search_time_ms = result_data["search_time_ms"]
 
+    # Fetch fresh captions from the database for the returned component IDs
+    if component_ids:
+        placeholders = ",".join("?" * len(component_ids))
+        con = sqlite3.connect(DB_PATH)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        cur.execute(
+            f"SELECT component_id, caption FROM components WHERE component_id IN ({placeholders})",
+            component_ids,
+        )
+        caption_rows = cur.fetchall()
+        con.close()
+        id_to_caption = {row["component_id"]: row["caption"] for row in caption_rows}
+    else:
+        id_to_caption = {}
+
     # Build components array with transformed bboxes and captions
     components = []
     for bbox, comp_id in zip(bboxes, component_ids):
         transformed_bbox = transform_bbox(bbox)
-        caption = component_captions[comp_id].get("caption", "No caption available")
+        caption = id_to_caption.get(comp_id, "No caption available")
         # Ensure component_id is returned as string for consistency with query parameters
         components.append(
             {"bbox": transformed_bbox, "caption": caption, "component_id": str(comp_id)}
@@ -313,15 +328,11 @@ def get_route():
     )
 
     # Process source query
-    source_result = process_query(
-        source_input, component_captions, bbox_lookup, provider
-    )
+    source_result = process_query(source_input, str(DB_PATH), provider)
     source_bboxes = source_result["bbox"]
 
     # Process destination query
-    destination_result = process_query(
-        destination_input, component_captions, bbox_lookup, provider
-    )
+    destination_result = process_query(destination_input, str(DB_PATH), provider)
     destination_bboxes = destination_result["bbox"]
 
     # Use the first bounding box from each result
@@ -373,22 +384,29 @@ def get_component_info():
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
 
-    # Try to convert to int if possible, keep as string otherwise
-    # Check both string and int versions to handle type mismatches
-    component_key = component_id
-    if component_id not in component_captions:
-        # Try as integer
-        try:
-            component_key = int(component_id)
-            if component_key not in component_captions:
-                return jsonify({"error": f"Component ID {component_id} not found"}), 404
-        except ValueError:
-            return jsonify({"error": f"Component ID {component_id} not found"}), 404
+    # Query the database for caption and best_crop
+    try:
+        comp_id_int = int(component_id)
+    except ValueError:
+        return jsonify({"error": f"Component ID {component_id} not found"}), 404
 
-    caption = component_captions[component_key].get("caption", "No caption available")
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    cur.execute(
+        "SELECT caption, best_crop FROM components WHERE component_id = ?",
+        (comp_id_int,),
+    )
+    row = cur.fetchone()
+    con.close()
 
-    # Get crops for this component from manifest (manifest uses string keys)
-    if component_id not in manifest_data:
+    if row is None:
+        return jsonify({"error": f"Component ID {component_id} not found"}), 404
+
+    caption = row["caption"] or "No caption available"
+    crop_filename = row["best_crop"]
+
+    if not crop_filename:
         return jsonify(
             {
                 "component_id": component_id,
@@ -398,23 +416,15 @@ def get_component_info():
             }
         )
 
-    component_crops = manifest_data[component_id].get("crops", [])
-
-    if not component_crops or len(component_crops) == 0:
-        return jsonify(
-            {
-                "component_id": component_id,
-                "caption": caption,
-                "image": None,
-                "message": "No crops available for this component",
-            }
-        )
-
-    # Find crop with highest fraction_visible
-    best_crop = max(component_crops, key=lambda x: x.get("fraction_visible", 0))
+    # Look up the crop metadata in the manifest using the stored filename
+    crop_meta = {}
+    component_crops = manifest_data.get(component_id, {}).get("crops", [])
+    for crop in component_crops:
+        if crop.get("crop_filename") == crop_filename:
+            crop_meta = crop
+            break
 
     # Read the crop image file and encode as base64
-    crop_filename = best_crop.get("crop_filename")
     image_path = (
         Path(__file__).parent
         / ".."
@@ -442,9 +452,9 @@ def get_component_info():
             "caption": caption,
             "crop_filename": crop_filename,
             "image_base64": image_base64,
-            "fraction_visible": best_crop.get("fraction_visible"),
-            "source_image": best_crop.get("source_image"),
-            "crop_coordinates": best_crop.get("crop_coordinates"),
+            "fraction_visible": crop_meta.get("fraction_visible"),
+            "source_image": crop_meta.get("source_image"),
+            "crop_coordinates": crop_meta.get("crop_coordinates"),
         }
     )
 

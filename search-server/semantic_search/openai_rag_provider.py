@@ -2,7 +2,8 @@
 
 import os
 import json
-from typing import Dict, Any, List, Optional
+import sqlite3
+from typing import Dict, Any, List
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -27,7 +28,7 @@ class OpenAIRAGProvider(SemanticSearchProvider):
 
     def __init__(
         self,
-        component_captions: Dict[int, Any],
+        db_path: str,
         model: str = "gpt-5-mini",
         api_key: str = None,
         bm25_top_k: int = 20,
@@ -36,19 +37,18 @@ class OpenAIRAGProvider(SemanticSearchProvider):
         Initialize the OpenAI RAG provider.
 
         Args:
-            component_captions: Dictionary keyed by component ID with captions
+            db_path: Path to the SQLite components database
             model: The OpenAI model to use
-            temperature: Sampling temperature
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env variable)
             bm25_top_k: Number of candidates to retrieve from BM25 (default: 20)
         """
+        self.db_path = db_path
         self.model = model
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
-        self.component_captions = component_captions
 
-        # Initialize BM25 provider for retrieval
+        # Initialize BM25 provider for retrieval (also uses db_path)
         self.bm25_provider = BM25Provider(
-            component_captions=component_captions,
+            db_path=db_path,
             top_k=bm25_top_k,
             gap_threshold=float("inf"),  # Disable elbow detection to get all top_k
             ratio_threshold=0.0,
@@ -94,9 +94,10 @@ class OpenAIRAGProvider(SemanticSearchProvider):
 
         except Exception as e:
             print(f"Error in OpenAI RAG provider: {e}")
-            return self._get_fallback_result(
-                reason=f"[RAG] Error in OpenAI RAG provider: {e}"
-            )
+            return {
+                "component_ids": [],
+                "reason": f"[RAG] Error in OpenAI RAG provider: {e}",
+            }
 
     def _rewrite_query(self, query: str) -> str:
         """
@@ -142,10 +143,24 @@ class OpenAIRAGProvider(SemanticSearchProvider):
         Returns:
             Dictionary with re-ranked component_ids and reason
         """
+        # Fetch captions for candidates fresh from DB
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        placeholders = ",".join("?" * len(candidate_ids))
+        cur.execute(
+            f"SELECT component_id, caption FROM components WHERE component_id IN ({placeholders})",
+            candidate_ids,
+        )
+        caption_map = {
+            row["component_id"]: row["caption"] or "" for row in cur.fetchall()
+        }
+        con.close()
+
         # Build candidate descriptions
         candidates_text = ""
         for i, comp_id in enumerate(candidate_ids):
-            caption = self.component_captions[comp_id].get("caption", "")
+            caption = caption_map.get(comp_id, "")
             candidates_text += f"{i+1}. Component {comp_id}: {caption}\n\n"
 
         prompt = OPENAI_RAG_RERANK_PROMPT.format(
@@ -178,11 +193,11 @@ class OpenAIRAGProvider(SemanticSearchProvider):
                 reranked_ids = [
                     int(id.strip()) for id in component_ids_str.split(",") if id.strip()
                 ]
-                # Validate IDs
+                # Validate IDs — only keep IDs that are in candidate_ids
                 valid_ids = [
                     id
                     for id in reranked_ids
-                    if id in self.component_captions and id in candidate_ids
+                    if id in caption_map and id in candidate_ids
                 ]
             else:
                 valid_ids = []
@@ -207,8 +222,3 @@ class OpenAIRAGProvider(SemanticSearchProvider):
                 "component_ids": fallback_ids,
                 "reason": f"Using top BM25 results (re-ranking failed: {e})",
             }
-
-    def _get_fallback_result(self, reason: str) -> Dict[str, Any]:
-        """Get fallback result with first component."""
-        first_component_id = list(self.component_captions.keys())[0]
-        return {"component_ids": [first_component_id], "reason": reason}

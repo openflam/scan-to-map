@@ -1,12 +1,13 @@
 from typing import Dict, Any, List
+import json
+import sqlite3
 from semantic_search import SemanticSearchProvider
 import time
 
 
 def process_query(
     query: str,
-    component_captions: Dict[int, Any],
-    bbox_lookup: Dict[int, Any],
+    db_path: str,
     provider: SemanticSearchProvider,
 ) -> Dict[str, Any]:
     """
@@ -14,49 +15,62 @@ def process_query(
 
     Args:
         query: The search query string
-        component_captions: Dictionary keyed by component ID with captions
-        bbox_lookup: Dictionary keyed by component ID with bbox data
+        db_path: Path to the SQLite components database
         provider: Semantic search provider to use for matching
 
     Returns:
         A dictionary with "bbox" (list of bounding boxes), "reason" (explanation for the choice),
         and "search_time_ms" (time taken to match components in milliseconds)
     """
-    # Use the provided provider
-    search_provider = provider
-
     # Get matched component IDs from the provider and measure time
     start_time = time.perf_counter()
-    result = search_provider.match_components(query)
+    result = provider.match_components(query)
     end_time = time.perf_counter()
     search_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
 
     component_ids = result["component_ids"]
     reason = result["reason"]
 
-    # Collect bounding boxes for the matched components
+    # Fetch bounding boxes for matched components from the DB
     valid_bboxes = []
     valid_component_ids = []
     invalid_ids = []
 
-    for component_id in component_ids:
-        if component_id in component_captions and component_id in bbox_lookup:
-            valid_bboxes.append(bbox_lookup[component_id])
-            valid_component_ids.append(component_id)
-        else:
-            invalid_ids.append(component_id)
+    if component_ids:
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        placeholders = ",".join("?" * len(component_ids))
+        cur.execute(
+            f"SELECT component_id, bbox_json FROM components WHERE component_id IN ({placeholders})",
+            component_ids,
+        )
+        bbox_map = {
+            row["component_id"]: json.loads(row["bbox_json"]) for row in cur.fetchall()
+        }
+        con.close()
+
+        for component_id in component_ids:
+            if component_id in bbox_map:
+                valid_bboxes.append(bbox_map[component_id])
+                valid_component_ids.append(component_id)
+            else:
+                invalid_ids.append(component_id)
 
     # Handle cases where no valid bboxes were found
     if not valid_bboxes:
-        print(f"Warning: No valid component IDs found. Using first component.")
-        first_component_id = list(component_captions.keys())[0]
-        if first_component_id in bbox_lookup:
-            valid_bboxes = [bbox_lookup[first_component_id]]
-            valid_component_ids = [first_component_id]
-        else:
-            # Fallback to first bbox if component_id doesn't match
-            valid_bboxes = [list(bbox_lookup.values())[0]]
-            valid_component_ids = [list(component_captions.keys())[0]]
+        print("Warning: No valid component IDs found. Using first component.")
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+        cur = con.cursor()
+        cur.execute(
+            "SELECT component_id, bbox_json FROM components ORDER BY component_id LIMIT 1"
+        )
+        row = cur.fetchone()
+        con.close()
+        if row:
+            valid_bboxes = [json.loads(row["bbox_json"])]
+            valid_component_ids = [row["component_id"]]
     elif invalid_ids:
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
 
