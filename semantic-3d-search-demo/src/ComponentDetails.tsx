@@ -1,5 +1,6 @@
-import { useState } from "react";
 import type { BoundingBox } from "./types/global";
+import ConfirmDelete from "./ConfirmDelete";
+import { styles } from "./componentDetailsStyles";
 
 export type GizmoMode = "translate" | "scale";
 
@@ -36,63 +37,22 @@ export default function ComponentDetails({
   onGizmoModeChange,
   onDelete,
 }: ComponentDetailsProps) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: "20px",
-        right: "20px",
-        width: "300px",
-        maxHeight: "calc(100% - 40px)",
-        overflowY: "auto",
-        zIndex: 10,
-        backgroundColor: "rgba(255, 255, 255, 0.95)",
-        padding: "20px",
-        borderRadius: "8px",
-        boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-        border: "1px solid #eee",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <h3
-        style={{
-          margin: 0,
-          fontSize: "12px",
-          color: "#888",
-          letterSpacing: "1px",
-          textTransform: "uppercase",
-        }}
-      >
-        Annotation Detail
-      </h3>
+    <div style={styles.panel}>
+      <h3 style={styles.sectionLabel}>Annotation Detail</h3>
 
       {isLoading ? (
-        <div style={{ textAlign: "center", padding: "20px" }}>
-          <p style={{ color: "#6b7280" }}>Loading...</p>
+        <div style={styles.loadingContainer}>
+          <p style={styles.loadingText}>Loading...</p>
         </div>
       ) : (
         <>
           {imageBase64 && (
-            <div
-              style={{
-                width: "100%",
-                borderRadius: "6px",
-                overflow: "hidden",
-                marginBottom: "8px",
-              }}
-            >
+            <div style={styles.imageWrapper}>
               <img
                 src={`data:image/jpeg;base64,${imageBase64}`}
                 alt="Component view"
-                style={{
-                  width: "100%",
-                  height: "auto",
-                  display: "block",
-                }}
+                style={styles.image}
               />
             </div>
           )}
@@ -101,38 +61,12 @@ export default function ComponentDetails({
             <textarea
               value={editedCaption}
               onChange={(e) => setEditedCaption(e.target.value)}
-              style={{
-                width: "100%",
-                height: "240px",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "2px solid #3b82f6",
-                fontSize: "14px",
-                outline: "none",
-                resize: "none",
-                overflowY: "auto",
-              }}
+              style={styles.textarea}
               autoFocus
             />
           ) : (
-            <div
-              style={{
-                minHeight: "60px",
-                maxHeight: "240px",
-                overflowY: "auto",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "16px",
-                  color: "#1f2937",
-                  lineHeight: "1.5",
-                }}
-              >
+            <div style={styles.captionBox}>
+              <p style={styles.captionText}>
                 {editedCaption || "No caption available."}
               </p>
             </div>
@@ -140,192 +74,44 @@ export default function ComponentDetails({
         </>
       )}
 
-      <div style={{ display: "flex", gap: "10px" }}>
-        {isEditing && onGizmoModeChange && (
-          <div
-            style={{
-              display: "flex",
-              gap: "6px",
-              marginBottom: "4px",
-              width: "100%",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#888",
-                alignSelf: "center",
-                marginRight: "4px",
-              }}
-            >
-              Gizmo:
-            </span>
+      {isEditing && onGizmoModeChange && (
+        <div style={styles.buttonRow}>
+          <div style={styles.gizmoRow}>
+            <span style={styles.gizmoLabel}>Gizmo:</span>
             {(["translate", "scale"] as GizmoMode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => onGizmoModeChange(m)}
-                style={{
-                  flex: 1,
-                  padding: "6px",
-                  cursor: "pointer",
-                  backgroundColor: gizmoMode === m ? "#3b82f6" : "#f3f4f6",
-                  color: gizmoMode === m ? "white" : "#374151",
-                  border: `1px solid ${gizmoMode === m ? "#3b82f6" : "#d1d5db"}`,
-                  borderRadius: "6px",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  textTransform: "capitalize",
-                  transition: "all 0.2s",
-                }}
+                style={styles.gizmoButton(gizmoMode === m)}
               >
                 {m}
               </button>
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div style={{ display: "flex", gap: "10px" }}>
+      <div style={styles.buttonRow}>
         <button
           onClick={() => setIsEditing(!isEditing)}
-          style={{
-            flex: 1,
-            padding: "10px",
-            cursor: "pointer",
-            backgroundColor: isEditing ? "#fee2e2" : "#f3f4f6",
-            color: isEditing ? "#ef4444" : "#374151",
-            border: "1px solid #d1d5db",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: "600",
-            transition: "all 0.2s",
-          }}
+          style={styles.editButton(isEditing)}
         >
           {isEditing ? "Cancel" : "Edit"}
         </button>
-        <button
-          onClick={onSave}
-          style={{
-            flex: 1,
-            padding: "10px",
-            cursor: "pointer",
-            backgroundColor: "#3b82f6",
-            color: "white",
-            border: "none",
-            borderRadius: "6px",
-            fontSize: "14px",
-            fontWeight: "600",
-            transition: "background-color 0.2s",
-          }}
-        >
+        <button onClick={onSave} style={styles.saveButton}>
           Save
         </button>
       </div>
-      {saveWarning && (
-        <div
-          style={{
-            padding: "8px 12px",
-            borderRadius: "6px",
-            backgroundColor: "#fef2f2",
-            border: "1px solid #fecaca",
-            color: "#b91c1c",
-            fontSize: "12px",
-          }}
-        >
-          {saveWarning}
-        </div>
-      )}
+
+      {saveWarning && <div style={styles.warningBox}>{saveWarning}</div>}
+
       {onDelete && (
-        <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: "12px" }}>
-          {confirmDelete ? (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "8px",
-              }}
-            >
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "13px",
-                  color: "#374151",
-                  textAlign: "center",
-                }}
-              >
-                Are you sure you want to delete this component? This cannot be
-                undone.
-              </p>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  onClick={() => setConfirmDelete(false)}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    cursor: "pointer",
-                    backgroundColor: "#f3f4f6",
-                    color: "#374151",
-                    border: "1px solid #d1d5db",
-                    borderRadius: "6px",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    setConfirmDelete(false);
-                    onDelete();
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: "8px",
-                    cursor: "pointer",
-                    backgroundColor: "#ef4444",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "6px",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                  }}
-                >
-                  Yes, Delete
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmDelete(true)}
-              style={{
-                width: "100%",
-                padding: "8px",
-                cursor: "pointer",
-                backgroundColor: "#fef2f2",
-                color: "#ef4444",
-                border: "1px solid #fecaca",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: "600",
-              }}
-            >
-              Delete Component
-            </button>
-          )}
+        <div style={styles.deleteSection}>
+          <ConfirmDelete onDelete={onDelete} />
         </div>
       )}
-      <button
-        onClick={onDismiss}
-        style={{
-          background: "none",
-          border: "none",
-          color: "#9ca3af",
-          fontSize: "12px",
-          cursor: "pointer",
-          alignSelf: "center",
-          marginTop: "4px",
-        }}
-      >
+
+      <button onClick={onDismiss} style={styles.dismissButton}>
         Dismiss (Esc)
       </button>
     </div>

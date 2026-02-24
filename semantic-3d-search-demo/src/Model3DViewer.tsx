@@ -1,27 +1,16 @@
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  OrbitControls,
-  useGLTF,
-  Text,
-  Line,
-  Edges,
-  Billboard,
-  KeyboardControls,
-  useKeyboardControls,
-  TransformControls,
-} from "@react-three/drei";
-import {
-  Suspense,
-  useMemo,
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-} from "react";
+import { Canvas } from "@react-three/fiber";
+import { OrbitControls, KeyboardControls } from "@react-three/drei";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
 import ComponentDetails from "./ComponentDetails";
 import type { GizmoMode } from "./ComponentDetails";
+import Model from "./viewer/Model";
+import BoundingBoxMesh from "./viewer/BoundingBoxMesh";
+import CameraController from "./viewer/CameraController";
+import GlobalInputHandler from "./viewer/GlobalInputHandler";
+import BBoxTransformGizmo from "./viewer/BBoxTransformGizmo";
+import RoutePath from "./viewer/RoutePath";
 
 interface Model3DViewerProps {
   source: string;
@@ -36,208 +25,13 @@ interface Model3DViewerProps {
   route?: Route;
 }
 
-function Model({ url }: { url: string }) {
-  const { scene } = useGLTF(url);
-  return <primitive object={scene} />;
-}
-
-function BoundingBoxMesh({
-  bbox,
-  color,
-  label,
-  opacity = 0.1,
-  onClick,
-  isSelected = false,
-  isDimmed = false,
-}: {
-  bbox: BoundingBox;
-  color: string | THREE.Color;
-  label?: string;
-  opacity?: number;
-  onClick?: (e: any) => void;
-  isSelected?: boolean;
-  isDimmed?: boolean;
-}) {
-  const { x_min, y_min, z_min, x_max, y_max, z_max } = bbox;
-  const width = Math.abs(x_max - x_min);
-  const height = Math.abs(y_max - y_min);
-  const depth = Math.abs(z_max - z_min);
-  const position: [number, number, number] = [
-    (x_min + x_max) / 2,
-    (y_min + y_max) / 2,
-    (z_min + z_max) / 2,
-  ];
-
-  const finalOpacity = isDimmed ? 0.05 : isSelected ? 0.6 : opacity;
-  const finalColor = isSelected ? "#3b82f6" : color;
-
-  return (
-    <group position={position}>
-      <mesh
-        onClick={(e) => {
-          if (e.button === 0) {
-            e.stopPropagation();
-            if (onClick) onClick(e);
-          }
-        }}
-      >
-        <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial
-          color={finalColor}
-          transparent
-          opacity={finalOpacity}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
-        <Edges color={new THREE.Color(finalColor).multiplyScalar(0.5)} />
-      </mesh>
-      {label && !isDimmed && (
-        <Billboard position={[0, height / 2 + 0.1, 0]}>
-          <Text
-            fontSize={0.1}
-            color="white"
-            anchorX="center"
-            anchorY="bottom"
-            outlineWidth={0.02}
-            outlineColor="black"
-          >
-            {label}
-          </Text>
-        </Billboard>
-      )}
-    </group>
-  );
-}
-
-function CameraController() {
-  const [, get] = useKeyboardControls();
-  const { camera } = useThree();
-  useFrame((state, delta) => {
-    const activeElement = document.activeElement;
-    if (activeElement && ["INPUT", "TEXTAREA"].includes(activeElement.tagName))
-      return;
-    const { forward, backward, left, right } = get();
-    if (!forward && !backward && !left && !right) return;
-    const speed = 5 * delta;
-    const direction = new THREE.Vector3();
-    if (forward) direction.z -= 1;
-    if (backward) direction.z += 1;
-    if (left) direction.x -= 1;
-    if (right) direction.x += 1;
-    if (direction.lengthSq() === 0) return;
-    direction
-      .normalize()
-      .multiplyScalar(speed)
-      .applyQuaternion(camera.quaternion);
-    camera.position.add(direction);
-    const controls = state.controls as any;
-    if (controls) controls.target.add(direction);
-  });
-  return null;
-}
-
-function GlobalInputHandler({ onExit }: { onExit: () => void }) {
-  const [, get] = useKeyboardControls();
-  useFrame(() => {
-    if (get().escape) onExit();
-  });
-  return null;
-}
-
-function BBoxTransformGizmo({
-  initialBBox,
-  mode,
-  onCommit,
-}: {
-  initialBBox: BoundingBox;
-  mode: GizmoMode;
-  onCommit: (bbox: BoundingBox) => void;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const tcRef = useRef<any>(null);
-  // Track live transforms in a ref – no React state updates during drag
-  const liveBBoxRef = useRef<BoundingBox>(initialBBox);
-
-  // Position/scale the mesh imperatively before the first Three.js frame so the
-  // gizmo spawns at the bbox center. useLayoutEffect fires synchronously after
-  // the R3F reconciler commits but before the canvas draws.
-  useLayoutEffect(() => {
-    const m = meshRef.current;
-    if (!m) return;
-    const { x_min, y_min, z_min, x_max, y_max, z_max } = initialBBox;
-    m.position.set(
-      (x_min + x_max) / 2,
-      (y_min + y_max) / 2,
-      (z_min + z_max) / 2,
-    );
-    m.scale.set(
-      Math.abs(x_max - x_min),
-      Math.abs(y_max - y_min),
-      Math.abs(z_max - z_min),
-    );
-    m.updateMatrixWorld(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
-
-  // Wire raw Three.js events so drag tracking never triggers React re-renders
-  useEffect(() => {
-    const tc = tcRef.current;
-    if (!tc) return;
-
-    const onObjectChange = () => {
-      const m = meshRef.current;
-      if (!m) return;
-      liveBBoxRef.current = {
-        x_min: m.position.x - m.scale.x / 2,
-        x_max: m.position.x + m.scale.x / 2,
-        y_min: m.position.y - m.scale.y / 2,
-        y_max: m.position.y + m.scale.y / 2,
-        z_min: m.position.z - m.scale.z / 2,
-        z_max: m.position.z + m.scale.z / 2,
-      };
-    };
-
-    const onDraggingChanged = (e: any) => {
-      if (!e.value) onCommit(liveBBoxRef.current);
-    };
-
-    tc.addEventListener("objectChange", onObjectChange);
-    tc.addEventListener("dragging-changed", onDraggingChanged);
-    return () => {
-      tc.removeEventListener("objectChange", onObjectChange);
-      tc.removeEventListener("dragging-changed", onDraggingChanged);
-    };
-  }, [onCommit]);
-
-  // Render the mesh and TransformControls as siblings.
-  // Using the `object` prop (instead of children wrapping) makes TransformControls
-  // attach() directly to the mesh, so the gizmo lives at the mesh's world position
-  // and moves with it. The children-wrapper approach puts kids inside an internal
-  // group at origin, causing the gizmo to appear at (0,0,0).
-  return (
-    <>
-      {/* No position/scale JSX props – set imperatively above so re-renders
-          from onCommit → setEditedBBox never reset the Three.js transform */}
-      <mesh ref={meshRef}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial
-          color="#3b82f6"
-          transparent
-          opacity={0.35}
-          depthWrite={false}
-          side={THREE.DoubleSide}
-        />
-        <Edges color="#1d4ed8" />
-      </mesh>
-      <TransformControls
-        ref={tcRef}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        object={meshRef as any}
-        mode={mode}
-      />
-    </>
-  );
-}
+const keyboardMap = [
+  { name: "forward", keys: ["ArrowUp", "KeyW"] },
+  { name: "backward", keys: ["ArrowDown", "KeyS"] },
+  { name: "left", keys: ["ArrowLeft", "KeyA"] },
+  { name: "right", keys: ["ArrowRight", "KeyD"] },
+  { name: "escape", keys: ["Escape"] },
+];
 
 export default function Model3DViewer({
   source,
@@ -269,9 +63,16 @@ export default function Model3DViewer({
     new Map(),
   );
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+
   // Disable OrbitControls as soon as the gizmo is visible so it never
   // interferes with pointer events intended for TransformControls.
   const orbitEnabled = !(isEditing && editedBBox !== null);
+
+  const handleDeselect = () => {
+    setSelectedBBoxIndex(null);
+    setSelectedAutoTagId(null);
+  };
 
   // Derive the bbox of whichever item is currently selected, preferring any
   // previously saved position so the gizmo starts from the right place if
@@ -407,16 +208,7 @@ export default function Model3DViewer({
     fetchComponentInfo();
   }, [selectedBBoxIndex, selectedAutoTagId, captions, componentIds]);
 
-  const map = useMemo(
-    () => [
-      { name: "forward", keys: ["ArrowUp", "KeyW"] },
-      { name: "backward", keys: ["ArrowDown", "KeyS"] },
-      { name: "left", keys: ["ArrowLeft", "KeyA"] },
-      { name: "right", keys: ["ArrowRight", "KeyD"] },
-      { name: "escape", keys: ["Escape"] },
-    ],
-    [],
-  );
+  const hasSelection = selectedBBoxIndex !== null || selectedAutoTagId !== null;
 
   return (
     <div
@@ -428,18 +220,15 @@ export default function Model3DViewer({
         fontFamily: "sans-serif",
       }}
     >
-      <KeyboardControls map={map}>
+      <KeyboardControls map={keyboardMap}>
         {/* --- HTML OVERLAY --- */}
-        {(selectedBBoxIndex !== null || selectedAutoTagId !== null) && (
+        {hasSelection && (
           <ComponentDetails
             editedCaption={editedCaption}
             setEditedCaption={setEditedCaption}
             isEditing={isEditing}
             setIsEditing={setIsEditing}
-            onDismiss={() => {
-              setSelectedBBoxIndex(null);
-              setSelectedAutoTagId(null);
-            }}
+            onDismiss={handleDeselect}
             onSave={handleSave}
             onDelete={
               currentComponentId
@@ -447,8 +236,10 @@ export default function Model3DViewer({
                     try {
                       const { deleteComponent } = await import("./query");
                       await deleteComponent(currentComponentId);
-                      setSelectedBBoxIndex(null);
-                      setSelectedAutoTagId(null);
+                      setDeletedIds((prev) =>
+                        new Set(prev).add(currentComponentId),
+                      );
+                      handleDeselect();
                     } catch (error) {
                       console.error("Error deleting component:", error);
                     }
@@ -474,23 +265,18 @@ export default function Model3DViewer({
           <pointLight position={[10, 10, 10]} intensity={2.0} />
           <OrbitControls makeDefault enabled={orbitEnabled} />
           <CameraController />
-          {/* Preserved Esc Key logic here */}
-          <GlobalInputHandler
-            onExit={() => {
-              setSelectedBBoxIndex(null);
-              setSelectedAutoTagId(null);
-            }}
-          />
+          <GlobalInputHandler onExit={handleDeselect} />
 
           <Suspense fallback={null}>
             <Model url={source} />
           </Suspense>
 
           {boundingBox?.map((bbox, i) => {
+            const savedId = componentIds?.[i] ?? null;
+            if (savedId && deletedIds.has(savedId)) return null;
             const isThisSelected =
               selectedBBoxIndex === i && selectedAutoTagId === null;
             if (isThisSelected && isEditing) return null;
-            const savedId = componentIds?.[i] ?? null;
             const displayBBox =
               savedId && savedBBoxMap.has(savedId)
                 ? savedBBoxMap.get(savedId)!
@@ -516,9 +302,10 @@ export default function Model3DViewer({
 
           {showAutoTags &&
             autoTagBBoxes?.map((bbox, i) => {
+              const annotId = annotations?.[i] ?? null;
+              if (annotId && deletedIds.has(annotId)) return null;
               const isThisSelected = selectedAutoTagId === annotations?.[i];
               if (isThisSelected && isEditing) return null;
-              const annotId = annotations?.[i] ?? null;
               const displayBBox =
                 annotId && savedBBoxMap.has(annotId)
                   ? savedBBoxMap.get(annotId)!
@@ -571,13 +358,4 @@ export default function Model3DViewer({
       </KeyboardControls>
     </div>
   );
-}
-
-function RoutePath({ route }: { route: Route }) {
-  if (!route || route.length < 2) return null;
-  const points = useMemo(
-    () => route.map((pt) => new THREE.Vector3(pt[0], pt[1], pt[2])),
-    [route],
-  );
-  return <Line points={points} color="blue" lineWidth={3} />;
 }

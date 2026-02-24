@@ -1,7 +1,7 @@
 import type { SearchResult, SearchQuery } from "./types/global";
 
-const SEARCH_SERVER_URL = "http://172.26.112.246:5000";
-// const SEARCH_SERVER_URL = "";
+// const SEARCH_SERVER_URL = "http://172.26.112.246:5000";
+const SEARCH_SERVER_URL = "";
 
 export async function query(
   searchQuery: SearchQuery,
