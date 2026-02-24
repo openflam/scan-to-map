@@ -13,25 +13,44 @@ User Query: {query}
 """
 
 
-OPENAI_RAG_RERANK_PROMPT = """Given the following search query and a list of candidate components retrieved by BM25, 
-select and rank the components that best match the query.
+OPENAI_RAG_RERANK_PROMPT = """Given the following user query and a list of candidate components retrieved by a search system (e.g., BM25), 
+re-rank and select the components that are most relevant.
 
-Only return those components that contain the objects almost exclusively without unrelated objects.
-Return the components in order of relevance (most relevant first).
+The user query may be:
+1. A search query describing objects (e.g., "red chairs near the window")
+2. A factual question (e.g., "What is the history of the oldest statue?")
+3. A comparative or superlative question (e.g., "Which is the largest painting?")
+4. A descriptive question about properties (e.g., "What material is the central table made of?")
 
-Search Query: {original_query}
+Your task:
+- Consider ONLY the provided candidate components.
+- Rank the relevant components in order of relevance (most relevant first).
+- Include all components that meaningfully contribute to answering or satisfying the query.
+- Prefer components that primarily contain the object(s) needed.
+- If the query involves a superlative (oldest, tallest, largest, etc.), determine which candidate best satisfies it using only the provided descriptions.
+- If no component perfectly matches, return the best available candidate.
+
+Search Query:
+{original_query}
 
 Candidate Components:
 {candidates_text}
 
-Respond with ONLY a JSON object containing:
-1. "component_ids": a comma-separated string of integer IDs of the matching components in order of relevance (e.g., "2,5,7")
-2. "reason": If the user asked a question or is seeking information about the components, answer the question here. If the query is a search query, provide a brief one-sentence explanation of why these components match the query. 
+Respond with ONLY a valid JSON object containing:
+1. "component_ids": a comma-separated string of integer IDs in ranked order (e.g., "5,2,7")
+2. "reason":
+   - If the query is a search request, explain why the ranked components match the query.
+   - If the query is a question, provide a complete answer using the information from the relevant component(s).
 
-Example response format:
-{{"component_ids": "2,5,7", "reason": "These component contain printers which match the search query. You can use them to print your documents."}}
+Example (search query):
+{{"component_ids": "5,2", "reason": "These components contain red chairs near the window and are ranked by proximity and object exclusivity."}}
 
-If no components match well, return the best matching component ID anyway."""
+Example (question):
+{{"component_ids": "3,7", "reason": "The oldest statue is the marble Roman sculpture dated to the 2nd century BCE. Another related statue in component 7 is from the 1st century CE but is newer."}}
+
+Do not include any text outside the JSON object.
+Return JSON only.
+"""
 
 # Prompts for OpenAI provider
 OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT = """Given the following user query and a list of component descriptions from a scene, determine which component IDs are most relevant.

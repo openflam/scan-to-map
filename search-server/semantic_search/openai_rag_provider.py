@@ -86,10 +86,7 @@ class OpenAIRAGProvider(SemanticSearchProvider):
 
             # Step 3: Re-rank candidates using OpenAI
             reranked_results = self._rerank_with_llm(query, candidate_ids)
-            reranked_results["reason"] = (
-                f"[RAG] BM25 Search Terms: {rewritten_query}\n\n"
-                + reranked_results["reason"]
-            )
+            print(f"[RAG] BM25 Search Terms: {rewritten_query}\n\n")
             return reranked_results
 
         except Exception as e:
