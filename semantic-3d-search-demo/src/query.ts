@@ -152,6 +152,32 @@ export async function deleteComponent(
   }
 }
 
+export async function downloadAllComponents(): Promise<
+  Array<{ connected_comp_id: number; bbox: { min: number[]; max: number[] } }>
+> {
+  console.log("Downloading all components...");
+
+  try {
+    const response = await fetch(
+      `${SEARCH_SERVER_URL}/download_all_components`,
+      { method: "GET" },
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Download failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log(`Downloaded ${data.length} components`);
+    return data;
+  } catch (error) {
+    console.error("Error downloading all components:", error);
+    throw error;
+  }
+}
+
 export async function updateComponent(
   componentId: string,
   updates: { caption?: string; bbox?: { min: number[]; max: number[] } },

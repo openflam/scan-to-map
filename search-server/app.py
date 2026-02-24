@@ -550,5 +550,40 @@ def get_component_info():
     )
 
 
+@app.route("/download_all_components", methods=["GET"])
+def download_all_components():
+    """
+    Download all components endpoint.
+    Returns a JSON array in the bbox_corners.json format expected by App.tsx:
+    [
+      {
+        "connected_comp_id": <int>,
+        "bbox": {"min": [x, y, z], "max": [x, y, z]}
+      },
+      ...
+    ]
+    """
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    cur.execute("SELECT component_id, bbox_json FROM components")
+    rows = cur.fetchall()
+    con.close()
+
+    result = []
+    for row in rows:
+        bbox = json.loads(row["bbox_json"])
+        result.append(
+            {
+                "connected_comp_id": row["component_id"],
+                "bbox": bbox,
+            }
+        )
+
+    response = jsonify(result)
+    response.headers["Content-Disposition"] = "attachment; filename=bbox_corners.json"
+    return response
+
+
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=5000)

@@ -1,7 +1,13 @@
-import { InputGroup, FormControl, Button, Form } from "react-bootstrap";
+import {
+  InputGroup,
+  FormControl,
+  Button,
+  Form,
+  ProgressBar,
+} from "react-bootstrap";
 import { useState, useRef } from "react";
-import type { SearchQuery, Route } from "./types/global";
-import { queryDirections } from "./query";
+import type { BoundingBox, SearchQuery, Route } from "./types/global";
+import { queryDirections, downloadAllComponents } from "./query";
 
 interface SearchBarProps {
   onSearch: (searchQuery: SearchQuery, method: string) => void;
@@ -11,6 +17,10 @@ interface SearchBarProps {
     destinationBBox: any,
     sourceReason: string,
     destinationReason: string,
+  ) => void;
+  onAnnotationsDownloaded: (
+    bboxes: BoundingBox[],
+    annotations: string[],
   ) => void;
   showAutoTags: boolean;
   onShowAutoTagsChange: (show: boolean) => void;
@@ -22,6 +32,7 @@ interface SearchBarProps {
 function SearchBar({
   onSearch,
   onDirections,
+  onAnnotationsDownloaded,
   showAutoTags,
   onShowAutoTagsChange,
   showOccupancyGrid,
@@ -35,6 +46,33 @@ function SearchBar({
   const [showDirections, setShowDirections] = useState(false);
   const [sourceTerm, setSourceTerm] = useState("");
   const [destinationTerm, setDestinationTerm] = useState("");
+  const [isDownloadingAnnotations, setIsDownloadingAnnotations] =
+    useState(false);
+  const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+
+  const handleDownloadAnnotations = async () => {
+    setIsDownloadingAnnotations(true);
+    try {
+      const data = await downloadAllComponents();
+      const bboxes: BoundingBox[] = data.map((item) => ({
+        x_min: item.bbox.min[1],
+        y_min: item.bbox.min[2],
+        z_min: item.bbox.min[0],
+        x_max: item.bbox.max[1],
+        y_max: item.bbox.max[2],
+        z_max: item.bbox.max[0],
+      }));
+      const annotationList: string[] = data.map((item) =>
+        item.connected_comp_id.toString(),
+      );
+      onAnnotationsDownloaded(bboxes, annotationList);
+      setAnnotationsLoaded(true);
+    } catch (error) {
+      console.error("Failed to download annotations:", error);
+    } finally {
+      setIsDownloadingAnnotations(false);
+    }
+  };
 
   const handleSearch = () => {
     if (showDirections) {
@@ -218,10 +256,30 @@ function SearchBar({
 
       <div className="d-flex align-items-center justify-content-between mb-3">
         <div className="d-flex align-items-center gap-3">
+          {isDownloadingAnnotations ? (
+            <ProgressBar
+              animated
+              striped
+              now={100}
+              label="Downloading…"
+              style={{ width: "160px", height: "31px" }}
+            />
+          ) : (
+            <Button
+              variant={annotationsLoaded ? "secondary" : "outline-secondary"}
+              disabled={annotationsLoaded}
+              onClick={handleDownloadAnnotations}
+            >
+              {annotationsLoaded
+                ? "Annotations Downloaded"
+                : "Download Annotations"}
+            </Button>
+          )}
           <Form.Check
             type="checkbox"
             label="Show Auto Tags"
             checked={showAutoTags}
+            disabled={!annotationsLoaded}
             onChange={(e) => onShowAutoTagsChange(e.target.checked)}
           />
           <Form.Check

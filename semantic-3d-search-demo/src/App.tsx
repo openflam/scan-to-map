@@ -23,33 +23,13 @@ function App() {
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
   const [route, setRoute] = useState<Route>([]);
 
-  // Load bbox_corners.json on mount
-  useEffect(() => {
-    fetch("/data/bbox_corners.json")
-      .then((response) => response.json())
-      .then((data) => {
-        // Extract bounding boxes from the JSON data.
-        // Swap axes as needed -- results of trial and error.
-        const bboxes: BoundingBox[] = data.map((item: any) => ({
-          x_min: item.bbox.min[1],
-          y_min: item.bbox.min[2],
-          z_min: item.bbox.min[0],
-          x_max: item.bbox.max[1],
-          y_max: item.bbox.max[2],
-          z_max: item.bbox.max[0],
-        }));
-        setAutoTagBBoxes(bboxes);
-
-        // Extract annotations (connected_comp_id)
-        const annotationList: string[] = data.map((item: any) =>
-          item.connected_comp_id.toString(),
-        );
-        setAnnotations(annotationList);
-      })
-      .catch((error) => {
-        console.error("Error loading bbox_corners.json:", error);
-      });
-  }, []);
+  const handleAnnotationsDownloaded = (
+    bboxes: BoundingBox[],
+    annotationList: string[],
+  ) => {
+    setAutoTagBBoxes(bboxes);
+    setAnnotations(annotationList);
+  };
 
   // Load occupancy_bbox.json on mount
   useEffect(() => {
@@ -110,6 +90,7 @@ function App() {
         <SearchBar
           onSearch={handleSearch}
           onDirections={handleDirections}
+          onAnnotationsDownloaded={handleAnnotationsDownloaded}
           showAutoTags={showAutoTags}
           onShowAutoTagsChange={setShowAutoTags}
           showOccupancyGrid={showOccupancyGrid}
