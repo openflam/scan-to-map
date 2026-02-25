@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import argparse
 import json
@@ -15,7 +15,9 @@ from semantic_search import (
 from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
 
-app = Flask(__name__)
+STATIC_DIR = Path(__file__).parent / "front-end-build"
+
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="")
 CORS(app, methods=["GET", "POST", "DELETE", "OPTIONS"])  # Enable CORS for all routes
 
 # Parse command line arguments
@@ -662,6 +664,25 @@ def download_all_components():
     response = jsonify(result)
     response.headers["Content-Disposition"] = "attachment; filename=bbox_corners.json"
     return response
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path: str):
+    """
+    Catch-all that serves the Vite-built React app.
+    Explicit API routes defined above take priority over this handler.
+    """
+    if STATIC_DIR.exists():
+        return send_from_directory(str(STATIC_DIR), "index.html")
+    return (
+        jsonify(
+            {
+                "error": "Frontend not built. Run: npm run build in semantic-3d-search-demo/"
+            }
+        ),
+        404,
+    )
 
 
 if __name__ == "__main__":
