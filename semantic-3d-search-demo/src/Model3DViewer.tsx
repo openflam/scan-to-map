@@ -23,6 +23,7 @@ interface Model3DViewerProps {
   showOccupancyGrid?: boolean;
   annotations?: string[];
   route?: Route;
+  datasetName: string;
 }
 
 const keyboardMap = [
@@ -44,6 +45,7 @@ export default function Model3DViewer({
   showOccupancyGrid,
   annotations,
   route,
+  datasetName,
 }: Model3DViewerProps) {
   const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
     null,
@@ -144,7 +146,7 @@ export default function Model3DViewer({
           max: [bboxToSave.z_max, bboxToSave.x_max, bboxToSave.y_max],
         };
       }
-      await updateComponent(currentComponentId, updates);
+      await updateComponent(currentComponentId, updates, datasetName);
       setSaveWarning(null);
     } catch (error) {
       console.error("Error saving component:", error);
@@ -166,7 +168,7 @@ export default function Model3DViewer({
         setIsLoadingComponent(true);
         try {
           const { getComponentInfo } = await import("./query");
-          const info = await getComponentInfo(selectedAutoTagId);
+          const info = await getComponentInfo(selectedAutoTagId, datasetName);
           setEditedCaption(info.caption || "");
           setComponentImage(info.image_base64);
         } catch (error) {
@@ -184,7 +186,7 @@ export default function Model3DViewer({
           setIsLoadingComponent(true);
           try {
             const { getComponentInfo } = await import("./query");
-            const info = await getComponentInfo(componentId);
+            const info = await getComponentInfo(componentId, datasetName);
             setEditedCaption(info.caption || "");
             setComponentImage(info.image_base64);
           } catch (error) {
@@ -235,7 +237,7 @@ export default function Model3DViewer({
                 ? async () => {
                     try {
                       const { deleteComponent } = await import("./query");
-                      await deleteComponent(currentComponentId);
+                      await deleteComponent(currentComponentId, datasetName);
                       setDeletedIds((prev) =>
                         new Set(prev).add(currentComponentId),
                       );

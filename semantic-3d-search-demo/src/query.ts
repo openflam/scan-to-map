@@ -1,11 +1,25 @@
 import type { SearchResult, SearchQuery } from "./types/global";
 
-// const SEARCH_SERVER_URL = "http://172.26.112.246:5000";
-const SEARCH_SERVER_URL = "";
+// export const SEARCH_SERVER_URL = "http://172.26.112.246:5000";
+export const SEARCH_SERVER_URL = "";
+
+export async function getProvidersList(): Promise<string[]> {
+  const response = await fetch(`${SEARCH_SERVER_URL}/get_providers_list`, {
+    method: "GET",
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Get providers list failed: ${response.status} ${response.statusText}`,
+    );
+  }
+  const data = await response.json();
+  return data.providers as string[];
+}
 
 export async function query(
   searchQuery: SearchQuery,
   method: string,
+  datasetName: string,
 ): Promise<SearchResult> {
   console.log("Querying with:", searchQuery, "using method:", method);
 
@@ -16,6 +30,7 @@ export async function query(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        dataset_name: datasetName,
         query: searchQuery,
         method: method,
       }),
@@ -43,6 +58,7 @@ export async function queryDirections(
   source: SearchQuery,
   destination: SearchQuery,
   method: string,
+  datasetName: string,
 ): Promise<{
   path: number[][];
   source_bbox: any;
@@ -66,6 +82,7 @@ export async function queryDirections(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        dataset_name: datasetName,
         source: source,
         destination: destination,
         method: method,
@@ -87,7 +104,10 @@ export async function queryDirections(
   }
 }
 
-export async function getComponentInfo(componentId: string): Promise<{
+export async function getComponentInfo(
+  componentId: string,
+  datasetName: string,
+): Promise<{
   component_id: string;
   caption: string;
   image_name: string;
@@ -100,7 +120,7 @@ export async function getComponentInfo(componentId: string): Promise<{
 
   try {
     const response = await fetch(
-      `${SEARCH_SERVER_URL}/get_component_info?component_id=${encodeURIComponent(componentId)}`,
+      `${SEARCH_SERVER_URL}/get_component_info?dataset_name=${encodeURIComponent(datasetName)}&component_id=${encodeURIComponent(componentId)}`,
       {
         method: "GET",
       },
@@ -124,6 +144,7 @@ export async function getComponentInfo(componentId: string): Promise<{
 
 export async function deleteComponent(
   componentId: string,
+  datasetName: string,
 ): Promise<{ component_id: string; deleted: boolean }> {
   console.log("Deleting component:", componentId);
 
@@ -133,7 +154,10 @@ export async function deleteComponent(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ component_id: componentId }),
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        component_id: componentId,
+      }),
     });
 
     if (!response.ok) {
@@ -152,14 +176,16 @@ export async function deleteComponent(
   }
 }
 
-export async function downloadAllComponents(): Promise<
+export async function downloadAllComponents(
+  datasetName: string,
+): Promise<
   Array<{ connected_comp_id: number; bbox: { min: number[]; max: number[] } }>
 > {
   console.log("Downloading all components...");
 
   try {
     const response = await fetch(
-      `${SEARCH_SERVER_URL}/download_all_components`,
+      `${SEARCH_SERVER_URL}/download_all_components?dataset_name=${encodeURIComponent(datasetName)}`,
       { method: "GET" },
     );
 
@@ -181,6 +207,7 @@ export async function downloadAllComponents(): Promise<
 export async function updateComponent(
   componentId: string,
   updates: { caption?: string; bbox?: { min: number[]; max: number[] } },
+  datasetName: string,
 ): Promise<{ component_id: string; caption?: string; bbox?: object }> {
   console.log("Updating component:", componentId, updates);
 
@@ -190,7 +217,11 @@ export async function updateComponent(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ component_id: componentId, ...updates }),
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        component_id: componentId,
+        ...updates,
+      }),
     });
 
     if (!response.ok) {

@@ -5,9 +5,13 @@ import {
   Form,
   ProgressBar,
 } from "react-bootstrap";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { BoundingBox, SearchQuery, Route } from "./types/global";
-import { queryDirections, downloadAllComponents } from "./query";
+import {
+  queryDirections,
+  downloadAllComponents,
+  getProvidersList,
+} from "./query";
 
 interface SearchBarProps {
   onSearch: (searchQuery: SearchQuery, method: string) => void;
@@ -27,6 +31,7 @@ interface SearchBarProps {
   showOccupancyGrid: boolean;
   onShowOccupancyGridChange: (show: boolean) => void;
   searchTime?: number;
+  datasetName: string;
 }
 
 function SearchBar({
@@ -38,9 +43,11 @@ function SearchBar({
   showOccupancyGrid,
   onShowOccupancyGridChange,
   searchTime,
+  datasetName,
 }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [method, setMethod] = useState("gpt-5-mini [Full]");
+  const [providers, setProviders] = useState<string[]>([]);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showDirections, setShowDirections] = useState(false);
@@ -50,10 +57,19 @@ function SearchBar({
     useState(false);
   const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
 
+  useEffect(() => {
+    getProvidersList()
+      .then((list) => {
+        setProviders(list);
+        if (list.length > 0) setMethod(list[0]);
+      })
+      .catch((err) => console.error("Failed to fetch providers list:", err));
+  }, []);
+
   const handleDownloadAnnotations = async () => {
     setIsDownloadingAnnotations(true);
     try {
-      const data = await downloadAllComponents();
+      const data = await downloadAllComponents(datasetName);
       const bboxes: BoundingBox[] = data.map((item) => ({
         x_min: item.bbox.min[1],
         y_min: item.bbox.min[2],
@@ -120,6 +136,7 @@ function SearchBar({
         sourceQuery,
         destinationQuery,
         method,
+        datasetName,
       );
       console.log("Route received:", result);
       // Convert the path to Route format (array of tuples)
@@ -179,10 +196,11 @@ function SearchBar({
           onChange={(e) => setMethod(e.target.value)}
           style={{ maxWidth: "200px" }}
         >
-          <option value="gpt-5-mini [Full]">gpt-5-mini [Full]</option>
-          <option value="gpt-5-mini [RAG]">gpt-5-mini [RAG]</option>
-          <option value="BM25">BM25</option>
-          <option value="CLIP ViT-H-14">CLIP ViT-H-14</option>
+          {providers.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
         </Form.Select>
 
         {!showDirections ? (

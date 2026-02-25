@@ -1,8 +1,8 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+import argparse
 import json
 import sqlite3
-import sys
 from pathlib import Path
 import numpy as np
 import base64
@@ -11,142 +11,74 @@ from semantic_search import (
     OpenAIProvider,
     BM25Provider,
     OpenAIRAGProvider,
-    CLIPProvider,
 )
+from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
 
 app = Flask(__name__)
 CORS(app, methods=["GET", "POST", "DELETE", "OPTIONS"])  # Enable CORS for all routes
 
-# Get dataset name from command line argument
-if len(sys.argv) < 2:
-    print("Usage: python app.py <dataset_name>")
-    print("Example: python app.py ArenaLabSemanticNeg")
-    sys.exit(1)
-
-DATASET_NAME = sys.argv[1]
-print(f"Loading data for dataset: {DATASET_NAME}")
-
-# Load component data from SQLite database
-DB_PATH = Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "components.db"
-
-if not DB_PATH.exists():
-    print(f"Error: components.db not found at {DB_PATH}")
-    print(f"Run: python create_database.py {DATASET_NAME}")
-    sys.exit(1)
-
-con = sqlite3.connect(DB_PATH)
-con.row_factory = sqlite3.Row
-cur = con.cursor()
-cur.execute("SELECT component_id, caption, bbox_json FROM components")
-rows = cur.fetchall()
-con.close()
-
-# Build component_captions dict for the CLIP provider (which still uses an in-memory dict)
-component_captions = {}
-for row in rows:
-    comp_id = row["component_id"]
-    bbox = json.loads(row["bbox_json"])
-    component_captions[comp_id] = {
-        "component_id": comp_id,
-        "caption": row["caption"],
-        "bbox": bbox,
-    }
-
-print(f"Loaded {len(component_captions)} components from database")
-
-# Load manifest.json on startup
-MANIFEST_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "crops" / "manifest.json"
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Search server for scan-to-map")
+parser.add_argument(
+    "dataset_name",
+    nargs="?",
+    default=None,
+    help=(
+        "Optional dataset name. If provided, CLIP will be pre-initialized for this dataset. "
+        "If omitted, CLIP is disabled."
+    ),
 )
+args = parser.parse_args()
 
-if not MANIFEST_PATH.exists():
-    print(f"Error: manifest.json not found at {MANIFEST_PATH}")
-    sys.exit(1)
+# CLIP state: pre-initialized at startup for a single dataset (if provided).
+# If no dataset name is given, CLIP is disabled.
+CLIP_DATASET_NAME = args.dataset_name  # None means CLIP is disabled
+clip_provider = None
 
-with open(MANIFEST_PATH, "r") as f:
-    manifest_data = json.load(f)
-
-# Initialize providers
-print("Initializing search providers...")
-
-FAISS_INDEX_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "clip_embeddings.faiss"
-)
-EMBEDDINGS_NPZ_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "clip_embeddings.npz"
-)
-CLIP_STATS_PATH = (
-    Path(__file__).parent
-    / ".."
-    / "outputs"
-    / DATASET_NAME
-    / "clip_embedding_stats.json"
-)
-
-with open(CLIP_STATS_PATH, "r") as f:
-    clip_stats = json.load(f)
-
-clip_model_name = clip_stats["model_name"]
-clip_pretrained = clip_stats["pretrained"]
-
-print(f"CLIP model configuration: {clip_model_name} ({clip_pretrained})")
-
-# Load occupancy grid and metadata
-OCCUPANCY_GRID_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "occupancy_grid.npy"
-)
-OCCUPANCY_METADATA_PATH = (
-    Path(__file__).parent
-    / ".."
-    / "outputs"
-    / DATASET_NAME
-    / "occupancy_grid_metadata.json"
-)
-FLOOR_HEIGHT_PATH = (
-    Path(__file__).parent / ".." / "outputs" / DATASET_NAME / "floor_height.json"
-)
-
-if OCCUPANCY_GRID_PATH.exists() and OCCUPANCY_METADATA_PATH.exists():
-    occupancy_grid = np.load(OCCUPANCY_GRID_PATH)
-    with open(OCCUPANCY_METADATA_PATH, "r") as f:
-        occupancy_metadata = json.load(f)
-    print(f"Loaded occupancy grid: {occupancy_grid.shape}")
-
-    # Load floor height if available
-    floor_height_file = str(FLOOR_HEIGHT_PATH) if FLOOR_HEIGHT_PATH.exists() else None
-    if floor_height_file:
-        print(f"Loaded floor height file: {FLOOR_HEIGHT_PATH}")
-    else:
-        print("Warning: Floor height file not found. Using default z-coordinates.")
+if CLIP_DATASET_NAME is not None:
+    print(f"Pre-initializing CLIP for dataset: {CLIP_DATASET_NAME}")
+    OUTPUTS_ROOT = Path(__file__).parent / ".." / "outputs"
+    clip_provider = load_clip_provider(CLIP_DATASET_NAME, OUTPUTS_ROOT)
+    print("CLIP initialized successfully")
 else:
-    occupancy_grid = None
-    occupancy_metadata = None
-    floor_height_file = None
-    print("Warning: Occupancy grid not found. Routing will be disabled.")
+    print(
+        "No dataset provided at startup — CLIP disabled. "
+        "Pass a dataset name as a positional argument to enable CLIP."
+    )
 
-openai_provider = OpenAIProvider(str(DB_PATH), model="gpt-5-mini")
-bm25_provider = BM25Provider(str(DB_PATH))
-openai_rag_provider_gpt_5_mini = OpenAIRAGProvider(
-    str(DB_PATH), model="gpt-5-mini", bm25_top_k=20
-)
-clip_provider = CLIPProvider(
-    faiss_index_path=str(FAISS_INDEX_PATH),
-    embeddings_npz_path=str(EMBEDDINGS_NPZ_PATH),
-    component_captions=component_captions,
-    model_name=clip_model_name,
-    pretrained=clip_pretrained,
-)
 
-print("Providers initialized successfully")
+@app.route("/load_mesh", methods=["GET"])
+def load_mesh():
+    """
+    Serves the raw.glb mesh file for the requested dataset.
+    """
+    dataset_name = request.args.get("dataset_name")
+    if not dataset_name:
+        return jsonify({"error": "dataset_name query parameter is required"}), 400
+    mesh_path = (
+        Path(__file__).parent
+        / ".."
+        / "data"
+        / dataset_name
+        / "polycam_data"
+        / "raw.glb"
+    )
+    if not mesh_path.exists():
+        return jsonify({"error": f"Mesh file not found at {mesh_path}"}), 404
+    return send_file(mesh_path, mimetype="model/gltf-binary")
 
-# Map method names to providers
-PROVIDERS = {
-    "gpt-5-mini [Full]": openai_provider,
-    "BM25": bm25_provider,
-    "gpt-5-mini [RAG]": openai_rag_provider_gpt_5_mini,
-    "CLIP ViT-H-14": clip_provider,
-}
+
+@app.route("/get_providers_list", methods=["GET"])
+def get_providers_list():
+    """
+    Returns the list of available search provider names.
+    CLIP ViT-H-14 is only listed when it was pre-initialized at startup.
+    """
+    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]"]
+    if clip_provider is not None:
+        providers.append("CLIP ViT-H-14")
+    return jsonify({"providers": providers})
 
 
 def transform_coordinates(coords):
@@ -182,6 +114,37 @@ def transform_bbox(bbox):
     }
 
 
+def get_db_path(dataset_name):
+    """Return the Path to the components.db for the given dataset."""
+    return Path(__file__).parent / ".." / "outputs" / dataset_name / "components.db"
+
+
+def initialize_provider(method, db_path, dataset_name):
+    """
+    Initialize and return the appropriate search provider for the given method.
+
+    Non-CLIP providers (OpenAI, BM25) are cheap to initialize and are created
+    fresh per request from the given db_path.
+
+    CLIP is expensive to initialize, so it is pre-loaded at startup for a single
+    dataset.  It is only returned here when the requested dataset_name matches
+    CLIP_DATASET_NAME and the provider was successfully initialized at startup.
+    """
+    if method == "gpt-5-mini [Full]":
+        return OpenAIProvider(str(db_path), model="gpt-5-mini")
+    elif method == "BM25":
+        return BM25Provider(str(db_path))
+    elif method == "gpt-5-mini [RAG]":
+        return OpenAIRAGProvider(str(db_path), model="gpt-5-mini", bm25_top_k=20)
+    elif method == "CLIP ViT-H-14":
+        if clip_provider is None:
+            return None  # CLIP was not initialized at startup
+        if dataset_name != CLIP_DATASET_NAME:
+            return None  # CLIP is only available for the startup dataset
+        return clip_provider
+    return None
+
+
 @app.route("/search", methods=["POST"])
 def search():
     """
@@ -196,16 +159,40 @@ def search():
     - y_max = bbox.max[2]
     - z_max = bbox.max[0]
     """
-    # Get search query and method
+    # Get search query, method, and dataset_name
+    dataset_name = request.json.get("dataset_name")
     search_query = request.json.get("query")
     method = request.json.get("method")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
 
     if not search_query or len(search_query) == 0:
         return jsonify({"error": "No query provided"}), 400
 
-    # Get the appropriate provider based on the method
-    provider = PROVIDERS.get(method)
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
+
+    # Initialize the appropriate provider
+    provider = initialize_provider(method, db_path, dataset_name)
     if provider is None:
+        if method == "CLIP ViT-H-14":
+            return (
+                jsonify(
+                    {
+                        "error": "CLIP is not available for this dataset. Start the server with the dataset name to enable CLIP."
+                    }
+                ),
+                400,
+            )
         return jsonify({"error": f"Invalid method: {method}"}), 400
 
     # Unpack the search query (assume only one entry for now)
@@ -219,10 +206,20 @@ def search():
     print(f"Processing query type '{query_type}' using method: '{method}'")
 
     # Validate query type compatibility with provider
+    if query_type == "image" and clip_provider is None:
+        return (
+            jsonify(
+                {
+                    "error": "Image queries are not available: CLIP was not initialized at startup"
+                }
+            ),
+            400,
+        )
+
     if query_type == "image" and method != "CLIP ViT-H-14":
         return (
             jsonify(
-                {"error": f"Image queries are only supported with CLIP ViT-H-14 method"}
+                {"error": "Image queries are only supported with CLIP ViT-H-14 method"}
             ),
             400,
         )
@@ -240,7 +237,7 @@ def search():
         query_input = query_value
 
     # Find the most relevant component bounding boxes and reason using the selected provider
-    result_data = process_query(query_input, str(DB_PATH), provider)
+    result_data = process_query(query_input, str(db_path), provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     component_ids = result_data["component_ids"]  # List of component IDs
     reason = result_data["reason"]
@@ -249,7 +246,7 @@ def search():
     # Fetch fresh captions from the database for the returned component IDs
     if component_ids:
         placeholders = ",".join("?" * len(component_ids))
-        con = sqlite3.connect(DB_PATH)
+        con = sqlite3.connect(db_path)
         con.row_factory = sqlite3.Row
         cur = con.cursor()
         cur.execute(
@@ -287,15 +284,14 @@ def get_route():
     Route calculation endpoint.
     Takes source and destination search terms and returns a path.
     """
-    # Check if occupancy grid is loaded
-    if occupancy_grid is None or occupancy_metadata is None:
-        return jsonify({"error": "Occupancy grid not available"}), 503
-
-    # Get source, destination, and method from request
     data = request.json
+    dataset_name = data.get("dataset_name")
     source = data.get("source")
     destination = data.get("destination")
     method = data.get("method")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
 
     if not source or not destination:
         return jsonify({"error": "Both source and destination are required"}), 400
@@ -303,9 +299,43 @@ def get_route():
     if not method:
         return jsonify({"error": "Method is required"}), 400
 
-    # Get the appropriate provider based on the method
-    provider = PROVIDERS.get(method)
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
+
+    # Load occupancy grid and metadata on demand
+    dataset_dir = Path(__file__).parent / ".." / "outputs" / dataset_name
+    occupancy_grid_path = dataset_dir / "occupancy_grid.npy"
+    occupancy_metadata_path = dataset_dir / "occupancy_grid_metadata.json"
+    floor_height_path = dataset_dir / "floor_height.json"
+
+    if not occupancy_grid_path.exists() or not occupancy_metadata_path.exists():
+        return jsonify({"error": "Occupancy grid not available"}), 503
+
+    occupancy_grid = np.load(occupancy_grid_path)
+    with open(occupancy_metadata_path, "r") as f:
+        occupancy_metadata = json.load(f)
+    floor_height_file = str(floor_height_path) if floor_height_path.exists() else None
+
+    # Initialize the appropriate provider
+    provider = initialize_provider(method, db_path, dataset_name)
     if provider is None:
+        if method == "CLIP ViT-H-14":
+            return (
+                jsonify(
+                    {
+                        "error": "CLIP is not available for this dataset. Start the server with the dataset name to enable CLIP."
+                    }
+                ),
+                400,
+            )
         return jsonify({"error": f"Invalid method: {method}"}), 400
 
     # Assume source and destination are single queries
@@ -328,11 +358,11 @@ def get_route():
     )
 
     # Process source query
-    source_result = process_query(source_input, str(DB_PATH), provider)
+    source_result = process_query(source_input, str(db_path), provider)
     source_bboxes = source_result["bbox"]
 
     # Process destination query
-    destination_result = process_query(destination_input, str(DB_PATH), provider)
+    destination_result = process_query(destination_input, str(db_path), provider)
     destination_bboxes = destination_result["bbox"]
 
     # Use the first bounding box from each result
@@ -382,9 +412,24 @@ def update_component():
     bbox must be in the format: {"min": [x, y, z], "max": [x, y, z]}
     """
     data = request.json
+    dataset_name = data.get("dataset_name")
     component_id = data.get("component_id")
     new_caption = data.get("caption")
     new_bbox = data.get("bbox")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
+
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
 
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
@@ -412,7 +457,7 @@ def update_component():
         params.append(json.dumps(new_bbox))
     params.append(comp_id_int)
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute(
@@ -441,17 +486,32 @@ def delete_component():
     Deletes the component with the given component ID from the database.
     """
     data = request.json
+    dataset_name = data.get("dataset_name")
     component_id = data.get("component_id")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
 
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
+
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
 
     try:
         comp_id_int = int(component_id)
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(db_path)
     cur = con.cursor()
     cur.execute("DELETE FROM components WHERE component_id = ?", (comp_id_int,))
     con.commit()
@@ -470,10 +530,25 @@ def get_component_info():
     Get component information endpoint.
     Returns the caption and corresponding crop image with highest fraction_visible for a given component ID.
     """
+    dataset_name = request.args.get("dataset_name")
     component_id = request.args.get("component_id")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name query parameter is required"}), 400
 
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
+
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
 
     # Query the database for caption and best_crop
     try:
@@ -481,7 +556,7 @@ def get_component_info():
     except ValueError:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute(
@@ -507,20 +582,12 @@ def get_component_info():
             }
         )
 
-    # Look up the crop metadata in the manifest using the stored filename
-    crop_meta = {}
-    component_crops = manifest_data.get(component_id, {}).get("crops", [])
-    for crop in component_crops:
-        if crop.get("crop_filename") == crop_filename:
-            crop_meta = crop
-            break
-
     # Read the crop image file and encode as base64
     image_path = (
         Path(__file__).parent
         / ".."
         / "outputs"
-        / DATASET_NAME
+        / dataset_name
         / "crops"
         / f"component_{component_id}"
         / crop_filename
@@ -543,9 +610,6 @@ def get_component_info():
             "caption": caption,
             "crop_filename": crop_filename,
             "image_base64": image_base64,
-            "fraction_visible": crop_meta.get("fraction_visible"),
-            "source_image": crop_meta.get("source_image"),
-            "crop_coordinates": crop_meta.get("crop_coordinates"),
         }
     )
 
@@ -563,7 +627,22 @@ def download_all_components():
       ...
     ]
     """
-    con = sqlite3.connect(DB_PATH)
+    dataset_name = request.args.get("dataset_name")
+    if not dataset_name:
+        return jsonify({"error": "dataset_name query parameter is required"}), 400
+
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
+
+    con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute("SELECT component_id, bbox_json FROM components")

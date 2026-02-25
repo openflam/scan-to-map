@@ -1,13 +1,20 @@
 import { Container, Row } from "react-bootstrap";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
 import SearchResult from "./SearchResult";
-import { query } from "./query";
+import { query, SEARCH_SERVER_URL } from "./query";
 import type { BoundingBox, SearchQuery, Route } from "./types/global";
 
+/** Read the dataset name from the `dataset_name` query parameter, e.g. "?dataset_name=ProjectLabNeg" */
+function getDatasetNameFromPath(): string | null {
+  return new URLSearchParams(window.location.search).get("dataset_name");
+}
+
 function App() {
+  const datasetName = useMemo(() => getDatasetNameFromPath(), []);
+
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [captions, setCaptions] = useState<string[]>([]);
   const [componentIds, setComponentIds] = useState<string[]>([]);
@@ -56,7 +63,7 @@ function App() {
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     setIsLoading(true);
     setSearchResult(undefined);
-    const result = await query(searchQuery, method);
+    const result = await query(searchQuery, method, datasetName!);
     setRoute([]); // Clear any existing route
     // Extract bounding boxes, captions, and component IDs from components
     setBoundingBox(result.components.map((c) => c.bbox));
@@ -84,6 +91,15 @@ function App() {
     setSearchResult(combinedReason);
   };
 
+  if (!datasetName) {
+    return (
+      <Container className="pt-5 text-center">
+        <h1>404 — Dataset Not Found</h1>
+        <p className="text-muted">No dataset name was provided in the URL.</p>
+      </Container>
+    );
+  }
+
   return (
     <Container className="pt-3">
       <Row>
@@ -96,11 +112,12 @@ function App() {
           showOccupancyGrid={showOccupancyGrid}
           onShowOccupancyGridChange={setShowOccupancyGrid}
           searchTime={searchTime}
+          datasetName={datasetName}
         />
       </Row>
       <Row style={{ height: "80vh" }}>
         <Model3DViewer
-          source="/data/raw.glb"
+          source={`${SEARCH_SERVER_URL}/load_mesh?dataset_name=${encodeURIComponent(datasetName)}`}
           boundingBox={boundingBox}
           captions={captions}
           componentIds={componentIds}
@@ -110,6 +127,7 @@ function App() {
           showOccupancyGrid={showOccupancyGrid}
           annotations={annotations}
           route={route}
+          datasetName={datasetName}
         />
       </Row>
       <Row>
