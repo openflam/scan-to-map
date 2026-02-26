@@ -1,4 +1,11 @@
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import (
+    Flask,
+    request,
+    jsonify,
+    send_file,
+    send_from_directory,
+    render_template,
+)
 from flask_cors import CORS
 import argparse
 import json
@@ -666,12 +673,48 @@ def download_all_components():
     return response
 
 
-@app.route("/", defaults={"path": ""})
+@app.route("/")
+def index():
+    """
+    Root route.
+    If a dataset_name query parameter is supplied, serve the Vite-built React app.
+    Otherwise, render the dataset picker page, discovering available datasets by
+    scanning the outputs directory for subdirectories that contain a components.db.
+    """
+    dataset_name = request.args.get("dataset_name")
+
+    if dataset_name:
+        # A dataset was chosen — hand off to the React SPA
+        if STATIC_DIR.exists():
+            return send_from_directory(str(STATIC_DIR), "index.html")
+        return (
+            jsonify(
+                {
+                    "error": "Frontend not built. Run: npm run build in semantic-3d-search-demo/"
+                }
+            ),
+            404,
+        )
+
+    # No dataset selected — show the picker
+    outputs_root = Path(__file__).parent / ".." / "outputs"
+    datasets = (
+        sorted(
+            d.name
+            for d in outputs_root.iterdir()
+            if d.is_dir() and (d / "components.db").exists()
+        )
+        if outputs_root.exists()
+        else []
+    )
+
+    return render_template("dataset_picker.html", datasets=datasets)
+
+
 @app.route("/<path:path>")
 def serve_frontend(path: str):
     """
-    Catch-all that serves the Vite-built React app.
-    Explicit API routes defined above take priority over this handler.
+    Catch-all that serves the Vite-built React app for all non-API paths.
     """
     if STATIC_DIR.exists():
         return send_from_directory(str(STATIC_DIR), "index.html")
