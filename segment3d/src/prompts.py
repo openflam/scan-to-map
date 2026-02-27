@@ -10,12 +10,3 @@ that captures what this object or region is. Focus on:
 3. Any notable features or context
 
 Keep the caption clear and factual, suitable for 3D semantic search."""
-
-CLASSIFy_IMAGE_PROMPT = \
-"""Classify the image as Object or Scene.
-
-Object: A single coherent object is the main focus, even if it has many parts (e.g., a printer, an open computer case). Background should not contain multiple distinct objects.
-
-Scene: The image contains multiple distinct objects or a wide view (room, street, landscape, etc.).
-
-Output only one word: Object or Scene."""
