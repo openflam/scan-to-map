@@ -15,7 +15,7 @@ __pycache__
 .vscode
 
 # Ignore temporary files
-temp.ipynb
+*temp.ipynb
 
 # Environment files
 .env
