@@ -20,8 +20,6 @@ services:
       # Values set in the 'environment' block below take precedence.
       - ./search-server/.env
     environment:
-      # Override OPENAI_API_KEY from the host environment if provided.
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       # Set DATASET_NAME to pre-load CLIP at startup for a specific dataset.
       # Leave empty (the default) to disable CLIP and use only text-based providers.
       - DATASET_NAME=${DATASET_NAME:-}
