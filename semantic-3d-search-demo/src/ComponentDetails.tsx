@@ -29,7 +29,7 @@ export default function ComponentDetails({
   onDismiss,
   onSave,
   saveWarning,
-  componentId: _componentId,
+  componentId,
   imageBase64,
   isLoading,
   editedBBox: _editedBBox,
@@ -39,7 +39,7 @@ export default function ComponentDetails({
 }: ComponentDetailsProps) {
   return (
     <div style={styles.panel}>
-      <h3 style={styles.sectionLabel}>Annotation Detail</h3>
+      <h3 style={styles.sectionLabel}>Component {componentId}</h3>
 
       {isLoading ? (
         <div style={styles.loadingContainer}>

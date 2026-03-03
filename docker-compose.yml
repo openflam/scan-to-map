@@ -11,6 +11,10 @@ services:
     ports:
       - "5000:5000"
     volumes:
+      # Live-mount the search-server source so code changes take effect without
+      # rebuilding the image.  Restart the container (docker compose restart
+      # search-server) to pick up changes; no --build required.
+      - ./search-server:/app/search-server
       # data/ and outputs/ are mounted at the level expected by app.py
       # (Path(__file__).parent / ".." / "data"  →  /app/data)
       - ./data:/app/data:ro
