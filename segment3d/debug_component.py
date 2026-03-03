@@ -37,6 +37,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from src.io_paths import (
+    get_colmap_model_dir,
     get_images_dir,
     get_masks_dir,
     get_outputs_dir,
@@ -143,6 +144,44 @@ def render_mask_image(
 
 
 # ---------------------------------------------------------------------------
+# Point cloud helpers
+# ---------------------------------------------------------------------------
+
+
+def write_ply(path: Path, xyzs: np.ndarray, rgbs: np.ndarray) -> None:
+    """Write a binary little-endian PLY file with float32 XYZ and uint8 RGB."""
+    n = len(xyzs)
+    header = (
+        "ply\n"
+        "format binary_little_endian 1.0\n"
+        f"element vertex {n}\n"
+        "property float x\n"
+        "property float y\n"
+        "property float z\n"
+        "property uchar red\n"
+        "property uchar green\n"
+        "property uchar blue\n"
+        "end_header\n"
+    )
+    # Build a structured array: 3x float32 + 3x uint8 = 15 bytes per point
+    dtype = np.dtype([
+        ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
+        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
+    ])
+    data = np.empty(n, dtype=dtype)
+    data["x"] = xyzs[:, 0].astype(np.float32)
+    data["y"] = xyzs[:, 1].astype(np.float32)
+    data["z"] = xyzs[:, 2].astype(np.float32)
+    data["red"]   = rgbs[:, 0]
+    data["green"] = rgbs[:, 1]
+    data["blue"]  = rgbs[:, 2]
+
+    with path.open("wb") as f:
+        f.write(header.encode("ascii"))
+        f.write(data.tobytes())
+
+
+# ---------------------------------------------------------------------------
 # Main logic
 # ---------------------------------------------------------------------------
 
@@ -170,6 +209,11 @@ def debug_component(
         print(
             "[warn] Could not resolve images_dir – overlays will use white background."
         )
+    try:
+        colmap_model_dir = get_colmap_model_dir(config)
+    except Exception:
+        colmap_model_dir = None
+        print("[warn] Could not resolve colmap_model_dir – skipping point cloud export.")
 
     components_path = outputs_dir / "connected_components.json"
     if not components_path.exists():
@@ -248,6 +292,35 @@ def debug_component(
         return
 
     print(f"\nAll images saved to: {out_dir}")
+
+    # -----------------------------------------------------------------------
+    # Point cloud export
+    # -----------------------------------------------------------------------
+    if colmap_model_dir is not None:
+        print("\nBuilding point cloud...")
+        from src.colmap_io import load_colmap_model
+
+        _, _, points3D = load_colmap_model(str(colmap_model_dir))
+
+        component_ids = set(component["set_of_point3DIds"])
+
+        all_ids = list(points3D.keys())
+        xyzs = np.array([points3D[pid].xyz for pid in all_ids], dtype=np.float32)
+
+        # COLMAP is Z-up; convert to Y-up for standard 3D viewers:
+        #   new X =  old X,  new Y =  old Z,  new Z = -old Y
+        xyzs = np.stack([xyzs[:, 0], xyzs[:, 2], -xyzs[:, 1]], axis=1)
+        rgbs = np.zeros((len(all_ids), 3), dtype=np.uint8)
+
+        for i, pid in enumerate(all_ids):
+            if pid in component_ids:
+                rgbs[i] = (255, 0, 0)   # red – component points
+            else:
+                rgbs[i] = (255, 255, 255)  # white – everything else
+
+        ply_path = out_dir / f"component_{component_id}.ply"
+        write_ply(ply_path, xyzs, rgbs)
+        print(f"Point cloud saved to: {ply_path}")
 
     if display:
         try:
