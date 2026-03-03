@@ -15,30 +15,39 @@ from scipy import sparse
 
 def load_single_association(
     file_path: Path, min_points: int
-) -> List[Tuple[Tuple[int, int], Set[int]]]:
+) -> List[Tuple[Tuple[int, int], Set[int], str]]:
     """
     Worker function to load a single JSON file.
-    Returns a list of ((image_id, mask_idx), point_set) tuples.
+    Returns a list of ((image_id, mask_idx), point_set, mask_id) tuples.
     """
     with file_path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
     image_id = data["image_id"]
     mask_point3d_sets = data["mask_point3d_sets"]
+    # Support legacy association files that pre-date mask_id tracking
+    image_name = data.get("image_name", str(image_id))
+    frame_stem = Path(image_name).stem
+    stored_mask_ids = data.get("mask_ids", None)
     results = []
 
     for mask_idx, point3d_list in enumerate(mask_point3d_sets):
         if len(point3d_list) < min_points:
             continue
+        # Use stored mask_id if available, otherwise derive it
+        if stored_mask_ids and mask_idx < len(stored_mask_ids):
+            mask_id = stored_mask_ids[mask_idx]
+        else:
+            mask_id = f"{frame_stem}_mask_{mask_idx}"
         # Convert to set here to save main thread from doing it
-        results.append(((image_id, mask_idx), set(point3d_list)))
+        results.append(((image_id, mask_idx), set(point3d_list), mask_id))
 
     return results
 
 
 def load_associations_parallel(
     associations_dir, min_points: int = 10
-) -> Dict[Tuple[int, int], Set[int]]:
+) -> Tuple[Dict[Tuple[int, int], Set[int]], Dict[Tuple[int, int], str]]:
     """
     Load all association files in parallel using ProcessPoolExecutor.
 
@@ -47,10 +56,13 @@ def load_associations_parallel(
         min_points: Minimum number of points required for a mask to be included
 
     Returns:
-        Dictionary mapping (image_id, mask_idx) to set of 3D point IDs
+        Tuple of:
+          - Dictionary mapping (image_id, mask_idx) to set of 3D point IDs
+          - Dictionary mapping (image_id, mask_idx) to mask_id string
     """
     associations_dir = Path(associations_dir)
     per_image_sets: Dict[Tuple[int, int], Set[int]] = {}
+    node_to_mask_id: Dict[Tuple[int, int], str] = {}
 
     # Find all association files
     association_files = sorted(associations_dir.glob("imageId_*.json"))
@@ -72,12 +84,13 @@ def load_associations_parallel(
         for future in concurrent.futures.as_completed(futures):
             try:
                 results = future.result()
-                for node_key, point_set in results:
+                for node_key, point_set, mask_id in results:
                     per_image_sets[node_key] = point_set
+                    node_to_mask_id[node_key] = mask_id
             except Exception as exc:
                 print(f"File loading generated an exception: {exc}")
 
-    return per_image_sets
+    return per_image_sets, node_to_mask_id
 
 
 def build_edges_scipy(
@@ -213,7 +226,7 @@ def build_mask_graph_cli(
 
     # Load associations (Parallelized)
     print("\nLoading associations...")
-    per_image_sets = load_associations_parallel(associations_dir)
+    per_image_sets, node_to_mask_id = load_associations_parallel(associations_dir)
 
     # Count statistics
     total_nodes = len(per_image_sets)
@@ -269,13 +282,17 @@ def build_mask_graph_cli(
         for comp_id, component in enumerate(connected_components):
             # Union all 3D point IDs from all nodes in this component
             point3d_union = set()
+            mask_id_set = set()
             for node in component:
                 point3d_union.update(per_image_sets[node])
+                if node in node_to_mask_id:
+                    mask_id_set.add(node_to_mask_id[node])
 
             if len(point3d_union) >= min_points_in_3D_segment:
                 connected_components_list.append(
                     {
                         "connected_comp_id": comp_id,
+                        "mask_id_set": sorted(list(mask_id_set)),
                         "set_of_point3DIds": sorted(list(point3d_union)),
                     }
                 )

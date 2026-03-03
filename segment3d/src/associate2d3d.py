@@ -113,9 +113,14 @@ def process_single_image(
         # Heavy lifting happens here
         mask_point_lists = points_in_masks_vectorized(xys, point3D_ids, masks_rle, H, W)
 
+        # Build mask_ids: "{frame_stem}_mask_{idx}" for each mask
+        frame_stem = Path(image_name).stem
+        mask_ids = [f"{frame_stem}_mask_{i}" for i in range(len(masks_rle))]
+
         output_data = {
             "image_id": image_id,
             "image_name": image_name,
+            "mask_ids": mask_ids,
             "mask_point3d_sets": mask_point_lists,
             "H": H,
             "W": W,
