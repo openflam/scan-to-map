@@ -84,3 +84,13 @@ See `CLI_REFERENCE.md` for more details on individual steps.
 ```bash
 ./run_floordetection.sh <datasetname>
 ```
+
+# Debug component script
+
+The `debug_component.py` script allows you to run and visualize individual components of the pipeline for debugging purposes. You can specify which component.
+
+### Usage
+
+```bash
+python debug_component.py --dataset_name <dataset_name> --component_id <component_id>
+```
