@@ -36,15 +36,20 @@ except ImportError:
 _SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
-from src.io_paths import get_images_dir, get_masks_dir, get_outputs_dir, load_config  # noqa: E402
+from src.io_paths import (
+    get_images_dir,
+    get_masks_dir,
+    get_outputs_dir,
+    load_config,
+)  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-OVERLAY_COLOR = (255, 80, 0)   # orange-red for the mask fill
-OVERLAY_ALPHA = 0.55           # blend amount
+OVERLAY_COLOR = (255, 80, 0)  # orange-red for the mask fill
+OVERLAY_ALPHA = 0.55  # blend amount
 
 
 def parse_mask_id(mask_id: str):
@@ -111,7 +116,10 @@ def render_mask_image(
 
     # Draw a red border along the mask boundary (dilate XOR erode)
     from scipy.ndimage import binary_dilation, binary_erosion
-    border = binary_dilation(mask_bool, iterations=2) & ~binary_erosion(mask_bool, iterations=2)
+
+    border = binary_dilation(mask_bool, iterations=2) & ~binary_erosion(
+        mask_bool, iterations=2
+    )
     blended[border] = (220, 0, 0)  # red border
 
     img = Image.fromarray(blended, mode="RGB")
@@ -119,15 +127,16 @@ def render_mask_image(
     # Draw label
     draw = ImageDraw.Draw(img)
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18
+        )
     except OSError:
         font = ImageFont.load_default()
 
     label = mask_id
     # Semi-transparent label background
     bbox = draw.textbbox((4, 4), label, font=font)
-    draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2],
-                   fill=(0, 0, 0))
+    draw.rectangle([bbox[0] - 2, bbox[1] - 2, bbox[2] + 2, bbox[3] + 2], fill=(0, 0, 0))
     draw.text((4, 4), label, fill=(255, 255, 255), font=font)
 
     return img
@@ -136,6 +145,7 @@ def render_mask_image(
 # ---------------------------------------------------------------------------
 # Main logic
 # ---------------------------------------------------------------------------
+
 
 def load_original_image(images_dir: Path, frame_stem: str) -> Optional[Image.Image]:
     """Try common extensions and return a PIL image, or None if not found."""
@@ -147,7 +157,9 @@ def load_original_image(images_dir: Path, frame_stem: str) -> Optional[Image.Ima
     return None
 
 
-def debug_component(dataset_name: str, component_id: int, display: bool = False) -> None:
+def debug_component(
+    dataset_name: str, component_id: int, display: bool = False
+) -> None:
     config = load_config(dataset_name)
     masks_dir = get_masks_dir(config)
     outputs_dir = get_outputs_dir(config)
@@ -155,7 +167,9 @@ def debug_component(dataset_name: str, component_id: int, display: bool = False)
         images_dir = get_images_dir(config)
     except Exception:
         images_dir = None
-        print("[warn] Could not resolve images_dir – overlays will use white background.")
+        print(
+            "[warn] Could not resolve images_dir – overlays will use white background."
+        )
 
     components_path = outputs_dir / "connected_components.json"
     if not components_path.exists():
@@ -210,8 +224,10 @@ def debug_component(dataset_name: str, component_id: int, display: bool = False)
 
         for mask_idx, mask_id in sorted(by_frame[frame_stem]):
             if mask_idx >= len(masks_list):
-                print(f"  [warn] mask index {mask_idx} out of range for {frame_stem} "
-                      f"(file has {len(masks_list)} masks)")
+                print(
+                    f"  [warn] mask index {mask_idx} out of range for {frame_stem} "
+                    f"(file has {len(masks_list)} masks)"
+                )
                 continue
 
             try:
@@ -236,19 +252,22 @@ def debug_component(dataset_name: str, component_id: int, display: bool = False)
     if display:
         try:
             import matplotlib.pyplot as plt
-            fig, axes = plt.subplots(
-                1, len(rendered), figsize=(4 * len(rendered), 4)
-            ) if len(rendered) > 1 else plt.subplots(1, 1, figsize=(6, 6))
+
+            fig, axes = (
+                plt.subplots(1, len(rendered), figsize=(4 * len(rendered), 4))
+                if len(rendered) > 1
+                else plt.subplots(1, 1, figsize=(6, 6))
+            )
 
             axes_flat = [axes] if len(rendered) == 1 else axes.flat
-            for ax, img, mask_id in zip(axes_flat, rendered,
-                                        sorted(mask_id_set)):
+            for ax, img, mask_id in zip(axes_flat, rendered, sorted(mask_id_set)):
                 ax.imshow(img)
                 ax.set_title(mask_id, fontsize=7)
                 ax.axis("off")
 
-            fig.suptitle(f"Component {component_id} – {len(rendered)} masks",
-                         fontsize=12)
+            fig.suptitle(
+                f"Component {component_id} – {len(rendered)} masks", fontsize=12
+            )
             plt.tight_layout()
             plt.show()
         except ImportError:
@@ -260,16 +279,21 @@ def main() -> None:
         description="Visualize all masks that contributed to a connected component"
     )
     parser.add_argument(
-        "--dataset_name", type=str, required=True,
-        help="Dataset name (e.g. ProjectLabStudio_NoNeg)"
+        "--dataset_name",
+        type=str,
+        required=True,
+        help="Dataset name (e.g. ProjectLabStudio_NoNeg)",
     )
     parser.add_argument(
-        "--component_id", type=int, required=True,
-        help="The connected_comp_id to inspect"
+        "--component_id",
+        type=int,
+        required=True,
+        help="The connected_comp_id to inspect",
     )
     parser.add_argument(
-        "--display", action="store_true",
-        help="Show images interactively using matplotlib"
+        "--display",
+        action="store_true",
+        help="Show images interactively using matplotlib",
     )
     args = parser.parse_args()
     debug_component(
