@@ -164,17 +164,23 @@ def write_ply(path: Path, xyzs: np.ndarray, rgbs: np.ndarray) -> None:
         "end_header\n"
     )
     # Build a structured array: 3x float32 + 3x uint8 = 15 bytes per point
-    dtype = np.dtype([
-        ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
-        ("red", "u1"), ("green", "u1"), ("blue", "u1"),
-    ])
+    dtype = np.dtype(
+        [
+            ("x", "<f4"),
+            ("y", "<f4"),
+            ("z", "<f4"),
+            ("red", "u1"),
+            ("green", "u1"),
+            ("blue", "u1"),
+        ]
+    )
     data = np.empty(n, dtype=dtype)
     data["x"] = xyzs[:, 0].astype(np.float32)
     data["y"] = xyzs[:, 1].astype(np.float32)
     data["z"] = xyzs[:, 2].astype(np.float32)
-    data["red"]   = rgbs[:, 0]
+    data["red"] = rgbs[:, 0]
     data["green"] = rgbs[:, 1]
-    data["blue"]  = rgbs[:, 2]
+    data["blue"] = rgbs[:, 2]
 
     with path.open("wb") as f:
         f.write(header.encode("ascii"))
@@ -213,7 +219,9 @@ def debug_component(
         colmap_model_dir = get_colmap_model_dir(config)
     except Exception:
         colmap_model_dir = None
-        print("[warn] Could not resolve colmap_model_dir – skipping point cloud export.")
+        print(
+            "[warn] Could not resolve colmap_model_dir – skipping point cloud export."
+        )
 
     components_path = outputs_dir / "connected_components.json"
     if not components_path.exists():
@@ -314,7 +322,7 @@ def debug_component(
 
         for i, pid in enumerate(all_ids):
             if pid in component_ids:
-                rgbs[i] = (255, 0, 0)   # red – component points
+                rgbs[i] = (255, 0, 0)  # red – component points
             else:
                 rgbs[i] = (255, 255, 255)  # white – everything else
 
