@@ -91,11 +91,14 @@ def render_mask_image(
     mask_bool: np.ndarray,
     mask_id: str,
     orig_image: Optional[Image.Image] = None,
+    only_mask: bool = False,
 ) -> Image.Image:
     """
     Create an RGB image showing the mask as a semi-transparent coloured overlay.
     If orig_image is provided it is used as the background; otherwise falls back
     to a plain white background.
+    If only_mask is True, show only the original image pixels inside the mask;
+    everything outside is white.
     """
     H, W = mask_bool.shape
 
@@ -107,21 +110,26 @@ def render_mask_image(
     else:
         bg = np.full((H, W, 3), 255, dtype=np.uint8)
 
-    # Apply overlay colour where mask is True
-    overlay = bg.copy()
-    overlay[mask_bool] = OVERLAY_COLOR
+    if only_mask:
+        # Show original pixels inside mask; white outside
+        blended = np.full((H, W, 3), 255, dtype=np.uint8)
+        blended[mask_bool] = bg[mask_bool]
+    else:
+        # Apply overlay colour where mask is True
+        overlay = bg.copy()
+        overlay[mask_bool] = OVERLAY_COLOR
 
-    # Blend only the masked region; leave the rest as-is
-    alpha = np.where(mask_bool[:, :, None], OVERLAY_ALPHA, 0.0)
-    blended = (overlay * alpha + bg * (1 - alpha)).astype(np.uint8)
+        # Blend only the masked region; leave the rest as-is
+        alpha = np.where(mask_bool[:, :, None], OVERLAY_ALPHA, 0.0)
+        blended = (overlay * alpha + bg * (1 - alpha)).astype(np.uint8)
 
-    # Draw a red border along the mask boundary (dilate XOR erode)
-    from scipy.ndimage import binary_dilation, binary_erosion
+        # Draw a red border along the mask boundary (dilate XOR erode)
+        from scipy.ndimage import binary_dilation, binary_erosion
 
-    border = binary_dilation(mask_bool, iterations=2) & ~binary_erosion(
-        mask_bool, iterations=2
-    )
-    blended[border] = (220, 0, 0)  # red border
+        border = binary_dilation(mask_bool, iterations=2) & ~binary_erosion(
+            mask_bool, iterations=2
+        )
+        blended[border] = (220, 0, 0)  # red border
 
     img = Image.fromarray(blended, mode="RGB")
 
@@ -203,7 +211,7 @@ def load_original_image(images_dir: Path, frame_stem: str) -> Optional[Image.Ima
 
 
 def debug_component(
-    dataset_name: str, component_id: int, display: bool = False
+    dataset_name: str, component_id: int, display: bool = False, only_mask: bool = False
 ) -> None:
     config = load_config(dataset_name)
     masks_dir = get_masks_dir(config)
@@ -288,7 +296,9 @@ def debug_component(
                 print(f"  [warn] Failed to decode {mask_id}: {exc}")
                 continue
 
-            img = render_mask_image(mask_bool, mask_id, orig_image=orig_image)
+            img = render_mask_image(
+                mask_bool, mask_id, orig_image=orig_image, only_mask=only_mask
+            )
             rendered.append(img)
 
             out_path = out_dir / f"{mask_id}.png"
@@ -376,11 +386,17 @@ def main() -> None:
         action="store_true",
         help="Show images interactively using matplotlib",
     )
+    parser.add_argument(
+        "--only-mask",
+        action="store_true",
+        help="Show only the original image pixels inside the mask; the rest is white",
+    )
     args = parser.parse_args()
     debug_component(
         dataset_name=args.dataset_name,
         component_id=args.component_id,
         display=args.display,
+        only_mask=args.only_mask,
     )
 
 
