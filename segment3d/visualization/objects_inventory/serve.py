@@ -31,7 +31,11 @@ def normalize_object(obj: str) -> str:
 
 def build_inventory_response(dataset: str) -> dict:
     json_path = (
-        REPO_ROOT / "outputs" / dataset / "objects_inventory" / "objects_inventory.json"
+        REPO_ROOT
+        / "outputs"
+        / dataset
+        / "objects_inventory"
+        / "objects_inventory_compact.json"
     )
     with open(json_path, "r") as f:
         raw = json.load(f)
