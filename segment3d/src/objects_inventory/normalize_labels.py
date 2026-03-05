@@ -179,10 +179,14 @@ def normalize_inventory(
     clip_model: str = "ViT-B-32",
     clip_pretrained: str = "openai",
     device: Optional[str] = None,
+    skip_lemmatize: bool = False,
 ) -> Dict[str, str]:
     """
-    Full pipeline: load inventory → lemmatize → embed → cluster →
+    Full pipeline: load inventory → (lemmatize) → embed → cluster →
     replace labels → write compact inventory.
+
+    When *skip_lemmatize* is ``True`` the lemmatization step is bypassed and
+    raw labels are used directly for embedding and clustering.
 
     Returns the label_to_representative mapping.
     """
@@ -198,16 +202,22 @@ def normalize_inventory(
     print(f"Total raw label occurrences: {len(all_raw_labels)}")
 
     # ---- 3. Lemmatize -------------------------------------------------------
-    print("Loading spaCy model...")
-    nlp = _load_nlp()
-
-    raw_to_lemma: Dict[str, str] = {}
-    for label in all_raw_labels:
-        if label not in raw_to_lemma:
-            raw_to_lemma[label] = lemmatize_label(label, nlp)
+    if skip_lemmatize:
+        print("Skipping lemmatization (--skip-lemmatize set).")
+        nlp = None
+        raw_to_lemma: Dict[str, str] = {label: label for label in set(all_raw_labels)}
+    else:
+        print("Loading spaCy model...")
+        nlp = _load_nlp()
+        raw_to_lemma = {}
+        for label in all_raw_labels:
+            if label not in raw_to_lemma:
+                raw_to_lemma[label] = lemmatize_label(label, nlp)
 
     unique_lemmas = sorted(set(raw_to_lemma.values()))
-    print(f"Unique lemmatized labels: {len(unique_lemmas)}")
+    print(
+        f"Unique {'raw' if skip_lemmatize else 'lemmatized'} labels: {len(unique_lemmas)}"
+    )
 
     # ---- 4. CLIP embeddings ------------------------------------------------
     print(
@@ -240,7 +250,12 @@ def normalize_inventory(
         for label in labels:
             if not label.strip():
                 continue
-            rep = raw_to_rep.get(label, lemmatize_label(label, nlp))
+            if label in raw_to_rep:
+                rep = raw_to_rep[label]
+            elif skip_lemmatize:
+                rep = label
+            else:
+                rep = lemmatize_label(label, nlp)  # type: ignore[arg-type]
             if rep not in seen:
                 seen.add(rep)
                 normalized.append(rep)
@@ -511,6 +526,7 @@ def normalize_inventory_cli(
     clip_model: str = "ViT-B-32",
     clip_pretrained: str = "openai",
     device: Optional[str] = None,
+    skip_lemmatize: bool = False,
 ) -> None:
     from ..io_paths import load_config, get_outputs_dir
 
@@ -534,6 +550,7 @@ def normalize_inventory_cli(
         clip_model=clip_model,
         clip_pretrained=clip_pretrained,
         device=device,
+        skip_lemmatize=skip_lemmatize,
     )
 
 
@@ -574,6 +591,13 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--skip-lemmatize",
+        dest="skip_lemmatize",
+        action="store_true",
+        default=False,
+        help="Skip lemmatization and use raw labels directly for embedding and clustering.",
+    )
+    parser.add_argument(
         "--no-fill-holes",
         dest="fill_holes",
         action="store_false",
@@ -609,6 +633,7 @@ def main() -> None:
         clip_model=args.clip_model,
         clip_pretrained=args.clip_pretrained,
         device=args.device,
+        skip_lemmatize=args.skip_lemmatize,
     )
 
     if args.fill_holes:

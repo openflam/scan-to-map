@@ -3,19 +3,26 @@
 Reads connected_components.json and the masks in the masks directory to
 render every mask that contributed to the specified component.
 
+Supports two connected_components.json formats:
+- ``mask_id_set`` (e.g. "frame_00001_mask_5"): reads from the SAM masks dir.
+- ``instance_ids`` (e.g. "Boxes_seq_0_0"): reads from
+  ``<outputs_dir>/object_level_masks/masks/<class>/<seq>/frame_XXXXX.json``.
+
 Usage:
     python debug_component.py --dataset_name ProjectLabStudio_NoNeg --component_id 5
     python debug_component.py --dataset_name ProjectLabStudio_NoNeg --component_id 5 --display
+    python debug_component.py --dataset_name ProjectLabStudio_inv_method --component_id 0
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -59,6 +66,43 @@ def parse_mask_id(mask_id: str):
     if not frame_stem:
         raise ValueError(f"Cannot parse mask_id: {mask_id!r}")
     return frame_stem, int(idx_str)
+
+
+# Pattern: <class_name>_seq_<seq_num>_<obj_id>
+_INSTANCE_ID_RE = re.compile(r"^(.+)_seq_(\d+)_(\d+)$")
+
+
+def parse_instance_id(instance_id: str) -> Tuple[str, str, int]:
+    """Split 'Boxes_seq_0_0' → ('Boxes', 'seq_0', 0).
+
+    Works for multi-word class names like 'plastic_container_seq_0_8'.
+    """
+    m = _INSTANCE_ID_RE.match(instance_id)
+    if not m:
+        raise ValueError(f"Cannot parse instance_id: {instance_id!r}")
+    class_name, seq_num, obj_id = m.group(1), m.group(2), m.group(3)
+    return class_name, f"seq_{seq_num}", int(obj_id)
+
+
+def load_object_level_frame_masks(
+    obj_masks_dir: Path, class_name: str, seq_name: str
+) -> Dict[str, List[dict]]:
+    """Load all per-frame JSON files for a given class/sequence.
+
+    Returns a dict mapping frame_stem (e.g. 'frame_00061') to a list of mask
+    entries (each entry has 'obj_id', 'segmentation', 'area').
+    """
+    seq_dir = obj_masks_dir / class_name / seq_name
+    if not seq_dir.exists():
+        print(f"  [warn] Sequence directory not found: {seq_dir}")
+        return {}
+    result: Dict[str, List[dict]] = {}
+    for json_file in sorted(seq_dir.glob("frame_*.json")):
+        frame_stem = json_file.stem  # e.g. 'frame_00061'
+        with json_file.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        result[frame_stem] = data if isinstance(data, list) else []
+    return result
 
 
 def load_masks_json(masks_dir: Path, frame_stem: str) -> Optional[List[dict]]:
@@ -214,8 +258,11 @@ def debug_component(
     dataset_name: str, component_id: int, display: bool = False, only_mask: bool = False
 ) -> None:
     config = load_config(dataset_name)
-    masks_dir = get_masks_dir(config)
     outputs_dir = get_outputs_dir(config)
+    try:
+        masks_dir = get_masks_dir(config)
+    except Exception:
+        masks_dir = None  # only needed for mask_id_set path
     try:
         images_dir = get_images_dir(config)
     except Exception:
@@ -253,57 +300,133 @@ def debug_component(
         )
 
     mask_id_set: List[str] = component.get("mask_id_set", [])
+    instance_ids: List[str] = component.get("instance_ids", [])
 
-    if not mask_id_set:
+    if not mask_id_set and not instance_ids:
         sys.exit(
-            f"Component {component_id} has no 'mask_id_set'.  "
+            f"Component {component_id} has neither 'mask_id_set' nor 'instance_ids'.  "
             "Re-run the mask_graph pipeline to regenerate connected_components.json "
             "with provenance tracking."
         )
-
-    print(f"Component {component_id}: {len(mask_id_set)} contributing mask(s)")
-
-    # Group mask_ids by frame so we load each file only once
-    by_frame: Dict[str, List[tuple]] = defaultdict(list)
-    for mask_id in sorted(mask_id_set):
-        frame_stem, mask_idx = parse_mask_id(mask_id)
-        by_frame[frame_stem].append((mask_idx, mask_id))
 
     # Output directory
     out_dir = outputs_dir / "debug_components" / f"component_{component_id}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rendered: List[Image.Image] = []
+    all_label_ids: List[str] = []
 
-    for frame_stem in sorted(by_frame.keys()):
-        masks_list = load_masks_json(masks_dir, frame_stem)
-        if masks_list is None:
-            continue
+    # -----------------------------------------------------------------------
+    # Path A: mask_id_set  →  SAM masks directory
+    # -----------------------------------------------------------------------
+    if mask_id_set:
+        print(
+            f"Component {component_id}: {len(mask_id_set)} contributing mask(s) [mask_id_set]"
+        )
 
-        orig_image = load_original_image(images_dir, frame_stem) if images_dir else None
-
-        for mask_idx, mask_id in sorted(by_frame[frame_stem]):
-            if mask_idx >= len(masks_list):
-                print(
-                    f"  [warn] mask index {mask_idx} out of range for {frame_stem} "
-                    f"(file has {len(masks_list)} masks)"
-                )
-                continue
-
-            try:
-                mask_bool = decode_mask(masks_list[mask_idx])
-            except Exception as exc:
-                print(f"  [warn] Failed to decode {mask_id}: {exc}")
-                continue
-
-            img = render_mask_image(
-                mask_bool, mask_id, orig_image=orig_image, only_mask=only_mask
+        if masks_dir is None:
+            sys.exit(
+                "masks_dir is not configured for this dataset but is required for "
+                "the mask_id_set format."
             )
-            rendered.append(img)
 
-            out_path = out_dir / f"{mask_id}.png"
-            img.save(out_path)
-            print(f"  Saved {out_path}")
+        # Group mask_ids by frame so we load each file only once
+        by_frame: Dict[str, List[tuple]] = defaultdict(list)
+        for mask_id in sorted(mask_id_set):
+            frame_stem, mask_idx = parse_mask_id(mask_id)
+            by_frame[frame_stem].append((mask_idx, mask_id))
+
+        for frame_stem in sorted(by_frame.keys()):
+            masks_list = load_masks_json(masks_dir, frame_stem)
+            if masks_list is None:
+                continue
+
+            orig_image = (
+                load_original_image(images_dir, frame_stem) if images_dir else None
+            )
+
+            for mask_idx, mask_id in sorted(by_frame[frame_stem]):
+                if mask_idx >= len(masks_list):
+                    print(
+                        f"  [warn] mask index {mask_idx} out of range for {frame_stem} "
+                        f"(file has {len(masks_list)} masks)"
+                    )
+                    continue
+
+                try:
+                    mask_bool = decode_mask(masks_list[mask_idx])
+                except Exception as exc:
+                    print(f"  [warn] Failed to decode {mask_id}: {exc}")
+                    continue
+
+                img = render_mask_image(
+                    mask_bool, mask_id, orig_image=orig_image, only_mask=only_mask
+                )
+                rendered.append(img)
+                all_label_ids.append(mask_id)
+
+                out_path = out_dir / f"{mask_id}.png"
+                img.save(out_path)
+                print(f"  Saved {out_path}")
+
+    # -----------------------------------------------------------------------
+    # Path B: instance_ids  →  object_level_masks directory
+    # -----------------------------------------------------------------------
+    elif instance_ids:
+        print(
+            f"Component {component_id}: {len(instance_ids)} instance(s) [instance_ids]"
+        )
+
+        obj_masks_dir = outputs_dir / "object_level_masks" / "masks"
+        if not obj_masks_dir.exists():
+            sys.exit(
+                f"object_level_masks/masks directory not found at {obj_masks_dir}. "
+                "Make sure the object_level_masks pipeline has been run."
+            )
+
+        for instance_id in sorted(instance_ids):
+            try:
+                class_name, seq_name, obj_id = parse_instance_id(instance_id)
+            except ValueError as exc:
+                print(f"  [warn] {exc}")
+                continue
+
+            frame_masks = load_object_level_frame_masks(
+                obj_masks_dir, class_name, seq_name
+            )
+            if not frame_masks:
+                continue
+
+            for frame_stem in sorted(frame_masks.keys()):
+                # Find the entry matching obj_id
+                entry = None
+                for item in frame_masks[frame_stem]:
+                    if item.get("obj_id") == obj_id:
+                        entry = item
+                        break
+                if entry is None:
+                    continue  # this instance not visible in this frame
+
+                try:
+                    mask_bool = decode_mask(entry)
+                except Exception as exc:
+                    label = f"{instance_id}_{frame_stem}"
+                    print(f"  [warn] Failed to decode {label}: {exc}")
+                    continue
+
+                orig_image = (
+                    load_original_image(images_dir, frame_stem) if images_dir else None
+                )
+                label = f"{instance_id}_{frame_stem}"
+                img = render_mask_image(
+                    mask_bool, label, orig_image=orig_image, only_mask=only_mask
+                )
+                rendered.append(img)
+                all_label_ids.append(label)
+
+                out_path = out_dir / f"{label}.png"
+                img.save(out_path)
+                print(f"  Saved {out_path}")
 
     if not rendered:
         print("No masks could be rendered.")
@@ -351,9 +474,9 @@ def debug_component(
             )
 
             axes_flat = [axes] if len(rendered) == 1 else axes.flat
-            for ax, img, mask_id in zip(axes_flat, rendered, sorted(mask_id_set)):
+            for ax, img, label in zip(axes_flat, rendered, all_label_ids):
                 ax.imshow(img)
-                ax.set_title(mask_id, fontsize=7)
+                ax.set_title(label, fontsize=7)
                 ax.axis("off")
 
             fig.suptitle(

@@ -1,38 +1,34 @@
 #!/usr/bin/env python3
 """
-Main pipeline script that runs all steps sequentially.
+Post-SAM3 pipeline script that runs all steps after SAM3 segmentation.
 
-This script orchestrates the complete scan-to-map pipeline:
-1. Run SAM segmentation
-2. Associate 2D masks with 3D points
-3. Build mask connectivity graph
-4. Compute 3D bounding boxes
-5. Project bounding boxes to images
-6. Crop images based on projections
-7. Generate captions with VLM
-8. Generate CLIP embeddings
+This script orchestrates the per-object pipeline starting from 2D-3D association:
+1. Associate per-object SAM3 masks with COLMAP 3D points
+2. Build object mask connectivity graph
+3. Clean connected components (DBSCAN noise removal + splitting)
+4. Compute 3D bounding boxes for each connected component
+5. Segment (crop) images using connected component masks
+6. Generate captions with VLM
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
 
-from src.sam_runner import run_sam_on_images
-from src.fast_sam_runner import run_fastsam_on_images
-from src.associate2d3d import associate_all_images
-from src.mask_graph import build_mask_graph_cli
-from src.bbox_corners import get_all_bbox_corners_cli
-from src.project_bbox import project_all_bboxes_cli
-from src.crop_images import crop_all_images_cli
-from src.captioning import caption_all_components_cli
-from src.clip_embed import generate_clip_embeddings_cli
-from src.io_paths import load_config
+from .associate2d3d import associate_per_object
+from .clean_components import clean_connected_components
+from .mask_graph import build_object_mask_graph
+from .segment_crops import segment_crops_cli
+from ..bbox_corners import get_all_bbox_corners_cli
+from ..captioning import caption_all_components_cli
+from ..clip_embed import generate_clip_embeddings_cli
+from ..io_paths import load_config
 from config import list_datasets, DEFAULT_PARAMETERS
-import os
 
 
 def print_step_header(step_num: int, total_steps: int, title: str) -> None:
@@ -49,52 +45,61 @@ def print_step_complete(elapsed_time: float) -> None:
 
 def run_pipeline(
     dataset_name: str,
-    skip_sam: bool = False,
     skip_association: bool = False,
     skip_graph: bool = False,
+    skip_clean: bool = False,
+    skip_bbox: bool = False,
+    skip_segment_crops: bool = False,
     skip_caption: bool = False,
     skip_clip: bool = False,
-    use_full_sam: bool = False,
-    fastsam_imgsz: int = 1024,
-    fastsam_conf: float = 0.4,
-    fastsam_iou: float = 0.7,
-    fastsam_batch_size: int = 64,
-    fastsam_num_workers: int = 4,
-    K: int = 5,
-    tau: float = 0.2,
-    min_points_in_3D_segment: int = 100,
+    # Mask graph parameters
+    K: int = 30,
+    tau: float = 0.8,
+    min_points: int = 1,
+    min_points_in_3d_segment: int = 10,
+    # Clean components parameters
+    dbscan_eps: float = 0.1,
+    dbscan_min_samples: int = 5,
+    dbscan_min_points: int = 20,
+    # Bounding box parameters
     percentile: float = 95.0,
-    min_fraction: float = 0.3,
+    # Segment crops parameters
+    top_n: int = 5,
+    min_fraction: float = 0.05,
+    # Captioning parameters
     caption_n_images: int = 1,
     captioner_type: str = "vllm",
     caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
     caption_device: int = 0,
     caption_batch_size: int = 4,
-    clip_model: str = "ViT-B-32",
-    clip_pretrained: str = "laion2b_s34b_b79k",
+    # CLIP embedding parameters
+    clip_model: str = "ViT-H-14",
+    clip_pretrained: str = "laion2B-s32B-b79K",
     clip_batch_size: int = 32,
     clip_device: int = 0,
 ) -> None:
     """
-    Run the complete pipeline.
+    Run the post-SAM3 pipeline (all steps after SAM3 segmentation).
 
     Args:
         dataset_name: Name of the dataset to process
-        skip_sam: Skip SAM segmentation step
         skip_association: Skip 2D-3D association step
-        skip_graph: Skip mask graph building step
+        skip_graph: Skip object mask graph building step
+        skip_clean: Skip DBSCAN component cleaning step
+        skip_bbox: Skip 3D bounding box computation step
+        skip_segment_crops: Skip image cropping step
         skip_caption: Skip VLM captioning step
         skip_clip: Skip CLIP embedding generation step
-        use_fastsam: Use FastSAM instead of SAM for segmentation
-        fastsam_imgsz: Input image size for FastSAM
-        fastsam_conf: Confidence threshold for FastSAM
-        fastsam_iou: IoU threshold for NMS in FastSAM
-        fastsam_batch_size: Batch size for FastSAM inference
-        fastsam_num_workers: Number of worker threads for parallel I/O
-        K: Number of nearest neighbors for mask graph
-        tau: Jaccard similarity threshold for mask graph
+        K: Min overlap count threshold for mask graph edges
+        tau: Min Jaccard similarity threshold for mask graph edges
+        min_points: Min 3D points for a node to be included in the graph
+        min_points_in_3d_segment: Min 3D points in a component to be reported
+        dbscan_eps: DBSCAN neighbourhood radius in world units
+        dbscan_min_samples: DBSCAN minimum samples per core point
+        dbscan_min_points: Drop components with fewer than this many points after cleaning
         percentile: Percentile threshold for bbox outlier removal
-        min_fraction: Minimum fraction of visible points for projection
+        top_n: Number of top frames to crop per component
+        min_fraction: Minimum visibility fraction to consider a frame for cropping
         caption_n_images: Number of top images to use for captioning
         captioner_type: Type of captioner to use (e.g., "vllm")
         caption_model: VLM model to use for captioning
@@ -105,12 +110,10 @@ def run_pipeline(
         clip_batch_size: Batch size for CLIP embedding generation
         clip_device: GPU device ID for CLIP embeddings
     """
-    # Load and display configuration
     print("\n" + "=" * 80)
-    print("SCAN-TO-MAP PIPELINE")
+    print("POST-SAM3 PIPELINE (per-object)")
     print("=" * 80)
 
-    # Set environment variable for dataset name so all modules can access it
     os.environ["SCAN_TO_MAP_DATASET"] = dataset_name
 
     try:
@@ -118,36 +121,38 @@ def run_pipeline(
         print(f"\nConfiguration loaded for dataset: {dataset_name}")
         print(f"  Images directory: {config.get('images_dir')}")
         print(f"  COLMAP model: {config.get('colmap_model_dir')}")
-        print(f"  SAM checkpoint: {config.get('sam_ckpt')}")
-        print(f"  Device: {config.get('device')}")
         print(f"  Outputs directory: {config.get('outputs_dir')}")
     except Exception as e:
         print(f"\nError loading configuration: {e}")
         sys.exit(1)
 
     print("\nPipeline Parameters:")
-    if skip_sam:
-        print("  Segmentation: SKIPPED")
-    else:
-        print(f"  Segmentation model: {'Full SAM' if use_full_sam else 'Fast SAM'}")
-        if not use_full_sam:
-            print(f"  FastSAM imgsz: {fastsam_imgsz}")
-            print(f"  FastSAM conf: {fastsam_conf}")
-            print(f"  FastSAM iou: {fastsam_iou}")
-            print(f"  FastSAM batch_size: {fastsam_batch_size}")
-            print(f"  FastSAM num_workers: {fastsam_num_workers}")
     if skip_association:
         print("  2D-3D association: SKIPPED")
     if skip_graph:
         print("  Mask graph building: SKIPPED")
+    if skip_clean:
+        print("  Component cleaning: SKIPPED")
+    if skip_bbox:
+        print("  3D bounding boxes: SKIPPED")
+    if skip_segment_crops:
+        print("  Image cropping: SKIPPED")
     if skip_caption:
         print("  VLM captioning: SKIPPED")
     if skip_clip:
         print("  CLIP embedding generation: SKIPPED")
     print(f"  Mask graph K: {K}")
     print(f"  Mask graph tau: {tau}")
-    print(f"  Bbox percentile: {percentile}")
-    print(f"  Min fraction: {min_fraction}")
+    print(f"  Mask graph min_points: {min_points}")
+    print(f"  Mask graph min_points_in_3d_segment: {min_points_in_3d_segment}")
+    if not skip_clean:
+        print(f"  DBSCAN eps: {dbscan_eps}")
+        print(f"  DBSCAN min_samples: {dbscan_min_samples}")
+        print(f"  DBSCAN min_points: {dbscan_min_points}")
+    if not skip_bbox:
+        print(f"  Bbox percentile: {percentile}")
+    print(f"  Segment crops top_n: {top_n}")
+    print(f"  Segment crops min_fraction: {min_fraction}")
     if not skip_caption:
         print(f"  Captioner type: {captioner_type}")
         print(f"  Caption model: {caption_model}")
@@ -160,12 +165,10 @@ def run_pipeline(
         print(f"  CLIP batch size: {clip_batch_size}")
         print(f"  CLIP device: {clip_device}")
 
-    # Track overall timing
     pipeline_start = time.time()
-    total_steps = 8
+    total_steps = 7
     current_step = 0
 
-    # Dictionary to store runtime statistics
     runtime_stats = {
         "dataset_name": dataset_name,
         "pipeline_start_time": time.strftime(
@@ -173,10 +176,22 @@ def run_pipeline(
         ),
         "steps": {},
         "parameters": {
+            "skip_association": skip_association,
+            "skip_graph": skip_graph,
+            "skip_clean": skip_clean,
+            "skip_bbox": skip_bbox,
+            "skip_segment_crops": skip_segment_crops,
+            "skip_caption": skip_caption,
+            "skip_clip": skip_clip,
             "K": K,
             "tau": tau,
-            "min_points_in_3D_segment": min_points_in_3D_segment,
+            "min_points": min_points,
+            "min_points_in_3d_segment": min_points_in_3d_segment,
+            "dbscan_eps": dbscan_eps,
+            "dbscan_min_samples": dbscan_min_samples,
+            "dbscan_min_points": dbscan_min_points,
             "percentile": percentile,
+            "top_n": top_n,
             "min_fraction": min_fraction,
             "caption_n_images": caption_n_images,
             "captioner_type": captioner_type,
@@ -187,56 +202,11 @@ def run_pipeline(
             "clip_pretrained": clip_pretrained,
             "clip_batch_size": clip_batch_size,
             "clip_device": clip_device,
-            "skip_sam": skip_sam,
-            "skip_association": skip_association,
-            "skip_graph": skip_graph,
-            "skip_caption": skip_caption,
-            "skip_clip": skip_clip,
-            "use_full_sam": use_full_sam,
-            "fastsam_imgsz": fastsam_imgsz,
-            "fastsam_conf": fastsam_conf,
-            "fastsam_iou": fastsam_iou,
-            "fastsam_batch_size": fastsam_batch_size,
-            "fastsam_num_workers": fastsam_num_workers,
         },
     }
 
     try:
-        # Step 1: Run SAM or FastSAM
-        if not skip_sam:
-            current_step += 1
-            if not use_full_sam:
-                print_step_header(current_step, total_steps, "Run FastSAM Segmentation")
-            else:
-                print_step_header(current_step, total_steps, "Run SAM Segmentation")
-            step_start = time.time()
-
-            if use_full_sam:
-                run_sam_on_images(dataset_name=dataset_name)
-            else:
-                run_fastsam_on_images(
-                    dataset_name=dataset_name,
-                    imgsz=fastsam_imgsz,
-                    conf=fastsam_conf,
-                    iou=fastsam_iou,
-                    batch_size=fastsam_batch_size,
-                )
-
-            step_time = time.time() - step_start
-            runtime_stats["steps"]["1_segmentation"] = {
-                "duration_seconds": step_time,
-                "status": "completed",
-                "model": "SAM" if use_full_sam else "Fast SAM",
-            }
-            print_step_complete(step_time)
-        else:
-            print("\nSkipping Step 1: Segmentation (using existing masks)")
-            runtime_stats["steps"]["1_segmentation"] = {
-                "duration_seconds": 0,
-                "status": "skipped",
-            }
-
-        # Step 2: Associate 2D-3D
+        # Step 1: Associate 2D-3D
         if not skip_association:
             current_step += 1
             print_step_header(
@@ -244,92 +214,129 @@ def run_pipeline(
             )
             step_start = time.time()
 
-            associate_all_images(dataset_name=dataset_name)
+            associate_per_object(dataset_name=dataset_name)
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["2_associate_2d_3d"] = {
+            runtime_stats["steps"]["1_associate_2d_3d"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 2: 2D-3D Association (using existing associations)")
-            runtime_stats["steps"]["2_associate_2d_3d"] = {
+            print("\nSkipping Step 1: 2D-3D Association (using existing associations)")
+            runtime_stats["steps"]["1_associate_2d_3d"] = {
                 "duration_seconds": 0,
                 "status": "skipped",
             }
 
-        # Step 3: Build mask graph
+        # Step 2: Build object mask graph
         if not skip_graph:
             current_step += 1
             print_step_header(
-                current_step, total_steps, "Build Mask Connectivity Graph"
+                current_step, total_steps, "Build Object Mask Connectivity Graph"
             )
             step_start = time.time()
 
-            build_mask_graph_cli(
+            build_object_mask_graph(
                 dataset_name=dataset_name,
                 K=K,
                 tau=tau,
-                min_points_in_3D_segment=min_points_in_3D_segment,
+                min_points=min_points,
+                min_points_in_3d_segment=min_points_in_3d_segment,
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["3_build_mask_graph"] = {
+            runtime_stats["steps"]["2_build_mask_graph"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 3: Mask Graph Building (using existing graph)")
-            runtime_stats["steps"]["3_build_mask_graph"] = {
+            print("\nSkipping Step 2: Mask Graph Building (using existing graph)")
+            runtime_stats["steps"]["2_build_mask_graph"] = {
                 "duration_seconds": 0,
                 "status": "skipped",
             }
 
-        # Step 4: Compute bounding boxes
-        current_step += 1
-        print_step_header(current_step, total_steps, "Compute 3D Bounding Boxes")
-        step_start = time.time()
+        # Step 3: Clean connected components
+        if not skip_clean:
+            current_step += 1
+            print_step_header(
+                current_step, total_steps, "Clean Connected Components (DBSCAN)"
+            )
+            step_start = time.time()
 
-        get_all_bbox_corners_cli(dataset_name=dataset_name, percentile=percentile)
+            clean_connected_components(
+                dataset_name=dataset_name,
+                eps=dbscan_eps,
+                min_samples=dbscan_min_samples,
+                min_points=dbscan_min_points,
+            )
 
-        step_time = time.time() - step_start
-        runtime_stats["steps"]["4_compute_bboxes"] = {
-            "duration_seconds": step_time,
-            "status": "completed",
-        }
-        print_step_complete(step_time)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["3_clean_components"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
+        else:
+            print(
+                "\nSkipping Step 3: Component Cleaning (using existing connected_components.json)"
+            )
+            runtime_stats["steps"]["3_clean_components"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
-        # Step 5: Project to 2D
-        current_step += 1
-        print_step_header(current_step, total_steps, "Project Bounding Boxes to Images")
-        step_start = time.time()
+        # Step 4: Compute 3D bounding boxes
+        if not skip_bbox:
+            current_step += 1
+            print_step_header(current_step, total_steps, "Compute 3D Bounding Boxes")
+            step_start = time.time()
 
-        project_all_bboxes_cli(dataset_name=dataset_name, min_fraction=min_fraction)
+            get_all_bbox_corners_cli(dataset_name=dataset_name, percentile=percentile)
 
-        step_time = time.time() - step_start
-        runtime_stats["steps"]["5_project_bboxes"] = {
-            "duration_seconds": step_time,
-            "status": "completed",
-        }
-        print_step_complete(step_time)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["4_compute_bboxes"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
+        else:
+            print(
+                "\nSkipping Step 4: 3D Bounding Box Computation (using existing bbox_corners.json)"
+            )
+            runtime_stats["steps"]["4_compute_bboxes"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
-        # Step 6: Crop images
-        current_step += 1
-        print_step_header(current_step, total_steps, "Crop Images")
-        step_start = time.time()
+        # Step 5: Segment crops
+        if not skip_segment_crops:
+            current_step += 1
+            print_step_header(current_step, total_steps, "Segment and Crop Images")
+            step_start = time.time()
 
-        crop_all_images_cli(dataset_name=dataset_name)
+            segment_crops_cli(
+                dataset_name=dataset_name,
+                top_n=top_n,
+                min_fraction=min_fraction,
+            )
 
-        step_time = time.time() - step_start
-        runtime_stats["steps"]["6_crop_images"] = {
-            "duration_seconds": step_time,
-            "status": "completed",
-        }
-        print_step_complete(step_time)
+            step_time = time.time() - step_start
+            runtime_stats["steps"]["5_segment_crops"] = {
+                "duration_seconds": step_time,
+                "status": "completed",
+            }
+            print_step_complete(step_time)
+        else:
+            print("\nSkipping Step 5: Image Cropping (using existing crops)")
+            runtime_stats["steps"]["5_segment_crops"] = {
+                "duration_seconds": 0,
+                "status": "skipped",
+            }
 
-        # Step 7: Caption components
+        # Step 6: Caption components
         if not skip_caption:
             current_step += 1
             print_step_header(current_step, total_steps, "Generate Captions with VLM")
@@ -345,19 +352,19 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["7_caption_components"] = {
+            runtime_stats["steps"]["6_caption_components"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 7: VLM Captioning")
-            runtime_stats["steps"]["7_caption_components"] = {
+            print("\nSkipping Step 6: VLM Captioning")
+            runtime_stats["steps"]["6_caption_components"] = {
                 "duration_seconds": 0,
                 "status": "skipped",
             }
 
-        # Step 8: Generate CLIP embeddings
+        # Step 7: Generate CLIP embeddings
         if not skip_clip:
             current_step += 1
             print_step_header(current_step, total_steps, "Generate CLIP Embeddings")
@@ -372,14 +379,14 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["8_clip_embeddings"] = {
+            runtime_stats["steps"]["7_clip_embeddings"] = {
                 "duration_seconds": step_time,
                 "status": "completed",
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 8: CLIP Embedding Generation")
-            runtime_stats["steps"]["8_clip_embeddings"] = {
+            print("\nSkipping Step 7: CLIP Embedding Generation")
+            runtime_stats["steps"]["7_clip_embeddings"] = {
                 "duration_seconds": 0,
                 "status": "skipped",
             }
@@ -387,16 +394,14 @@ def run_pipeline(
         # Pipeline complete
         total_time = time.time() - pipeline_start
 
-        # Add total time to runtime stats
         runtime_stats["total_duration_seconds"] = total_time
         runtime_stats["total_duration_minutes"] = total_time / 60
         runtime_stats["pipeline_end_time"] = time.strftime(
             "%Y-%m-%d %H:%M:%S", time.localtime()
         )
 
-        # Save runtime statistics to file
         outputs_dir = Path(config.get("outputs_dir"))
-        runtime_stats_path = outputs_dir / "runtime_stats.json"
+        runtime_stats_path = outputs_dir / "runtime_stats_postsam3.json"
         with runtime_stats_path.open("w", encoding="utf-8") as f:
             json.dump(runtime_stats, f, indent=2)
 
@@ -409,16 +414,14 @@ def run_pipeline(
         print(f"\nResults saved to: {config.get('outputs_dir')}")
         print(f"Runtime statistics saved to: {runtime_stats_path}")
         print("\nOutput structure:")
-        print("  ├── masks/              - SAM segmentation masks")
-        print("  ├── masks_images/       - SAM visualization images")
-        print("  ├── associations/       - 2D-3D point associations")
-        print("  ├── mask_graph.gpickle  - Mask connectivity graph")
+        print("  ├── object_level_masks/")
+        print("  │   ├── masks/              - SAM3 per-object mask JSON files (input)")
+        print("  │   └── object_3d_associations.json")
         print("  ├── connected_components.json")
-        print("  ├── bbox_corners.json   - 3D bounding box corners")
-        print("  ├── image_crop_coordinates.json")
-        print("  ├── crop_stats.json")
-        print("  ├── runtime_stats.json  - Pipeline execution times")
-        print("  ├── crops/              - Cropped image regions")
+        print("  ├── mask_graph_stats.json")
+        print("  ├── bbox_corners.json       - 3D bounding box corners")
+        print("  ├── bbox_stats.json")
+        print("  ├── crops/                  - Masked & cropped image regions")
         print("  │   ├── component_0/")
         print("  │   ├── component_1/")
         print("  │   └── manifest.json")
@@ -426,7 +429,7 @@ def run_pipeline(
         print("  ├── clip_embeddings.json    - CLIP embeddings (JSON)")
         print("  ├── clip_embeddings.npz     - CLIP embeddings (numpy)")
         print("  ├── clip_embeddings.faiss   - FAISS HNSW index")
-        print("  └── clip_embedding_stats.json")
+        print("  └── runtime_stats_postsam3.json")
 
     except KeyboardInterrupt:
         print("\n\nPipeline interrupted by user")
@@ -441,18 +444,16 @@ def run_pipeline(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Run the complete scan-to-map pipeline",
+        description="Run the post-SAM3 per-object pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Pipeline Steps:
-  1. Run SAM segmentation on all images
-  2. Associate 2D masks with 3D COLMAP points
-  3. Build mask connectivity graph and extract connected components
-  4. Compute 3D bounding boxes for each component
-  5. Project 3D bounding boxes onto images
-  6. Crop images based on projected coordinates
-  7. Generate captions for each component using VLM
-  8. Generate CLIP embeddings for each component
+  1. Associate per-object SAM3 masks with COLMAP 3D points
+  2. Build object mask connectivity graph and extract connected components
+  3. Clean connected components (DBSCAN noise removal + multi-cluster splitting)
+  4. Compute 3D bounding boxes for each connected component
+  5. Segment and crop images using connected component masks
+  6. Generate captions for each component using VLM
 
 Configuration:
   Dataset configurations are defined in segment3d/config.py
@@ -469,12 +470,7 @@ Configuration:
         help=f"Dataset to process (required). Available: {', '.join(available_datasets)}",
     )
 
-    # Pipeline parameters
-    parser.add_argument(
-        "--skip-sam",
-        action="store_true",
-        help="Skip SAM/FastSAM segmentation step (use existing masks)",
-    )
+    # Skip flags
     parser.add_argument(
         "--skip-association",
         action="store_true",
@@ -486,6 +482,21 @@ Configuration:
         help="Skip mask graph building step (use existing graph)",
     )
     parser.add_argument(
+        "--skip-clean",
+        action="store_true",
+        help="Skip DBSCAN component cleaning step (use existing connected_components.json)",
+    )
+    parser.add_argument(
+        "--skip-bbox",
+        action="store_true",
+        help="Skip 3D bounding box computation step (use existing bbox_corners.json)",
+    )
+    parser.add_argument(
+        "--skip-segment-crops",
+        action="store_true",
+        help="Skip image cropping step (use existing crops)",
+    )
+    parser.add_argument(
         "--skip-caption",
         action="store_true",
         help="Skip VLM captioning step",
@@ -495,71 +506,76 @@ Configuration:
         action="store_true",
         help="Skip CLIP embedding generation step",
     )
-    parser.add_argument(
-        "--use-full-sam",
-        action="store_true",
-        help=f"Use Full SAM instead of Fast SAM for segmentation (default: {DEFAULT_PARAMETERS['use_full_sam']})",
-    )
-    parser.add_argument(
-        "--fastsam-imgsz",
-        type=int,
-        default=DEFAULT_PARAMETERS["fastsam_imgsz"],
-        help=f"Input image size for FastSAM (default: {DEFAULT_PARAMETERS['fastsam_imgsz']})",
-    )
-    parser.add_argument(
-        "--fastsam-conf",
-        type=float,
-        default=DEFAULT_PARAMETERS["fastsam_conf"],
-        help=f"Confidence threshold for FastSAM (default: {DEFAULT_PARAMETERS['fastsam_conf']})",
-    )
-    parser.add_argument(
-        "--fastsam-iou",
-        type=float,
-        default=DEFAULT_PARAMETERS["fastsam_iou"],
-        help=f"IoU threshold for NMS in FastSAM (default: {DEFAULT_PARAMETERS['fastsam_iou']})",
-    )
-    parser.add_argument(
-        "--fastsam-batch-size",
-        type=int,
-        default=DEFAULT_PARAMETERS["fastsam_batch_size"],
-        help=f"Batch size for FastSAM inference (default: {DEFAULT_PARAMETERS['fastsam_batch_size']})",
-    )
-    parser.add_argument(
-        "--fastsam-num-workers",
-        type=int,
-        default=DEFAULT_PARAMETERS["fastsam_num_workers"],
-        help=f"Number of worker threads for parallel I/O in FastSAM (default: {DEFAULT_PARAMETERS['fastsam_num_workers']})",
-    )
+
+    # Mask graph parameters
     parser.add_argument(
         "--K",
         type=int,
-        default=DEFAULT_PARAMETERS["K"],
-        help=f"Number of nearest neighbors for mask graph (default: {DEFAULT_PARAMETERS['K']})",
+        default=30,
+        help=f"Min overlap count threshold for mask graph edges (default: 30)",
     )
     parser.add_argument(
         "--tau",
         type=float,
-        default=DEFAULT_PARAMETERS["tau"],
-        help=f"Jaccard similarity threshold for mask graph (default: {DEFAULT_PARAMETERS['tau']})",
+        default=0.8,
+        help=f"Min Jaccard similarity threshold for mask graph edges (default: 0.8)",
     )
     parser.add_argument(
-        "--min-points-in-3D-segment",
+        "--min-points",
         type=int,
-        default=DEFAULT_PARAMETERS["min_points_in_3D_segment"],
-        help=f"Minimum points in 3D segment for mask graph (default: {DEFAULT_PARAMETERS['min_points_in_3D_segment']})",
+        default=1,
+        help="Min 3D points for a node to be included in the graph (default: 1)",
     )
+    parser.add_argument(
+        "--min-points-in-3d-segment",
+        type=int,
+        default=10,
+        help="Min 3D points in a connected component to be reported (default: 10)",
+    )
+
+    # Clean components parameters
+    parser.add_argument(
+        "--dbscan-eps",
+        type=float,
+        default=0.1,
+        help="DBSCAN neighbourhood radius in world units (default: 0.1)",
+    )
+    parser.add_argument(
+        "--dbscan-min-samples",
+        type=int,
+        default=5,
+        help="DBSCAN minimum samples per core point (default: 5)",
+    )
+    parser.add_argument(
+        "--dbscan-min-points",
+        type=int,
+        default=20,
+        help="Drop components with fewer than this many points after cleaning (default: 20)",
+    )
+
+    # Bounding box parameters
     parser.add_argument(
         "--percentile",
         type=float,
         default=DEFAULT_PARAMETERS["percentile"],
         help=f"Percentile threshold for bbox outlier removal (default: {DEFAULT_PARAMETERS['percentile']})",
     )
+
+    # Segment crops parameters
+    parser.add_argument(
+        "--top-n",
+        type=int,
+        default=5,
+        help="Number of top frames to crop per component (default: 5)",
+    )
     parser.add_argument(
         "--min-fraction",
         type=float,
-        default=DEFAULT_PARAMETERS["min_fraction"],
-        help=f"Minimum fraction of visible points for projection (default: {DEFAULT_PARAMETERS['min_fraction']})",
+        default=0.05,
+        help="Minimum visibility fraction to consider a frame for cropping (default: 0.05)",
     )
+
+    # Captioning parameters
     parser.add_argument(
         "--caption-n-images",
         type=int,
@@ -590,6 +606,8 @@ Configuration:
         default=DEFAULT_PARAMETERS["caption_batch_size"],
         help=f"Batch size for captioning inference (default: {DEFAULT_PARAMETERS['caption_batch_size']})",
     )
+
+    # CLIP embedding parameters
     parser.add_argument(
         "--clip-model",
         type=str,
@@ -620,45 +638,49 @@ Configuration:
     # Validate parameters
     if args.tau <= 0 or args.tau > 1:
         parser.error("--tau must be between 0 and 1")
-    if args.percentile <= 0 or args.percentile > 100:
-        parser.error("--percentile must be between 0 and 100")
     if args.min_fraction <= 0 or args.min_fraction > 1:
         parser.error("--min-fraction must be between 0 and 1")
+    if args.K < 1:
+        parser.error("--K must be at least 1")
+    if args.min_points < 1:
+        parser.error("--min-points must be at least 1")
+    if args.min_points_in_3d_segment < 1:
+        parser.error("--min-points-in-3d-segment must be at least 1")
+    if args.top_n < 1:
+        parser.error("--top-n must be at least 1")
     if args.caption_n_images < 1:
         parser.error("--caption-n-images must be at least 1")
     if args.caption_batch_size < 1:
         parser.error("--caption-batch-size must be at least 1")
     if args.clip_batch_size < 1:
         parser.error("--clip-batch-size must be at least 1")
-    if args.fastsam_imgsz < 1:
-        parser.error("--fastsam-imgsz must be at least 1")
-    if args.fastsam_conf <= 0 or args.fastsam_conf > 1:
-        parser.error("--fastsam-conf must be between 0 and 1")
-    if args.fastsam_iou <= 0 or args.fastsam_iou > 1:
-        parser.error("--fastsam-iou must be between 0 and 1")
-    if args.fastsam_batch_size < 1:
-        parser.error("--fastsam-batch-size must be at least 1")
-    if args.fastsam_num_workers < 1:
-        parser.error("--fastsam-num-workers must be at least 1")
+    if args.percentile <= 0 or args.percentile > 100:
+        parser.error("--percentile must be between 0 and 100")
+    if args.dbscan_eps <= 0:
+        parser.error("--dbscan-eps must be positive")
+    if args.dbscan_min_samples < 1:
+        parser.error("--dbscan-min-samples must be at least 1")
+    if args.dbscan_min_points < 1:
+        parser.error("--dbscan-min-points must be at least 1")
 
-    # Run the pipeline with parsed arguments
     run_pipeline(
         dataset_name=args.dataset,
-        skip_sam=args.skip_sam,
         skip_association=args.skip_association,
         skip_graph=args.skip_graph,
+        skip_clean=args.skip_clean,
+        skip_bbox=args.skip_bbox,
+        skip_segment_crops=args.skip_segment_crops,
         skip_caption=args.skip_caption,
         skip_clip=args.skip_clip,
-        use_full_sam=args.use_full_sam,
-        fastsam_imgsz=args.fastsam_imgsz,
-        fastsam_conf=args.fastsam_conf,
-        fastsam_iou=args.fastsam_iou,
-        fastsam_batch_size=args.fastsam_batch_size,
-        fastsam_num_workers=args.fastsam_num_workers,
         K=args.K,
         tau=args.tau,
-        min_points_in_3D_segment=args.min_points_in_3D_segment,
+        min_points=args.min_points,
+        min_points_in_3d_segment=args.min_points_in_3d_segment,
+        dbscan_eps=args.dbscan_eps,
+        dbscan_min_samples=args.dbscan_min_samples,
+        dbscan_min_points=args.dbscan_min_points,
         percentile=args.percentile,
+        top_n=args.top_n,
         min_fraction=args.min_fraction,
         caption_n_images=args.caption_n_images,
         captioner_type=args.captioner_type,
