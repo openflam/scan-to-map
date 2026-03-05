@@ -382,6 +382,125 @@ def fill_holes_cli(
 
 
 # ---------------------------------------------------------------------------
+# Objects-to-frames index
+# ---------------------------------------------------------------------------
+
+
+def build_objects_to_frames(
+    compact_path: Path,
+    output_path: Path,
+    min_sequence_length: int = 5,
+) -> Dict[str, List[List[str]]]:
+    """
+    Build an inverted index: object → list of consecutive frame-key sequences.
+
+    For each object label, the full list of frames in which it appears is split
+    into runs of *consecutive* frame numbers.  Only runs whose length exceeds
+    ``min_sequence_length`` are kept.
+
+    Parameters
+    ----------
+    compact_path : Path
+        Path to ``objects_inventory_compact.json`` (after hole-filling).
+    output_path : Path
+        Destination path for ``objects_to_frames.json``.
+    min_sequence_length : int
+        Minimum number of frames a consecutive run must have to be included
+        (default: 5, i.e. sequences of length > 5 → strictly longer than 5).
+
+    Returns
+    -------
+    dict[str, list[list[str]]]
+        Mapping ``label → [[frame_key, ...], ...]`` for qualifying sequences.
+    """
+    import re
+
+    print(f"\nLoading compact inventory from: {compact_path}")
+    with compact_path.open("r", encoding="utf-8") as f:
+        compact: Dict[str, List[str]] = json.load(f)
+
+    def _frame_num(key: str) -> int:
+        m = re.search(r"(\d+)$", key)
+        if not m:
+            raise ValueError(f"Cannot parse frame number from key: {key!r}")
+        return int(m.group(1))
+
+    # Sort frames numerically; build num → key map
+    sorted_frame_keys = sorted(compact.keys(), key=_frame_num)
+    num_to_key: Dict[int, str] = {_frame_num(k): k for k in sorted_frame_keys}
+
+    # ---- Collect sorted frame numbers per label --------------------------
+    label_to_framenums: Dict[str, List[int]] = defaultdict(list)
+    for key, labels in compact.items():
+        fn = _frame_num(key)
+        for label in labels:
+            label_to_framenums[label].append(fn)
+
+    for label in label_to_framenums:
+        label_to_framenums[label].sort()
+
+    # ---- Split each label's frame list into consecutive runs -------------
+    result: Dict[str, List[List[str]]] = {}
+
+    for label, frame_nums in sorted(label_to_framenums.items()):
+        runs: List[List[str]] = []
+        current_run: List[str] = [num_to_key[frame_nums[0]]]
+
+        for i in range(1, len(frame_nums)):
+            if frame_nums[i] == frame_nums[i - 1] + 1:
+                current_run.append(num_to_key[frame_nums[i]])
+            else:
+                if len(current_run) > min_sequence_length:
+                    runs.append(current_run)
+                current_run = [num_to_key[frame_nums[i]]]
+
+        # Flush the last run
+        if len(current_run) > min_sequence_length:
+            runs.append(current_run)
+
+        if runs:
+            result[label] = runs
+
+    # ---- Write output ----------------------------------------------------
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2)
+
+    total_seqs = sum(len(seqs) for seqs in result.values())
+    print(f"Objects-to-frames index written to: {output_path}")
+    print(f"  Objects with qualifying sequences: {len(result)}")
+    print(f"  Total sequences (length > {min_sequence_length}): {total_seqs}")
+
+    return result
+
+
+def objects_to_frames_cli(
+    dataset_name: str,
+    min_sequence_length: int = 5,
+) -> None:
+    from ..io_paths import load_config, get_outputs_dir
+
+    config = load_config(dataset_name=dataset_name)
+    outputs_dir = get_outputs_dir(config)
+    inventory_dir = outputs_dir / "objects_inventory"
+
+    compact_path = inventory_dir / "objects_inventory_compact.json"
+    output_path = inventory_dir / "objects_to_frames.json"
+
+    if not compact_path.exists():
+        raise FileNotFoundError(
+            f"Compact inventory not found: {compact_path}\n"
+            "Please run the normalize step first."
+        )
+
+    build_objects_to_frames(
+        compact_path=compact_path,
+        output_path=output_path,
+        min_sequence_length=min_sequence_length,
+    )
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -468,6 +587,20 @@ def main() -> None:
         help="Maximum number of consecutive missing frames to fill (default: 3). "
         "Only used when --fill-holes is set.",
     )
+    parser.add_argument(
+        "--no-objects-to-frames",
+        dest="objects_to_frames",
+        action="store_false",
+        default=True,
+        help="Skip building the objects_to_frames.json index (built by default).",
+    )
+    parser.add_argument(
+        "--min-sequence-length",
+        type=int,
+        default=5,
+        help="Minimum consecutive-frame run length to include in objects_to_frames.json "
+        "(default: 5, i.e. sequences strictly longer than 5 frames).",
+    )
 
     args = parser.parse_args()
     normalize_inventory_cli(
@@ -480,6 +613,12 @@ def main() -> None:
 
     if args.fill_holes:
         fill_holes_cli(dataset_name=args.dataset, max_gap=args.max_gap)
+
+    if args.objects_to_frames:
+        objects_to_frames_cli(
+            dataset_name=args.dataset,
+            min_sequence_length=args.min_sequence_length,
+        )
 
 
 if __name__ == "__main__":
