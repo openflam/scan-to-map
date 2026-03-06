@@ -9,7 +9,6 @@ produced by associate2d3d.py.  Each node in the graph is one
 (obj_slug, seq_key, obj_id) triple.  Edges connect nodes from *different*
 sequences that share enough 3D points (Jaccard ≥ tau or overlap ≥ K).
 The merge is object-name-agnostic: nodes from different objects may be linked.
-Nodes within the same sequence are never connected.
 
 Outputs (written to <outputs_dir>/object_level_masks/):
     object_mask_graph.gpickle          – NetworkX graph (pickle)
@@ -99,8 +98,6 @@ def build_edges_scipy(
 
     Two nodes are connected when:
         overlap ≥ K  OR  Jaccard(A, B) ≥ tau
-
-    Nodes from the *same sequence* (node[0] == node[0]) are never connected.
     """
     nodes_list = list(per_instance_sets.keys())
     if not nodes_list:
@@ -145,16 +142,189 @@ def build_edges_scipy(
         node1 = nodes_list[i]
         node2 = nodes_list[j]
 
-        # Never connect instances from the same video sequence
-        if node1[0] == node2[0]:
-            continue
-
         union_size = set_sizes[i] + set_sizes[j] - overlap
         jaccard_sim = float(overlap / union_size) if union_size > 0 else 0.0
 
         if overlap >= K or jaccard_sim >= tau:
             edges.append(
                 (node1, node2, {"overlap": int(overlap), "jaccard": jaccard_sim})
+            )
+
+    return edges
+
+
+# ---------------------------------------------------------------------------
+# Geometric (voxel-based) edge building
+# ---------------------------------------------------------------------------
+
+
+def build_edges_geometric_intersection(
+    per_instance_sets: Dict[Node, Set[int]],
+    points3D: Dict[int, Any],
+    voxel_size_cm: float = 10.0,
+    tau: float = 0.8,
+) -> List[Tuple[Node, Node, Dict[str, Any]]]:
+    """
+    Build edges using voxel-based geometric intersection.
+
+    Each instance's 3D point set is projected onto a voxel grid whose cell
+    side length is *voxel_size_cm* centimetres (point coordinates are assumed
+    to be in metres).  The grid spans the global bounding box of **all points
+    in the COLMAP model** (not just the points belonging to the instances under
+    comparison).  This ensures voxel indices are consistent across all instance
+    pairs and that the grid is not artificially shrunk to fit only the
+    instances being compared (which would inflate Jaccard similarity).
+
+    Two instances are connected when their voxel-occupancy Jaccard similarity
+    meets the threshold:
+
+        Jaccard(A, B) ≥ tau
+
+    The same sparse incidence matrix + M·Mᵀ trick employed in
+    :func:`build_edges_scipy` is used, but the columns represent voxels
+    instead of raw point IDs.
+
+    Args:
+        per_instance_sets:  Node → set of COLMAP 3D point IDs.
+        points3D:           COLMAP ``points3D`` dict
+                            (``point_id → Point3D`` namedtuple with ``.xyz``).
+        voxel_size_cm:      Side length of each voxel in centimetres
+                            (point coordinates are in metres).  The per-axis
+                            grid resolution is derived as
+                            ``ceil(extent_m / (voxel_size_cm / 100))``.
+        tau:                Min Jaccard similarity of voxel-occupancy sets.
+
+    Returns:
+        List of ``(node1, node2, attrs)`` edge triples where *attrs* contains
+        ``voxel_overlap`` (int) and ``geometric_jaccard`` (float).
+    """
+    nodes_list = list(per_instance_sets.keys())
+    if not nodes_list:
+        return []
+
+    # ------------------------------------------------------------------
+    # Global bounding box: use ALL points in the COLMAP model so that
+    # voxel indices are stable and not biased toward the instances being
+    # compared.
+    # ------------------------------------------------------------------
+    if not points3D:
+        print("Warning: points3D is empty; returning no edges.")
+        return []
+
+    all_scene_xyz = np.stack(
+        [np.array(pt.xyz, dtype=np.float64) for pt in points3D.values()], axis=0
+    )  # (N_scene, 3)
+    min_xyz = all_scene_xyz.min(axis=0)
+    max_xyz = all_scene_xyz.max(axis=0)
+    extent = max_xyz - min_xyz
+    # Avoid division-by-zero on degenerate axes.
+    extent = np.where(extent == 0, 1.0, extent)
+
+    voxel_size_m = voxel_size_cm / 100.0
+    grid_xyz = np.maximum(np.ceil(extent / voxel_size_m).astype(np.int64), 1)
+    grid_x, grid_y, grid_z = int(grid_xyz[0]), int(grid_xyz[1]), int(grid_xyz[2])
+
+    print(
+        f"Voxel grid: {grid_x}×{grid_y}×{grid_z} (voxel_size={voxel_size_cm}cm)  "
+        f"bbox [{min_xyz[0]:.3f}, {min_xyz[1]:.3f}, {min_xyz[2]:.3f}] → "
+        f"[{max_xyz[0]:.3f}, {max_xyz[1]:.3f}, {max_xyz[2]:.3f}]"
+    )
+
+    def _point_to_voxel(xyz: np.ndarray) -> int:
+        """Map an XYZ coordinate to a flat voxel index."""
+        frac = (xyz - min_xyz) / extent  # values in [0, 1]
+        ix, iy, iz = (frac * grid_xyz).astype(np.int64).clip(0, grid_xyz - 1)
+        return int(ix * grid_y * grid_z + iy * grid_z + iz)
+
+    # ------------------------------------------------------------------
+    # Resolve instance point IDs → xyz (skip IDs absent from the model).
+    # ------------------------------------------------------------------
+    all_instance_point_ids: Set[int] = set()
+    for s in per_instance_sets.values():
+        all_instance_point_ids.update(s)
+
+    point_xyz: Dict[int, np.ndarray] = {
+        pid: np.array(points3D[pid].xyz, dtype=np.float64)
+        for pid in all_instance_point_ids
+        if pid in points3D
+    }
+
+    if not point_xyz:
+        print(
+            "Warning: no valid 3D coordinates found for any instance; returning no edges."
+        )
+        return []
+
+    # ------------------------------------------------------------------
+    # Compute per-instance voxel occupancy sets.
+    # ------------------------------------------------------------------
+    per_instance_voxels: Dict[Node, Set[int]] = {}
+    for node, point_ids in per_instance_sets.items():
+        voxel_set: Set[int] = set()
+        for pid in point_ids:
+            if pid in point_xyz:
+                voxel_set.add(_point_to_voxel(point_xyz[pid]))
+        if voxel_set:
+            per_instance_voxels[node] = voxel_set
+
+    # Work only with nodes that have at least one valid voxel.
+    valid_nodes = [n for n in nodes_list if n in per_instance_voxels]
+    if not valid_nodes:
+        return []
+
+    # ------------------------------------------------------------------
+    # Build sparse incidence matrix M  (instances × voxels).
+    # ------------------------------------------------------------------
+    all_voxels: Set[int] = set()
+    total_assoc = 0
+    for s in per_instance_voxels.values():
+        all_voxels.update(s)
+        total_assoc += len(s)
+
+    voxel_to_idx = {v: i for i, v in enumerate(all_voxels)}
+    num_nodes = len(valid_nodes)
+    num_voxels = len(all_voxels)
+
+    print(
+        f"Constructing sparse voxel matrix "
+        f"({num_nodes} instances × {num_voxels} occupied voxels)…"
+    )
+
+    row_inds = np.zeros(total_assoc, dtype=np.int32)
+    col_inds = np.zeros(total_assoc, dtype=np.int32)
+    cur = 0
+    for ni, node in enumerate(valid_nodes):
+        for v in per_instance_voxels[node]:
+            row_inds[cur] = ni
+            col_inds[cur] = voxel_to_idx[v]
+            cur += 1
+
+    data = np.ones(total_assoc, dtype=np.int32)
+    M = sparse.csr_matrix((data, (row_inds, col_inds)), shape=(num_nodes, num_voxels))
+
+    print("Computing voxel intersection matrix (M · Mᵀ)…")
+    intersection_matrix = M.dot(M.T)
+
+    set_sizes = np.array(M.sum(axis=1)).flatten()
+
+    print("Filtering edges and calculating geometric Jaccard…")
+    upper_tri = sparse.triu(intersection_matrix, k=1).tocoo()
+
+    edges: List[Tuple[Node, Node, Dict[str, Any]]] = []
+    for i, j, overlap in zip(upper_tri.row, upper_tri.col, upper_tri.data):
+        node1 = valid_nodes[i]
+        node2 = valid_nodes[j]
+
+        union_size = set_sizes[i] + set_sizes[j] - overlap
+        geo_jac = float(overlap / union_size) if union_size > 0 else 0.0
+
+        if geo_jac >= tau:
+            edges.append(
+                (
+                    node1,
+                    node2,
+                    {"voxel_overlap": int(overlap), "geometric_jaccard": geo_jac},
+                )
             )
 
     return edges
@@ -196,7 +366,27 @@ def build_object_mask_graph(
     tau: float = 0.8,
     min_points: int = 1,
     min_points_in_3d_segment: int = 10,
+    intersection_type: str = "geometric",
+    voxel_size_cm: float = 10.0,
 ) -> None:
+    """
+    Build the object mask graph.
+
+    Args:
+        intersection_type: How to measure instance overlap.
+            ``"geometric"``  – voxelise each instance's 3D point cloud and
+                              compute Jaccard over the voxel-occupancy sets
+                              (calls :func:`build_edges_geometric_intersection`).
+            ``"id_based"``   – compute Jaccard directly over the raw COLMAP
+                              point-ID sets (calls :func:`build_edges_scipy`).
+        voxel_size_cm: Side length of each voxel in centimetres used when
+            *intersection_type* is ``"geometric"``.
+    """
+    if intersection_type not in ("geometric", "id_based"):
+        raise ValueError(
+            f"intersection_type must be 'geometric' or 'id_based', got {intersection_type!r}"
+        )
+
     config = load_config(dataset_name)
     outputs_dir = get_outputs_dir(config)
     obj_level_dir = outputs_dir / "object_level_masks"
@@ -220,8 +410,26 @@ def build_object_mask_graph(
         print(f"Average points per instance: {total_pts / total_nodes:.1f}")
 
     # ----- Build edges ------------------------------------------------------
-    print(f"\nBuilding edges (K={K}, tau={tau})…")
-    edges = build_edges_scipy(per_instance_sets, K=K, tau=tau)
+    print(
+        f"\nBuilding edges (K={K}, tau={tau}, intersection_type={intersection_type!r})…"
+    )
+    if intersection_type == "geometric":
+        from ..colmap_io import load_colmap_model
+        from ..io_paths import get_colmap_model_dir
+
+        colmap_model_dir = get_colmap_model_dir(config)
+        print(
+            f"Loading COLMAP model for geometric intersection from {colmap_model_dir}…"
+        )
+        _, _, points3D = load_colmap_model(str(colmap_model_dir))
+        edges = build_edges_geometric_intersection(
+            per_instance_sets,
+            points3D=points3D,
+            voxel_size_cm=voxel_size_cm,
+            tau=tau,
+        )
+    else:
+        edges = build_edges_scipy(per_instance_sets, K=K, tau=tau)
     print(f"Created {len(edges)} edges.")
 
     # ----- NetworkX graph ---------------------------------------------------
@@ -349,6 +557,8 @@ def build_object_mask_graph(
             "tau": tau,
             "min_points": min_points,
             "min_points_in_3d_segment": min_points_in_3d_segment,
+            "intersection_type": intersection_type,
+            "voxel_size_cm": voxel_size_cm,
         },
         "nodes": {"total": total_nodes},
         "edges": {"total": G.number_of_edges()},
@@ -400,6 +610,19 @@ def _parse_args() -> argparse.Namespace:
         default=10,
         help="Min 3D points in a connected component to be reported.",
     )
+    parser.add_argument(
+        "--intersection-type",
+        choices=["geometric", "id_based"],
+        default="geometric",
+        help="How to measure instance overlap: 'geometric' (voxel Jaccard) or 'id_based' (point-ID Jaccard).",
+    )
+    parser.add_argument(
+        "--voxel-size-cm",
+        type=float,
+        default=10.0,
+        help="Voxel side length in centimetres (used when --intersection-type=geometric). "
+        "Point coordinates are assumed to be in metres.",
+    )
     return parser.parse_args()
 
 
@@ -411,4 +634,6 @@ if __name__ == "__main__":
         tau=args.tau,
         min_points=args.min_points,
         min_points_in_3d_segment=args.min_points_segment,
+        intersection_type=args.intersection_type,
+        voxel_size_cm=args.voxel_size_cm,
     )

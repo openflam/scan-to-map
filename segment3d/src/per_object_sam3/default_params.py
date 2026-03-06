@@ -18,7 +18,7 @@ DEFAULT_PARAMETERS: dict = {
     # Object labels (case-insensitive) whose masks should be excluded from
     # 2D-3D association entirely (e.g. structural elements that are not objects
     # of interest).
-    "discard_objects_list": ["wall", "walls", "floor", "ceiling"],
+    "discard_objects_list": ["wall", "walls", "floor", "ceiling", "window"],
 
     # Neighbourhood radius in the same units as the COLMAP reconstruction
     # (typically metres).
@@ -31,13 +31,28 @@ DEFAULT_PARAMETERS: dict = {
     # Mask graph parameters
     # ------------------------------------------------------------------
 
-    # Minimum overlap count (number of shared 3D points) for an edge to be
-    # created between two mask nodes in the object mask graph.
+    # How to measure instance overlap when building edges:
+    #   "geometric" – voxelise each instance's 3D point cloud and compute
+    #                 Jaccard over the voxel-occupancy sets.
+    #   "id_based"  – compute Jaccard directly over the raw COLMAP point-ID sets.
+    "intersection_type": "geometric",
+
+    # Voxel side length in centimetres used when intersection_type="geometric".
+    # Point coordinates are assumed to be in metres.
+    "voxel_size_cm": 50.0,
+
+    # Minimum shared-point overlap count for an edge to be created between two
+    # mask nodes.  Used only when intersection_type="id_based": an edge is kept
+    # when the number of shared COLMAP point IDs ≥ K *or* Jaccard ≥ tau.
+    # Has no effect when intersection_type="geometric".
     "K": 5,
 
-    # Minimum Jaccard similarity between two masks' 3D point sets for an edge
-    # to be kept (range 0–1].
-    "tau": 0.8,
+    # Minimum Jaccard similarity threshold for an edge to be kept (range 0–1].
+    # When intersection_type="id_based": Jaccard is computed over raw COLMAP
+    #   point-ID sets; an edge is kept when Jaccard ≥ tau *or* overlap ≥ K.
+    # When intersection_type="geometric": Jaccard is computed over voxel-
+    #   occupancy sets; an edge is kept only when Jaccard ≥ tau (K is ignored).
+    "tau": 0.6,
 
     # Minimum number of 3D points a mask node must have to be included in the
     # graph at all.
@@ -102,7 +117,7 @@ DEFAULT_PARAMETERS: dict = {
     "caption_device": 0,
 
     # Batch size for captioning inference.
-    "caption_batch_size": 4,
+    "caption_batch_size": 32,
 
     # ------------------------------------------------------------------
     # CLIP embedding parameters

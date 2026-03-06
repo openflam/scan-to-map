@@ -58,6 +58,8 @@ def run_pipeline(
     tau: float = DEFAULT_PARAMETERS["tau"],
     min_points: int = DEFAULT_PARAMETERS["min_points"],
     min_points_in_3d_segment: int = DEFAULT_PARAMETERS["min_points_in_3d_segment"],
+    intersection_type: str = DEFAULT_PARAMETERS["intersection_type"],
+    voxel_size_cm: float = DEFAULT_PARAMETERS["voxel_size_cm"],
     # Segment-level DBSCAN parameters (2D-3D association noise filtering)
     segment_dbscan_eps: float = DEFAULT_PARAMETERS["segment_dbscan_eps"],
     segment_dbscan_min_samples: int = DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
@@ -105,6 +107,10 @@ def run_pipeline(
         tau: Min Jaccard similarity threshold for mask graph edges
         min_points: Min 3D points for a node to be included in the graph
         min_points_in_3d_segment: Min 3D points in a component to be reported
+        intersection_type: How to measure instance overlap: "geometric" (voxel
+            Jaccard over 3D space) or "id_based" (Jaccard over raw point IDs)
+        voxel_size_cm: Voxel side length in centimetres when intersection_type="geometric"
+            (point coordinates are assumed to be in metres)
         segment_dbscan_eps: DBSCAN neighbourhood radius for segment-level noise filtering during 2D-3D association
         segment_dbscan_min_samples: DBSCAN minimum samples per core point for segment-level filtering
         discard_objects_list: Object labels (case-insensitive) to skip during 2D-3D association
@@ -160,6 +166,9 @@ def run_pipeline(
     print(f"  Mask graph tau: {tau}")
     print(f"  Mask graph min_points: {min_points}")
     print(f"  Mask graph min_points_in_3d_segment: {min_points_in_3d_segment}")
+    print(f"  Mask graph intersection_type: {intersection_type}")
+    if intersection_type == "geometric":
+        print(f"  Mask graph voxel_size_cm: {voxel_size_cm}")
     if not skip_association:
         print(f"  Segment DBSCAN eps: {segment_dbscan_eps}")
         print(f"  Segment DBSCAN min_samples: {segment_dbscan_min_samples}")
@@ -207,6 +216,8 @@ def run_pipeline(
             "tau": tau,
             "min_points": min_points,
             "min_points_in_3d_segment": min_points_in_3d_segment,
+            "intersection_type": intersection_type,
+            "voxel_size_cm": voxel_size_cm,
             "segment_dbscan_eps": segment_dbscan_eps,
             "segment_dbscan_min_samples": segment_dbscan_min_samples,
             "discard_objects_list": discard_objects_list,
@@ -272,6 +283,8 @@ def run_pipeline(
                 tau=tau,
                 min_points=min_points,
                 min_points_in_3d_segment=min_points_in_3d_segment,
+                intersection_type=intersection_type,
+                voxel_size_cm=voxel_size_cm,
             )
 
             step_time = time.time() - step_start
@@ -585,6 +598,22 @@ Configuration:
         f"(default: {DEFAULT_PARAMETERS['discard_objects_list']})",
     )
 
+    # Mask graph intersection type
+    parser.add_argument(
+        "--intersection-type",
+        choices=["geometric", "id_based"],
+        default=DEFAULT_PARAMETERS["intersection_type"],
+        help=f"How to measure instance overlap: 'geometric' (voxel Jaccard) or 'id_based' (point-ID Jaccard) "
+        f"(default: {DEFAULT_PARAMETERS['intersection_type']})",
+    )
+    parser.add_argument(
+        "--voxel-size-cm",
+        type=float,
+        default=DEFAULT_PARAMETERS["voxel_size_cm"],
+        help=f"Voxel side length in centimetres used when --intersection-type=geometric "
+        f"(point coordinates assumed in metres; default: {DEFAULT_PARAMETERS['voxel_size_cm']})",
+    )
+
     # Clean components parameters (component-level DBSCAN)
     parser.add_argument(
         "--component-dbscan-eps",
@@ -757,4 +786,6 @@ Configuration:
         clip_pretrained=args.clip_pretrained,
         clip_batch_size=args.clip_batch_size,
         clip_device=args.clip_device,
+        intersection_type=args.intersection_type,
+        voxel_size_cm=args.voxel_size_cm,
     )
