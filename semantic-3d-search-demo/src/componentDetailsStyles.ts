@@ -40,14 +40,19 @@ export const styles = {
   imageWrapper: {
     width: "100%",
     borderRadius: "6px",
-    overflow: "hidden",
     marginBottom: "8px",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
   } satisfies CSSProperties,
 
   image: {
-    width: "100%",
+    maxWidth: "100%",
+    maxHeight: "220px",
+    width: "auto",
     height: "auto",
     display: "block",
+    borderRadius: "6px",
   } satisfies CSSProperties,
 
   textarea: {
