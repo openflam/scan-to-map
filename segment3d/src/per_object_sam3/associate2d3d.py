@@ -32,6 +32,7 @@ from typing import Any, Dict, List, Set
 
 import numpy as np
 from pycocotools import mask as mask_utils
+from sklearn.cluster import DBSCAN
 from tqdm import tqdm
 
 from ..io_paths import get_outputs_dir, get_colmap_model_dir, load_config
@@ -76,13 +77,31 @@ def _points_in_masks(
     rle_list: List[RLE],
     H: int,
     W: int,
+    points3D: Dict[int, Any],
+    dbscan_eps: float = 0.5,
+    dbscan_min_samples: int = 5,
 ) -> List[List[int]]:
     """
     For each mask in *rle_list*, return the list of COLMAP 3D point IDs
     whose 2D projection (xys) falls inside that mask.
 
+    After collecting candidate point IDs, DBSCAN is run on their 3D
+    coordinates to remove noise/outlier points.  Only IDs that belong to
+    at least one non-noise cluster (label != -1) are returned.
+
+    Args:
+        xys:              (N, 2) 2-D keypoint coordinates for this image.
+        point3D_ids:      (N,) corresponding COLMAP 3D point IDs.
+        rle_list:         List of per-instance RLE annotations.
+        H, W:             Image height and width.
+        points3D:         COLMAP points3D dict mapping point3d_id -> Point3D
+                          namedtuple (must have a .xyz attribute).
+        dbscan_eps:       DBSCAN neighbourhood radius (same units as the
+                          COLMAP reconstruction, typically metres).
+        dbscan_min_samples: Minimum points to form a core sample.
+
     Returns a list of length len(rle_list); each element is a sorted list of
-    unique 3D point IDs.
+    unique 3D point IDs that survived DBSCAN noise filtering.
     """
     num_masks = len(rle_list)
     if num_masks == 0 or len(xys) == 0:
@@ -114,7 +133,34 @@ def _points_in_masks(
         if mask_idx != -1:
             mask_point_sets[mask_idx].add(int(final_p3d[i]))
 
-    return [sorted(s) for s in mask_point_sets]
+    # ----- DBSCAN noise filtering per mask ----------------------------------
+    filtered: List[List[int]] = []
+    for pt_set in mask_point_sets:
+        if len(pt_set) == 0:
+            filtered.append([])
+            continue
+
+        ids = list(pt_set)
+        # Only keep IDs that exist in the COLMAP model
+        ids_with_xyz = [pid for pid in ids if pid in points3D]
+        if len(ids_with_xyz) == 0:
+            filtered.append([])
+            continue
+
+        coords = np.array([points3D[pid].xyz for pid in ids_with_xyz])
+
+        if len(coords) < dbscan_min_samples:
+            # Too few points to form any cluster – treat all as noise
+            filtered.append([])
+            continue
+
+        labels = DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples).fit_predict(
+            coords
+        )
+        inlier_ids = [pid for pid, lbl in zip(ids_with_xyz, labels) if lbl != -1]
+        filtered.append(sorted(inlier_ids))
+
+    return filtered
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +168,11 @@ def _points_in_masks(
 # ---------------------------------------------------------------------------
 
 
-def associate_per_object(dataset_name: str) -> None:
+def associate_per_object(
+    dataset_name: str,
+    segment_dbscan_eps: float = 0.5,
+    segment_dbscan_min_samples: int = 5,
+) -> None:
     config = load_config(dataset_name)
     outputs_dir = get_outputs_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
@@ -136,7 +186,7 @@ def associate_per_object(dataset_name: str) -> None:
 
     # ----- Load COLMAP model ------------------------------------------------
     print("Loading COLMAP model…")
-    cameras, images, _ = load_colmap_model(str(colmap_model_dir))
+    cameras, images, points3D = load_colmap_model(str(colmap_model_dir))
     image_metadata = index_image_metadata(images)
 
     # Build stem → (xys, point3D_ids, H, W) for fast per-frame lookup
@@ -200,7 +250,16 @@ def associate_per_object(dataset_name: str) -> None:
             point3D_ids = colmap_meta["point3D_ids"]
 
             # points_in_masks returns one list per element of annotations
-            per_mask_points = _points_in_masks(xys, point3D_ids, annotations, H, W)
+            per_mask_points = _points_in_masks(
+                xys,
+                point3D_ids,
+                annotations,
+                H,
+                W,
+                points3D,
+                dbscan_eps=segment_dbscan_eps,
+                dbscan_min_samples=segment_dbscan_min_samples,
+            )
 
             for ann, pts in zip(annotations, per_mask_points):
                 if not pts:

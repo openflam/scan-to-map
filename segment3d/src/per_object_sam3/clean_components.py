@@ -47,6 +47,7 @@ def clean_component(
     points3D: Dict,
     eps: float,
     min_samples: int,
+    split_components: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Clean a single connected component with DBSCAN.
@@ -54,7 +55,9 @@ def clean_component(
     Returns a list of component dicts:
     - If all points are noise → returns an empty list (component removed).
     - If one cluster       → returns a single component (noise stripped).
-    - If multiple clusters → returns one component per cluster (split).
+    - If multiple clusters → returns one component per cluster (split),
+                             only if *split_components* is True; otherwise
+                             all inlier points are kept in a single component.
     """
     comp_id = component["connected_comp_id"]
     instance_ids = component["instance_ids"]
@@ -99,6 +102,29 @@ def clean_component(
             }
         ]
 
+    # Multiple clusters
+    if not split_components:
+        # Keep all inlier points in the original component without splitting
+        kept_ids = [vid for vid, lbl in zip(valid_ids, labels) if lbl != -1]
+        if noise_count:
+            print(
+                f"  Component {comp_id}: {len(cluster_labels)} clusters found — "
+                f"noise only mode, removed {noise_count} noise points "
+                f"({len(kept_ids)} kept, not split)."
+            )
+        else:
+            print(
+                f"  Component {comp_id}: {len(cluster_labels)} clusters found — "
+                f"noise only mode, no noise removed."
+            )
+        return [
+            {
+                "connected_comp_id": comp_id,
+                "instance_ids": instance_ids,
+                "set_of_point3DIds": kept_ids,
+            }
+        ]
+
     # Multiple clusters → split
     print(
         f"  Component {comp_id}: split into {len(cluster_labels)} clusters "
@@ -124,18 +150,23 @@ def clean_connected_components(
     eps: float = 0.1,
     min_samples: int = 5,
     min_points: int = 20,
+    split_components: bool = False,
 ) -> None:
     """
     Load connected_components.json, apply DBSCAN cleaning to every component,
     and save the cleaned result back to the same file.
 
     Args:
-        dataset_name:  Dataset name recognised by load_config().
-        eps:           DBSCAN neighbourhood radius (in COLMAP world units, metres
-                       if the model is metric).
-        min_samples:   Minimum neighbours for a core point in DBSCAN.
-        min_points:    Drop components with fewer than this many points after
-                       cleaning (default: 20).
+        dataset_name:     Dataset name recognised by load_config().
+        eps:              DBSCAN neighbourhood radius (in COLMAP world units, metres
+                          if the model is metric).
+        min_samples:      Minimum neighbours for a core point in DBSCAN.
+        min_points:       Drop components with fewer than this many points after
+                          cleaning (default: 20).
+        split_components: When True, components with multiple DBSCAN clusters are
+                          split into separate components.  When False (default),
+                          only noise points (label == -1) are removed and
+                          multi-cluster components are kept as a single component.
     """
     config = load_config(dataset_name)
     outputs_dir = get_outputs_dir(config)
@@ -167,14 +198,22 @@ def clean_connected_components(
     cameras, images, points3D = load_colmap_model(colmap_model_dir)
     print(f"  {len(points3D)} 3D points loaded.")
 
-    print(f"\nRunning DBSCAN (eps={eps}, min_samples={min_samples}) …\n")
+    print(
+        f"\nRunning DBSCAN (eps={eps}, min_samples={min_samples}, split_components={split_components}) …\n"
+    )
 
     all_output: List[Dict[str, Any]] = []
     removed = 0
     split = 0
 
     for component in connected_components:
-        result = clean_component(component, points3D, eps=eps, min_samples=min_samples)
+        result = clean_component(
+            component,
+            points3D,
+            eps=eps,
+            min_samples=min_samples,
+            split_components=split_components,
+        )
         if len(result) == 0:
             removed += 1
         elif len(result) > 1:
@@ -245,6 +284,16 @@ def _parse_args() -> argparse.Namespace:
         default=20,
         help="Drop components with fewer than this many points after cleaning.",
     )
+    parser.add_argument(
+        "--split_components",
+        action="store_true",
+        default=False,
+        help=(
+            "Split components with multiple DBSCAN clusters into separate "
+            "components.  By default only noise points are removed and "
+            "multi-cluster components are kept intact."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -255,4 +304,5 @@ if __name__ == "__main__":
         eps=args.eps,
         min_samples=args.min_samples,
         min_points=args.min_points,
+        split_components=args.split_components,
     )

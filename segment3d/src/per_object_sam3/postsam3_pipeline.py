@@ -22,13 +22,14 @@ from pathlib import Path
 
 from .associate2d3d import associate_per_object
 from .clean_components import clean_connected_components
+from .default_params import DEFAULT_PARAMETERS
 from .mask_graph import build_object_mask_graph
 from .segment_crops import segment_crops_cli
 from ..bbox_corners import get_all_bbox_corners_cli
 from ..captioning import caption_all_components_cli
 from ..clip_embed import generate_clip_embeddings_cli
 from ..io_paths import load_config
-from config import list_datasets, DEFAULT_PARAMETERS
+from config import list_datasets
 
 
 def print_step_header(step_num: int, total_steps: int, title: str) -> None:
@@ -53,30 +54,38 @@ def run_pipeline(
     skip_caption: bool = False,
     skip_clip: bool = False,
     # Mask graph parameters
-    K: int = 30,
-    tau: float = 0.8,
-    min_points: int = 1,
-    min_points_in_3d_segment: int = 10,
-    # Clean components parameters
-    dbscan_eps: float = 0.1,
-    dbscan_min_samples: int = 5,
-    dbscan_min_points: int = 20,
+    K: int = DEFAULT_PARAMETERS["K"],
+    tau: float = DEFAULT_PARAMETERS["tau"],
+    min_points: int = DEFAULT_PARAMETERS["min_points"],
+    min_points_in_3d_segment: int = DEFAULT_PARAMETERS["min_points_in_3d_segment"],
+    # Segment-level DBSCAN parameters (2D-3D association noise filtering)
+    segment_dbscan_eps: float = DEFAULT_PARAMETERS["segment_dbscan_eps"],
+    segment_dbscan_min_samples: int = DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
+    # Clean components parameters (component-level DBSCAN)
+    component_dbscan_eps: float = DEFAULT_PARAMETERS["component_dbscan_eps"],
+    component_dbscan_min_samples: int = DEFAULT_PARAMETERS[
+        "component_dbscan_min_samples"
+    ],
+    component_dbscan_min_points: int = DEFAULT_PARAMETERS[
+        "component_dbscan_min_points"
+    ],
+    split_components: bool = DEFAULT_PARAMETERS["split_components"],
     # Bounding box parameters
-    percentile: float = 95.0,
+    percentile: float = DEFAULT_PARAMETERS["percentile"],
     # Segment crops parameters
-    top_n: int = 5,
-    min_fraction: float = 0.05,
+    top_n: int = DEFAULT_PARAMETERS["top_n"],
+    min_fraction: float = DEFAULT_PARAMETERS["min_fraction"],
     # Captioning parameters
-    caption_n_images: int = 1,
-    captioner_type: str = "vllm",
-    caption_model: str = "Qwen/Qwen2.5-VL-7B-Instruct",
-    caption_device: int = 0,
-    caption_batch_size: int = 4,
+    caption_n_images: int = DEFAULT_PARAMETERS["caption_n_images"],
+    captioner_type: str = DEFAULT_PARAMETERS["captioner_type"],
+    caption_model: str = DEFAULT_PARAMETERS["caption_model"],
+    caption_device: int = DEFAULT_PARAMETERS["caption_device"],
+    caption_batch_size: int = DEFAULT_PARAMETERS["caption_batch_size"],
     # CLIP embedding parameters
-    clip_model: str = "ViT-H-14",
-    clip_pretrained: str = "laion2B-s32B-b79K",
-    clip_batch_size: int = 32,
-    clip_device: int = 0,
+    clip_model: str = DEFAULT_PARAMETERS["clip_model"],
+    clip_pretrained: str = DEFAULT_PARAMETERS["clip_pretrained"],
+    clip_batch_size: int = DEFAULT_PARAMETERS["clip_batch_size"],
+    clip_device: int = DEFAULT_PARAMETERS["clip_device"],
 ) -> None:
     """
     Run the post-SAM3 pipeline (all steps after SAM3 segmentation).
@@ -94,9 +103,12 @@ def run_pipeline(
         tau: Min Jaccard similarity threshold for mask graph edges
         min_points: Min 3D points for a node to be included in the graph
         min_points_in_3d_segment: Min 3D points in a component to be reported
-        dbscan_eps: DBSCAN neighbourhood radius in world units
-        dbscan_min_samples: DBSCAN minimum samples per core point
-        dbscan_min_points: Drop components with fewer than this many points after cleaning
+        segment_dbscan_eps: DBSCAN neighbourhood radius for segment-level noise filtering during 2D-3D association
+        segment_dbscan_min_samples: DBSCAN minimum samples per core point for segment-level filtering
+        component_dbscan_eps: Component-level DBSCAN neighbourhood radius in world units
+        component_dbscan_min_samples: Component-level DBSCAN minimum samples per core point
+        component_dbscan_min_points: Drop components with fewer than this many points after cleaning
+        split_components: Split multi-cluster components into separate components (default: False)
         percentile: Percentile threshold for bbox outlier removal
         top_n: Number of top frames to crop per component
         min_fraction: Minimum visibility fraction to consider a frame for cropping
@@ -145,10 +157,14 @@ def run_pipeline(
     print(f"  Mask graph tau: {tau}")
     print(f"  Mask graph min_points: {min_points}")
     print(f"  Mask graph min_points_in_3d_segment: {min_points_in_3d_segment}")
+    if not skip_association:
+        print(f"  Segment DBSCAN eps: {segment_dbscan_eps}")
+        print(f"  Segment DBSCAN min_samples: {segment_dbscan_min_samples}")
     if not skip_clean:
-        print(f"  DBSCAN eps: {dbscan_eps}")
-        print(f"  DBSCAN min_samples: {dbscan_min_samples}")
-        print(f"  DBSCAN min_points: {dbscan_min_points}")
+        print(f"  Component DBSCAN eps: {component_dbscan_eps}")
+        print(f"  Component DBSCAN min_samples: {component_dbscan_min_samples}")
+        print(f"  Component DBSCAN min_points: {component_dbscan_min_points}")
+        print(f"  Split components: {split_components}")
     if not skip_bbox:
         print(f"  Bbox percentile: {percentile}")
     print(f"  Segment crops top_n: {top_n}")
@@ -187,9 +203,12 @@ def run_pipeline(
             "tau": tau,
             "min_points": min_points,
             "min_points_in_3d_segment": min_points_in_3d_segment,
-            "dbscan_eps": dbscan_eps,
-            "dbscan_min_samples": dbscan_min_samples,
-            "dbscan_min_points": dbscan_min_points,
+            "segment_dbscan_eps": segment_dbscan_eps,
+            "segment_dbscan_min_samples": segment_dbscan_min_samples,
+            "component_dbscan_eps": component_dbscan_eps,
+            "component_dbscan_min_samples": component_dbscan_min_samples,
+            "component_dbscan_min_points": component_dbscan_min_points,
+            "split_components": split_components,
             "percentile": percentile,
             "top_n": top_n,
             "min_fraction": min_fraction,
@@ -214,7 +233,11 @@ def run_pipeline(
             )
             step_start = time.time()
 
-            associate_per_object(dataset_name=dataset_name)
+            associate_per_object(
+                dataset_name=dataset_name,
+                segment_dbscan_eps=segment_dbscan_eps,
+                segment_dbscan_min_samples=segment_dbscan_min_samples,
+            )
 
             step_time = time.time() - step_start
             runtime_stats["steps"]["1_associate_2d_3d"] = {
@@ -268,9 +291,10 @@ def run_pipeline(
 
             clean_connected_components(
                 dataset_name=dataset_name,
-                eps=dbscan_eps,
-                min_samples=dbscan_min_samples,
-                min_points=dbscan_min_points,
+                eps=component_dbscan_eps,
+                min_samples=component_dbscan_min_samples,
+                min_points=component_dbscan_min_points,
+                split_components=split_components,
             )
 
             step_time = time.time() - step_start
@@ -511,46 +535,66 @@ Configuration:
     parser.add_argument(
         "--K",
         type=int,
-        default=30,
-        help=f"Min overlap count threshold for mask graph edges (default: 30)",
+        default=DEFAULT_PARAMETERS["K"],
+        help=f"Min overlap count threshold for mask graph edges (default: {DEFAULT_PARAMETERS['K']})",
     )
     parser.add_argument(
         "--tau",
         type=float,
-        default=0.8,
-        help=f"Min Jaccard similarity threshold for mask graph edges (default: 0.8)",
+        default=DEFAULT_PARAMETERS["tau"],
+        help=f"Min Jaccard similarity threshold for mask graph edges (default: {DEFAULT_PARAMETERS['tau']})",
     )
     parser.add_argument(
         "--min-points",
         type=int,
-        default=1,
-        help="Min 3D points for a node to be included in the graph (default: 1)",
+        default=DEFAULT_PARAMETERS["min_points"],
+        help=f"Min 3D points for a node to be included in the graph (default: {DEFAULT_PARAMETERS['min_points']})",
     )
     parser.add_argument(
         "--min-points-in-3d-segment",
         type=int,
-        default=10,
-        help="Min 3D points in a connected component to be reported (default: 10)",
+        default=DEFAULT_PARAMETERS["min_points_in_3d_segment"],
+        help=f"Min 3D points in a connected component to be reported (default: {DEFAULT_PARAMETERS['min_points_in_3d_segment']})",
     )
 
-    # Clean components parameters
+    # Segment-level DBSCAN parameters (2D-3D association)
     parser.add_argument(
-        "--dbscan-eps",
+        "--segment-dbscan-eps",
         type=float,
-        default=0.1,
-        help="DBSCAN neighbourhood radius in world units (default: 0.1)",
+        default=DEFAULT_PARAMETERS["segment_dbscan_eps"],
+        help=f"Segment-level DBSCAN neighbourhood radius for 2D-3D association noise filtering (default: {DEFAULT_PARAMETERS['segment_dbscan_eps']})",
     )
     parser.add_argument(
-        "--dbscan-min-samples",
+        "--segment-dbscan-min-samples",
         type=int,
-        default=5,
-        help="DBSCAN minimum samples per core point (default: 5)",
+        default=DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
+        help=f"Segment-level DBSCAN minimum samples per core point (default: {DEFAULT_PARAMETERS['segment_dbscan_min_samples']})",
+    )
+
+    # Clean components parameters (component-level DBSCAN)
+    parser.add_argument(
+        "--component-dbscan-eps",
+        type=float,
+        default=DEFAULT_PARAMETERS["component_dbscan_eps"],
+        help=f"Component-level DBSCAN neighbourhood radius in world units (default: {DEFAULT_PARAMETERS['component_dbscan_eps']})",
     )
     parser.add_argument(
-        "--dbscan-min-points",
+        "--component-dbscan-min-samples",
         type=int,
-        default=20,
-        help="Drop components with fewer than this many points after cleaning (default: 20)",
+        default=DEFAULT_PARAMETERS["component_dbscan_min_samples"],
+        help=f"Component-level DBSCAN minimum samples per core point (default: {DEFAULT_PARAMETERS['component_dbscan_min_samples']})",
+    )
+    parser.add_argument(
+        "--component-dbscan-min-points",
+        type=int,
+        default=DEFAULT_PARAMETERS["component_dbscan_min_points"],
+        help=f"Drop components with fewer than this many points after cleaning (default: {DEFAULT_PARAMETERS['component_dbscan_min_points']})",
+    )
+    parser.add_argument(
+        "--split-components",
+        action="store_true",
+        default=DEFAULT_PARAMETERS["split_components"],
+        help="Split components with multiple DBSCAN clusters into separate components (default: False)",
     )
 
     # Bounding box parameters
@@ -565,14 +609,14 @@ Configuration:
     parser.add_argument(
         "--top-n",
         type=int,
-        default=5,
-        help="Number of top frames to crop per component (default: 5)",
+        default=DEFAULT_PARAMETERS["top_n"],
+        help=f"Number of top frames to crop per component (default: {DEFAULT_PARAMETERS['top_n']})",
     )
     parser.add_argument(
         "--min-fraction",
         type=float,
-        default=0.05,
-        help="Minimum visibility fraction to consider a frame for cropping (default: 0.05)",
+        default=DEFAULT_PARAMETERS["min_fraction"],
+        help=f"Minimum visibility fraction to consider a frame for cropping (default: {DEFAULT_PARAMETERS['min_fraction']})",
     )
 
     # Captioning parameters
@@ -656,12 +700,16 @@ Configuration:
         parser.error("--clip-batch-size must be at least 1")
     if args.percentile <= 0 or args.percentile > 100:
         parser.error("--percentile must be between 0 and 100")
-    if args.dbscan_eps <= 0:
-        parser.error("--dbscan-eps must be positive")
-    if args.dbscan_min_samples < 1:
-        parser.error("--dbscan-min-samples must be at least 1")
-    if args.dbscan_min_points < 1:
-        parser.error("--dbscan-min-points must be at least 1")
+    if args.segment_dbscan_eps <= 0:
+        parser.error("--segment-dbscan-eps must be positive")
+    if args.segment_dbscan_min_samples < 1:
+        parser.error("--segment-dbscan-min-samples must be at least 1")
+    if args.component_dbscan_eps <= 0:
+        parser.error("--component-dbscan-eps must be positive")
+    if args.component_dbscan_min_samples < 1:
+        parser.error("--component-dbscan-min-samples must be at least 1")
+    if args.component_dbscan_min_points < 1:
+        parser.error("--component-dbscan-min-points must be at least 1")
 
     run_pipeline(
         dataset_name=args.dataset,
@@ -676,9 +724,12 @@ Configuration:
         tau=args.tau,
         min_points=args.min_points,
         min_points_in_3d_segment=args.min_points_in_3d_segment,
-        dbscan_eps=args.dbscan_eps,
-        dbscan_min_samples=args.dbscan_min_samples,
-        dbscan_min_points=args.dbscan_min_points,
+        segment_dbscan_eps=args.segment_dbscan_eps,
+        segment_dbscan_min_samples=args.segment_dbscan_min_samples,
+        component_dbscan_eps=args.component_dbscan_eps,
+        component_dbscan_min_samples=args.component_dbscan_min_samples,
+        component_dbscan_min_points=args.component_dbscan_min_points,
+        split_components=args.split_components,
         percentile=args.percentile,
         top_n=args.top_n,
         min_fraction=args.min_fraction,
