@@ -15,6 +15,11 @@ DEFAULT_PARAMETERS: dict = {
     # Applied per per-frame mask *before* votes are accumulated across frames.
     # ------------------------------------------------------------------
 
+    # Object labels (case-insensitive) whose masks should be excluded from
+    # 2D-3D association entirely (e.g. structural elements that are not objects
+    # of interest).
+    "discard_objects_list": ["wall", "walls", "floor", "ceiling"],
+
     # Neighbourhood radius in the same units as the COLMAP reconstruction
     # (typically metres).
     "segment_dbscan_eps": 0.5,

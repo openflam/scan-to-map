@@ -172,7 +172,12 @@ def associate_per_object(
     dataset_name: str,
     segment_dbscan_eps: float = 0.5,
     segment_dbscan_min_samples: int = 5,
+    discard_objects_list: List[str] | None = None,
 ) -> None:
+    if discard_objects_list is None:
+        discard_objects_list = []
+    discard_lower = {label.lower() for label in discard_objects_list}
+
     config = load_config(dataset_name)
     outputs_dir = get_outputs_dir(config)
     colmap_model_dir = get_colmap_model_dir(config)
@@ -206,6 +211,9 @@ def associate_per_object(
     work_items = []  # (obj_slug, seq_idx, seq_dir)
     for obj_dir in sorted(masks_base_dir.iterdir()):
         if not obj_dir.is_dir():
+            continue
+        if obj_dir.name.lower() in discard_lower:
+            print(f"  Skipping discarded object: {obj_dir.name}")
             continue
         for seq_dir in sorted(obj_dir.iterdir()):
             if not seq_dir.is_dir() or not seq_dir.name.startswith("seq_"):
@@ -314,9 +322,20 @@ def _parse_args() -> argparse.Namespace:
         required=True,
         help="Dataset name (must match a folder under data/ and outputs/).",
     )
+    parser.add_argument(
+        "--discard-objects",
+        nargs="+",
+        default=["wall", "walls", "floor", "ceiling"],
+        metavar="LABEL",
+        help="Object labels (case-insensitive) to exclude from 2D-3D association "
+        "(default: wall walls floor ceiling).",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
-    associate_per_object(args.dataset)
+    associate_per_object(
+        dataset_name=args.dataset,
+        discard_objects_list=args.discard_objects,
+    )

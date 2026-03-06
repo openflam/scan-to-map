@@ -61,6 +61,8 @@ def run_pipeline(
     # Segment-level DBSCAN parameters (2D-3D association noise filtering)
     segment_dbscan_eps: float = DEFAULT_PARAMETERS["segment_dbscan_eps"],
     segment_dbscan_min_samples: int = DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
+    # Objects to discard during 2D-3D association
+    discard_objects_list: list = DEFAULT_PARAMETERS["discard_objects_list"],
     # Clean components parameters (component-level DBSCAN)
     component_dbscan_eps: float = DEFAULT_PARAMETERS["component_dbscan_eps"],
     component_dbscan_min_samples: int = DEFAULT_PARAMETERS[
@@ -105,6 +107,7 @@ def run_pipeline(
         min_points_in_3d_segment: Min 3D points in a component to be reported
         segment_dbscan_eps: DBSCAN neighbourhood radius for segment-level noise filtering during 2D-3D association
         segment_dbscan_min_samples: DBSCAN minimum samples per core point for segment-level filtering
+        discard_objects_list: Object labels (case-insensitive) to skip during 2D-3D association
         component_dbscan_eps: Component-level DBSCAN neighbourhood radius in world units
         component_dbscan_min_samples: Component-level DBSCAN minimum samples per core point
         component_dbscan_min_points: Drop components with fewer than this many points after cleaning
@@ -160,6 +163,7 @@ def run_pipeline(
     if not skip_association:
         print(f"  Segment DBSCAN eps: {segment_dbscan_eps}")
         print(f"  Segment DBSCAN min_samples: {segment_dbscan_min_samples}")
+        print(f"  Discard objects: {discard_objects_list}")
     if not skip_clean:
         print(f"  Component DBSCAN eps: {component_dbscan_eps}")
         print(f"  Component DBSCAN min_samples: {component_dbscan_min_samples}")
@@ -205,6 +209,7 @@ def run_pipeline(
             "min_points_in_3d_segment": min_points_in_3d_segment,
             "segment_dbscan_eps": segment_dbscan_eps,
             "segment_dbscan_min_samples": segment_dbscan_min_samples,
+            "discard_objects_list": discard_objects_list,
             "component_dbscan_eps": component_dbscan_eps,
             "component_dbscan_min_samples": component_dbscan_min_samples,
             "component_dbscan_min_points": component_dbscan_min_points,
@@ -237,6 +242,7 @@ def run_pipeline(
                 dataset_name=dataset_name,
                 segment_dbscan_eps=segment_dbscan_eps,
                 segment_dbscan_min_samples=segment_dbscan_min_samples,
+                discard_objects_list=discard_objects_list,
             )
 
             step_time = time.time() - step_start
@@ -570,6 +576,14 @@ Configuration:
         default=DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
         help=f"Segment-level DBSCAN minimum samples per core point (default: {DEFAULT_PARAMETERS['segment_dbscan_min_samples']})",
     )
+    parser.add_argument(
+        "--discard-objects",
+        nargs="+",
+        default=DEFAULT_PARAMETERS["discard_objects_list"],
+        metavar="LABEL",
+        help=f"Object labels (case-insensitive) to exclude from 2D-3D association "
+        f"(default: {DEFAULT_PARAMETERS['discard_objects_list']})",
+    )
 
     # Clean components parameters (component-level DBSCAN)
     parser.add_argument(
@@ -726,6 +740,7 @@ Configuration:
         min_points_in_3d_segment=args.min_points_in_3d_segment,
         segment_dbscan_eps=args.segment_dbscan_eps,
         segment_dbscan_min_samples=args.segment_dbscan_min_samples,
+        discard_objects_list=args.discard_objects,
         component_dbscan_eps=args.component_dbscan_eps,
         component_dbscan_min_samples=args.component_dbscan_min_samples,
         component_dbscan_min_points=args.component_dbscan_min_points,
