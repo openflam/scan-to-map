@@ -31,34 +31,38 @@ def normalize_object(obj: str) -> str:
 
 def build_inventory_response(dataset: str) -> dict:
     json_path = (
-        REPO_ROOT
-        / "outputs"
-        / dataset
-        / "objects_inventory"
-        / "objects_inventory_compact.json"
+        REPO_ROOT / "outputs" / dataset / "objects_inventory" / "objects_to_frames.json"
     )
     with open(json_path, "r") as f:
         raw = json.load(f)
 
-    # Normalize all entries
-    normalized: dict[str, list[str]] = {}
-    all_objects: set[str] = set()
-    for frame, objs in raw.items():
-        norm_objs = list(
-            dict.fromkeys(normalize_object(o) for o in objs)
-        )  # unique, ordered
-        normalized[frame] = norm_objs
-        all_objects.update(norm_objs)
+    # raw is {object: [[frame, ...], [frame, ...], ...]}
+    # Flatten and normalize: object -> set of frames
+    obj_to_frames: dict[str, set[str]] = {}
+    for obj, frame_groups in raw.items():
+        norm_obj = normalize_object(obj)
+        if norm_obj not in obj_to_frames:
+            obj_to_frames[norm_obj] = set()
+        for group in frame_groups:
+            obj_to_frames[norm_obj].update(group)
 
-    all_objects = sorted(all_objects)  # sort alphabetically
-    frames = sorted(raw.keys())
+    # Collect all frames
+    all_frames: set[str] = set()
+    for frames_set in obj_to_frames.values():
+        all_frames.update(frames_set)
+    frames = sorted(all_frames)
+
+    # Invert to frame -> [objects]
+    normalized: dict[str, list[str]] = {f: [] for f in frames}
+    for obj, frames_set in obj_to_frames.items():
+        for frame in frames_set:
+            normalized[frame].append(obj)
+    for frame in normalized:
+        normalized[frame] = sorted(normalized[frame])
 
     # Sort objects by frequency descending (most common first), then alphabetically
-    freq: dict[str, int] = {obj: 0 for obj in all_objects}
-    for objs in normalized.values():
-        for obj in objs:
-            freq[obj] += 1
-    unique_objects = sorted(all_objects, key=lambda o: (-freq[o], o))
+    freq: dict[str, int] = {obj: len(fs) for obj, fs in obj_to_frames.items()}
+    unique_objects = sorted(obj_to_frames.keys(), key=lambda o: (-freq[o], o))
 
     return {
         "dataset": dataset,
@@ -138,7 +142,7 @@ def main():
         / "outputs"
         / args.dataset
         / "objects_inventory"
-        / "objects_inventory.json"
+        / "objects_to_frames.json"
     )
     if not out_path.exists():
         print(f"ERROR: Inventory file not found: {out_path}")
