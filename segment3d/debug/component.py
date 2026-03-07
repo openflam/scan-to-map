@@ -40,7 +40,7 @@ except ImportError:
     sys.exit("Pillow is required.  Install with: pip install Pillow")
 
 # Add the segment3d package to the path so we can import io_paths / config
-_SCRIPT_DIR = Path(__file__).resolve().parent
+_SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 
 from src.io_paths import (

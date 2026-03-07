@@ -10,10 +10,13 @@ produced by associate2d3d.py.  Each node in the graph is one
 sequences that share enough 3D points (Jaccard ≥ tau or overlap ≥ K).
 The merge is object-name-agnostic: nodes from different objects may be linked.
 
-Outputs (written to <outputs_dir>/object_level_masks/):
-    object_mask_graph.gpickle          – NetworkX graph (pickle)
-    object_connected_components.json   – list of merged instances with point3D IDs
-    object_mask_graph_stats.json       – summary statistics
+Outputs (written to <outputs_dir>/):
+    mask_graph.gpickle             – NetworkX graph (pickle)
+    connected_components.json      – list of merged instances with point3D IDs
+    mask_graph_stats.json          – summary statistics
+    unmerged_edges.json            – candidate pairs that had spatial overlap but were
+                                     rejected (Jaccard below threshold or CLIP distance
+                                     exceeded), with their jaccard / clip_distance scores
 
 Usage (from the segment3d/ directory):
     python -m src.per_object_sam3.mask_graph --dataset ProjectLabStudio_inv_method
@@ -305,7 +308,10 @@ def build_edges_scipy(
     tau: float = 0.2,
     clip_node_embeddings: Dict[Node, np.ndarray] = {},
     clip_distance_threshold: float = 0.8,
-) -> List[Tuple[Node, Node, Dict[str, Any]]]:
+) -> Tuple[
+    List[Tuple[Node, Node, Dict[str, Any]]],
+    List[Tuple[Node, Node, Dict[str, Any]]],
+]:
     """
     Build edges using a sparse incidence matrix + M·Mᵀ intersection trick.
 
@@ -316,10 +322,15 @@ def build_edges_scipy(
     discarded if the cosine distance between the two nodes' mask-image
     embeddings exceeds *clip_distance_threshold*:
         cosine_distance = 1 − cosine_similarity
+
+    Returns:
+        A tuple ``(edges, unmerged_edges)`` where *unmerged_edges* contains
+        candidate pairs that had at least one shared 3D point but were
+        rejected, annotated with a ``rejection_reason`` field.
     """
     nodes_list = list(per_instance_sets.keys())
     if not nodes_list:
-        return []
+        return [], []
 
     # --- collect all unique 3D point IDs ---
     all_points: Set[int] = set()
@@ -356,6 +367,7 @@ def build_edges_scipy(
     upper_tri = sparse.triu(intersection_matrix, k=1).tocoo()
 
     edges: List[Tuple[Node, Node, Dict[str, Any]]] = []
+    unmerged_edges: List[Tuple[Node, Node, Dict[str, Any]]] = []
     for i, j, overlap in zip(upper_tri.row, upper_tri.col, upper_tri.data):
         node1 = nodes_list[i]
         node2 = nodes_list[j]
@@ -363,15 +375,28 @@ def build_edges_scipy(
         union_size = set_sizes[i] + set_sizes[j] - overlap
         jaccard_sim = float(overlap / union_size) if union_size > 0 else 0.0
 
+        emb1 = clip_node_embeddings.get(node1)
+        emb2 = clip_node_embeddings.get(node2)
+        clip_dist: Optional[float] = None
+        if emb1 is not None and emb2 is not None:
+            clip_dist = 1.0 - float(np.dot(emb1, emb2))
+
         if overlap >= K or jaccard_sim >= tau:
             # CLIP semantic guard: skip if mask images are too dissimilar.
-            emb1 = clip_node_embeddings.get(node1)
-            emb2 = clip_node_embeddings.get(node2)
-            clip_dist: Optional[float] = None
-            if emb1 is not None and emb2 is not None:
-                clip_dist = 1.0 - float(np.dot(emb1, emb2))
-                if clip_dist > clip_distance_threshold:
-                    continue
+            if clip_dist is not None and clip_dist > clip_distance_threshold:
+                unmerged_edges.append(
+                    (
+                        node1,
+                        node2,
+                        {
+                            "overlap": int(overlap),
+                            "jaccard": jaccard_sim,
+                            "clip_distance": clip_dist,
+                            "rejection_reason": "clip_distance_exceeded",
+                        },
+                    )
+                )
+                continue
 
             edges.append(
                 (
@@ -384,8 +409,21 @@ def build_edges_scipy(
                     },
                 )
             )
+        else:
+            unmerged_edges.append(
+                (
+                    node1,
+                    node2,
+                    {
+                        "overlap": int(overlap),
+                        "jaccard": jaccard_sim,
+                        "clip_distance": clip_dist,
+                        "rejection_reason": "jaccard_below_threshold",
+                    },
+                )
+            )
 
-    return edges
+    return edges, unmerged_edges
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +438,10 @@ def build_edges_geometric_intersection(
     tau: float = 0.8,
     clip_node_embeddings: Dict[Node, np.ndarray] = {},
     clip_distance_threshold: float = 0.8,
-) -> List[Tuple[Node, Node, Dict[str, Any]]]:
+) -> Tuple[
+    List[Tuple[Node, Node, Dict[str, Any]]],
+    List[Tuple[Node, Node, Dict[str, Any]]],
+]:
     """
     Build edges using voxel-based geometric intersection.
 
@@ -440,12 +481,16 @@ def build_edges_geometric_intersection(
                             nodes' representative mask crops.
 
     Returns:
-        List of ``(node1, node2, attrs)`` edge triples where *attrs* contains
-        ``voxel_overlap`` (int) and ``geometric_jaccard`` (float).
+        A tuple ``(edges, unmerged_edges)`` where *unmerged_edges* contains
+        candidate pairs that had at least one shared voxel but were rejected,
+        annotated with a ``rejection_reason`` field
+        (``"jaccard_below_threshold"`` or ``"clip_distance_exceeded"``).
+        Each entry carries ``voxel_overlap`` (int), ``geometric_jaccard``
+        (float), and ``clip_distance`` (float or None).
     """
     nodes_list = list(per_instance_sets.keys())
     if not nodes_list:
-        return []
+        return [], []
 
     # ------------------------------------------------------------------
     # Global bounding box: use ALL points in the COLMAP model so that
@@ -454,7 +499,7 @@ def build_edges_geometric_intersection(
     # ------------------------------------------------------------------
     if not points3D:
         print("Warning: points3D is empty; returning no edges.")
-        return []
+        return [], []
 
     all_scene_xyz = np.stack(
         [np.array(pt.xyz, dtype=np.float64) for pt in points3D.values()], axis=0
@@ -515,7 +560,7 @@ def build_edges_geometric_intersection(
     # Work only with nodes that have at least one valid voxel.
     valid_nodes = [n for n in nodes_list if n in per_instance_voxels]
     if not valid_nodes:
-        return []
+        return [], []
 
     # ------------------------------------------------------------------
     # Build sparse incidence matrix M  (instances × voxels).
@@ -556,26 +601,40 @@ def build_edges_geometric_intersection(
     upper_tri = sparse.triu(intersection_matrix, k=1).tocoo()
 
     edges: List[Tuple[Node, Node, Dict[str, Any]]] = []
+    unmerged_edges: List[Tuple[Node, Node, Dict[str, Any]]] = []
     for i, j, overlap in zip(upper_tri.row, upper_tri.col, upper_tri.data):
         node1 = valid_nodes[i]
         node2 = valid_nodes[j]
 
-        # Do not merge objects identified as different instances by SAM3.
-        if (node1[0] == node2[0]) and (node1[1] == node2[1]) and (node1[2] != node2[2]):
-            continue
+        # # Do not merge objects identified as different instances by SAM3.
+        # if (node1[0] == node2[0]) and (node1[1] == node2[1]) and (node1[2] != node2[2]):
+        #     continue
 
         union_size = set_sizes[i] + set_sizes[j] - overlap
         geo_jac = float(overlap / union_size) if union_size > 0 else 0.0
 
+        emb1 = clip_node_embeddings.get(node1)
+        emb2 = clip_node_embeddings.get(node2)
+        clip_dist: Optional[float] = None
+        if emb1 is not None and emb2 is not None:
+            clip_dist = 1.0 - float(np.dot(emb1, emb2))
+
         if geo_jac >= tau:
             # CLIP semantic guard: skip if mask images are too dissimilar.
-            emb1 = clip_node_embeddings.get(node1)
-            emb2 = clip_node_embeddings.get(node2)
-            clip_dist: Optional[float] = None
-            if emb1 is not None and emb2 is not None:
-                clip_dist = 1.0 - float(np.dot(emb1, emb2))
-                if clip_dist > clip_distance_threshold:
-                    continue
+            if clip_dist is not None and clip_dist > clip_distance_threshold:
+                unmerged_edges.append(
+                    (
+                        node1,
+                        node2,
+                        {
+                            "voxel_overlap": int(overlap),
+                            "geometric_jaccard": geo_jac,
+                            "clip_distance": clip_dist,
+                            "rejection_reason": "clip_distance_exceeded",
+                        },
+                    )
+                )
+                continue
 
             edges.append(
                 (
@@ -588,8 +647,21 @@ def build_edges_geometric_intersection(
                     },
                 )
             )
+        else:
+            unmerged_edges.append(
+                (
+                    node1,
+                    node2,
+                    {
+                        "voxel_overlap": int(overlap),
+                        "geometric_jaccard": geo_jac,
+                        "clip_distance": clip_dist,
+                        "rejection_reason": "jaccard_below_threshold",
+                    },
+                )
+            )
 
-    return edges
+    return edges, unmerged_edges
 
 
 # ---------------------------------------------------------------------------
@@ -715,7 +787,7 @@ def build_object_mask_graph(
         f"\nBuilding edges (K={K}, tau={tau}, intersection_type={intersection_type!r})…"
     )
     if intersection_type == "geometric":
-        edges = build_edges_geometric_intersection(
+        edges, unmerged_edges = build_edges_geometric_intersection(
             per_instance_sets,
             points3D=points3D,
             voxel_size_cm=voxel_size_cm,
@@ -724,14 +796,14 @@ def build_object_mask_graph(
             clip_distance_threshold=clip_distance_threshold,
         )
     else:
-        edges = build_edges_scipy(
+        edges, unmerged_edges = build_edges_scipy(
             per_instance_sets,
             K=K,
             tau=tau,
             clip_node_embeddings=clip_node_embeddings,
             clip_distance_threshold=clip_distance_threshold,
         )
-    print(f"Created {len(edges)} edges.")
+    print(f"Created {len(edges)} edges, {len(unmerged_edges)} unmerged candidate(s).")
 
     # ----- NetworkX graph ---------------------------------------------------
     print("\nCreating NetworkX graph…")
@@ -751,6 +823,20 @@ def build_object_mask_graph(
     with graph_path.open("wb") as fh:
         pickle.dump(G, fh, protocol=pickle.HIGHEST_PROTOCOL)
     print(f"\nSaved graph → {graph_path}")
+
+    # ----- Save unmerged edges ----------------------------------------------
+    unmerged_path = outputs_dir / "unmerged_edges.json"
+    unmerged_list = [
+        {
+            "node1": node_to_instance_id.get(n1, "|".join(n1)),
+            "node2": node_to_instance_id.get(n2, "|".join(n2)),
+            **attrs,
+        }
+        for n1, n2, attrs in unmerged_edges
+    ]
+    with unmerged_path.open("w", encoding="utf-8") as fh:
+        json.dump(unmerged_list, fh, indent=2)
+    print(f"Saved unmerged edges  → {unmerged_path}  ({len(unmerged_list)} entries)")
 
     # ----- Load existing component IDs for stable incremental assignment -----
     components_path = outputs_dir / "connected_components.json"
