@@ -180,8 +180,8 @@ def get_mask_image(
 
     if save_dir is not None:
         save_dir.mkdir(parents=True, exist_ok=True)
-        save_path = save_dir / f"{obj_slug}__{seq_key}__{obj_id_str}.jpg"
-        result.save(save_path, "JPEG")
+        save_path = save_dir / f"{obj_slug}__{seq_key}__{obj_id_str}.png"
+        result.save(save_path, "PNG")
 
     return result
 
@@ -208,8 +208,8 @@ def compute_clip_image_embeddings(
 
     Args:
         save_dir: If provided, each resolved mask-crop image is saved as a
-            JPEG to this directory under the name
-            ``{seq_key}__{obj_slug}__{obj_id_str}.jpg``.
+            lossless PNG to this directory under the name
+            ``{obj_slug}__{seq_key}__{obj_id_str}.png``.
     """
     import torch
 

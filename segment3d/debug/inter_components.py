@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
 def load_clip(model_name: str, pretrained: str, device: str):
     import open_clip
 
-    model, preprocess, _ = open_clip.create_model_and_transforms(
+    model, _, preprocess = open_clip.create_model_and_transforms(
         model_name, pretrained=pretrained
     )
     model.eval().to(device)
@@ -80,8 +80,16 @@ def parse_instance_id(iid: str):
 
 def instance_to_image_path(iid: str, dataset_name: str) -> Path:
     label, seq_key, idx = parse_instance_id(iid)
-    fname = f"{label}__{seq_key}__{idx}.jpg"
-    return BASE / "outputs" / dataset_name / "graph_node_mask_images" / fname
+    base_path = (
+        BASE
+        / "outputs"
+        / dataset_name
+        / "graph_node_mask_images"
+        / f"{label}__{seq_key}__{idx}"
+    )
+    return base_path.with_suffix(
+        ".png"
+    )  # default to PNG (matches mask_graph.py output)
 
 
 def instance_to_point_ids(iid: str, obj_assoc: dict) -> set:
