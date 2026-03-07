@@ -26,7 +26,7 @@ import json
 import pickle
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import networkx as nx
 import numpy as np
@@ -42,12 +42,223 @@ for _p in [str(_SRC_DIR), str(_SEGMENT3D_DIR)]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from ..io_paths import get_outputs_dir, load_config  # noqa: E402
+from ..io_paths import (
+    get_outputs_dir,
+    get_images_dir,
+    get_colmap_model_dir,
+    load_config,
+)  # noqa: E402
 
 # Node type: (seq_key, obj_slug, obj_id_str)
 # Using seq_key as the first element so the "same-sequence" skip is node[0] == node[0],
 # mirroring the "same image" guard in src/mask_graph.py.
 Node = Tuple[str, str, str]
+
+
+# ---------------------------------------------------------------------------
+# Mask image extractor
+# ---------------------------------------------------------------------------
+
+
+def get_mask_image(
+    node: Node,
+    per_instance_sets: Dict[Node, Set[int]],
+    images: Dict[int, Any],
+    masks_base_dir: Path,
+    images_dir: Path,
+    save_dir: Optional[Path] = None,
+) -> "Optional[Any]":  # Optional[PIL.Image.Image]
+    """
+    Return a PIL Image of the masked region for *node*.
+
+    Frame selection: for each frame JSON in
+    ``masks_base_dir / obj_slug / seq_key / *.json``, count how many of the
+    node’s COLMAP 3D point IDs are also observed in the corresponding COLMAP
+    image.  The frame with the highest overlap is preferred.  Frames are
+    visited in descending overlap order until one is found that contains an
+    annotation for the node’s ``obj_id``.
+
+    The RLE mask for that annotation is decoded, applied to the RGB image, and
+    the bounding-box crop (background pixels zeroed) is returned.
+
+    Returns ``None`` if no suitable frame is found.
+    """
+    try:
+        from PIL import Image as PILImage
+        from pycocotools import mask as mask_utils
+    except ImportError as exc:
+        raise ImportError(
+            "Pillow and pycocotools are required for mask-image extraction. "
+            "Install with: pip install Pillow pycocotools"
+        ) from exc
+
+    seq_key, obj_slug, obj_id_str = node
+    obj_id_int = int(obj_id_str)
+    node_point_ids = per_instance_sets.get(node, set())
+
+    mask_seq_dir = masks_base_dir / obj_slug / seq_key
+    if not mask_seq_dir.is_dir():
+        return None
+
+    # Map frame stem -> COLMAP Image namedtuple
+    stem_to_image: Dict[str, Any] = {
+        Path(img.name).stem: img for img in images.values()
+    }
+
+    # ------------------------------------------------------------------
+    # Pass 1: count node-point overlap per frame (no JSON reading).
+    # ------------------------------------------------------------------
+    candidates: List[Tuple[int, Path]] = []
+    for frame_path in sorted(mask_seq_dir.glob("*.json")):
+        colmap_img = stem_to_image.get(frame_path.stem)
+        if colmap_img is None:
+            continue
+        img_point_ids = {int(pid) for pid in colmap_img.point3D_ids if int(pid) != -1}
+        count = len(node_point_ids & img_point_ids)
+        candidates.append((count, frame_path))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+
+    # ------------------------------------------------------------------
+    # Pass 2: walk best-first, read JSONs until we find our obj_id.
+    # ------------------------------------------------------------------
+    best_rle: Optional[Dict[str, Any]] = None
+    best_frame_stem: Optional[str] = None
+
+    for _count, frame_path in candidates:
+        with frame_path.open("r", encoding="utf-8") as fh:
+            annotations = json.load(fh)
+        for ann in annotations:
+            if int(ann["obj_id"]) == obj_id_int:
+                best_rle = ann["segmentation"]
+                best_frame_stem = frame_path.stem
+                break
+        if best_rle is not None:
+            break
+
+    if best_rle is None or best_frame_stem is None:
+        return None
+
+    # ------------------------------------------------------------------
+    # Load the RGB image, apply mask, crop to bounding box.
+    # ------------------------------------------------------------------
+    img_path: Optional[Path] = None
+    for ext in (".jpg", ".jpeg", ".png"):
+        p = images_dir / (best_frame_stem + ext)
+        if p.exists():
+            img_path = p
+            break
+
+    if img_path is None:
+        return None
+
+    rgb = PILImage.open(img_path).convert("RGB")
+    mask_arr = mask_utils.decode(best_rle).astype(bool)  # (H, W)
+
+    rows = np.any(mask_arr, axis=1)
+    cols = np.any(mask_arr, axis=0)
+    if not rows.any() or not cols.any():
+        return None
+
+    rmin = int(np.where(rows)[0][0])
+    rmax = int(np.where(rows)[0][-1])
+    cmin = int(np.where(cols)[0][0])
+    cmax = int(np.where(cols)[0][-1])
+
+    rgb_arr = np.array(rgb)
+    cropped = rgb_arr[rmin : rmax + 1, cmin : cmax + 1].copy()
+    mask_crop = mask_arr[rmin : rmax + 1, cmin : cmax + 1]
+    cropped[~mask_crop] = 0  # zero out background pixels
+
+    result = PILImage.fromarray(cropped)
+
+    if save_dir is not None:
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_path = save_dir / f"{obj_slug}__{seq_key}__{obj_id_str}.jpg"
+        result.save(save_path, "JPEG")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# CLIP image encoder
+# ---------------------------------------------------------------------------
+
+
+def compute_clip_image_embeddings(
+    nodes: List[Node],
+    per_instance_sets: Dict[Node, Set[int]],
+    images: Dict[int, Any],
+    masks_base_dir: Path,
+    images_dir: Path,
+    save_dir: Optional[Path] = None,
+) -> Dict[Node, np.ndarray]:
+    """
+    Encode the representative mask image for each node with OpenCLIP ViT-H-14
+    and return ``node → unit-normalised float32 vector`` (shape ``(1024,)``).
+
+    For each node :func:`get_mask_image` is called to obtain the best-frame
+    masked crop; crops that can't be resolved are silently skipped.
+
+    Args:
+        save_dir: If provided, each resolved mask-crop image is saved as a
+            JPEG to this directory under the name
+            ``{seq_key}__{obj_slug}__{obj_id_str}.jpg``.
+    """
+    import torch
+
+    try:
+        import open_clip
+    except ImportError as exc:
+        raise ImportError(
+            "open_clip is required for CLIP image embedding.  "
+            "Install with: pip install open-clip-torch"
+        ) from exc
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, _, preprocess = open_clip.create_model_and_transforms(
+        "ViT-H-14", pretrained="laion2b_s32b_b79k"
+    )
+    model.eval().to(device)
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        tqdm = None
+
+    embeddings: Dict[Node, np.ndarray] = {}
+    missing = 0
+    iterator = (
+        tqdm(nodes, desc="CLIP image embeddings", unit="node", dynamic_ncols=True)
+        if tqdm is not None
+        else nodes
+    )
+    for node in iterator:
+        img = get_mask_image(
+            node,
+            per_instance_sets,
+            images,
+            masks_base_dir,
+            images_dir,
+            save_dir=save_dir,
+        )
+        if img is None:
+            missing += 1
+            continue
+        tensor = preprocess(img).unsqueeze(0).to(device)
+        with torch.no_grad():
+            feat = model.encode_image(tensor)
+            feat = feat / feat.norm(dim=-1, keepdim=True)
+        embeddings[node] = feat.squeeze(0).cpu().float().numpy()
+
+    print(
+        f"  Computed image embeddings for {len(embeddings)}/{len(nodes)} node(s) "
+        f"({missing} skipped – no suitable frame found)."
+    )
+    return embeddings
 
 
 # ---------------------------------------------------------------------------
@@ -92,12 +303,19 @@ def build_edges_scipy(
     per_instance_sets: Dict[Node, Set[int]],
     K: int = 5,
     tau: float = 0.2,
+    clip_node_embeddings: Dict[Node, np.ndarray] = {},
+    clip_distance_threshold: float = 0.8,
 ) -> List[Tuple[Node, Node, Dict[str, Any]]]:
     """
     Build edges using a sparse incidence matrix + M·Mᵀ intersection trick.
 
     Two nodes are connected when:
         overlap ≥ K  OR  Jaccard(A, B) ≥ tau
+
+    A CLIP-based semantic guard is always applied: a candidate edge is
+    discarded if the cosine distance between the two nodes' mask-image
+    embeddings exceeds *clip_distance_threshold*:
+        cosine_distance = 1 − cosine_similarity
     """
     nodes_list = list(per_instance_sets.keys())
     if not nodes_list:
@@ -146,8 +364,25 @@ def build_edges_scipy(
         jaccard_sim = float(overlap / union_size) if union_size > 0 else 0.0
 
         if overlap >= K or jaccard_sim >= tau:
+            # CLIP semantic guard: skip if mask images are too dissimilar.
+            emb1 = clip_node_embeddings.get(node1)
+            emb2 = clip_node_embeddings.get(node2)
+            clip_dist: Optional[float] = None
+            if emb1 is not None and emb2 is not None:
+                clip_dist = 1.0 - float(np.dot(emb1, emb2))
+                if clip_dist > clip_distance_threshold:
+                    continue
+
             edges.append(
-                (node1, node2, {"overlap": int(overlap), "jaccard": jaccard_sim})
+                (
+                    node1,
+                    node2,
+                    {
+                        "overlap": int(overlap),
+                        "jaccard": jaccard_sim,
+                        "clip_distance": clip_dist,
+                    },
+                )
             )
 
     return edges
@@ -161,8 +396,10 @@ def build_edges_scipy(
 def build_edges_geometric_intersection(
     per_instance_sets: Dict[Node, Set[int]],
     points3D: Dict[int, Any],
-    voxel_size_cm: float = 10.0,
+    voxel_size_cm: float = 50.0,
     tau: float = 0.8,
+    clip_node_embeddings: Dict[Node, np.ndarray] = {},
+    clip_distance_threshold: float = 0.8,
 ) -> List[Tuple[Node, Node, Dict[str, Any]]]:
     """
     Build edges using voxel-based geometric intersection.
@@ -193,6 +430,14 @@ def build_edges_geometric_intersection(
                             grid resolution is derived as
                             ``ceil(extent_m / (voxel_size_cm / 100))``.
         tau:                Min Jaccard similarity of voxel-occupancy sets.
+        clip_node_embeddings: Mapping of Node → unit-vector
+                            (from :func:`compute_clip_image_embeddings`).
+                            Candidate edges whose two node embeddings have
+                            cosine distance ``> clip_distance_threshold``
+                            are always discarded.
+        clip_distance_threshold: Maximum allowed cosine distance between
+                            the OpenCLIP ViT-H-14 image embeddings of the two
+                            nodes' representative mask crops.
 
     Returns:
         List of ``(node1, node2, attrs)`` edge triples where *attrs* contains
@@ -315,15 +560,32 @@ def build_edges_geometric_intersection(
         node1 = valid_nodes[i]
         node2 = valid_nodes[j]
 
+        # Do not merge objects identified as different instances by SAM3.
+        if (node1[0] == node2[0]) and (node1[1] == node2[1]) and (node1[2] != node2[2]):
+            continue
+
         union_size = set_sizes[i] + set_sizes[j] - overlap
         geo_jac = float(overlap / union_size) if union_size > 0 else 0.0
 
         if geo_jac >= tau:
+            # CLIP semantic guard: skip if mask images are too dissimilar.
+            emb1 = clip_node_embeddings.get(node1)
+            emb2 = clip_node_embeddings.get(node2)
+            clip_dist: Optional[float] = None
+            if emb1 is not None and emb2 is not None:
+                clip_dist = 1.0 - float(np.dot(emb1, emb2))
+                if clip_dist > clip_distance_threshold:
+                    continue
+
             edges.append(
                 (
                     node1,
                     node2,
-                    {"voxel_overlap": int(overlap), "geometric_jaccard": geo_jac},
+                    {
+                        "voxel_overlap": int(overlap),
+                        "geometric_jaccard": geo_jac,
+                        "clip_distance": clip_dist,
+                    },
                 )
             )
 
@@ -367,7 +629,9 @@ def build_object_mask_graph(
     min_points: int = 1,
     min_points_in_3d_segment: int = 10,
     intersection_type: str = "geometric",
-    voxel_size_cm: float = 10.0,
+    voxel_size_cm: float = 50.0,
+    clip_distance_threshold: float = 0.8,
+    save_segment_images: bool = False,
 ) -> None:
     """
     Build the object mask graph.
@@ -381,6 +645,14 @@ def build_object_mask_graph(
                               point-ID sets (calls :func:`build_edges_scipy`).
         voxel_size_cm: Side length of each voxel in centimetres used when
             *intersection_type* is ``"geometric"``.
+        clip_distance_threshold: Maximum cosine distance between OpenCLIP
+            ViT-H-14 image embeddings of the two nodes' representative mask
+            crops for an edge to be kept.  Two nodes whose mask-image embeddings
+            have cosine distance greater than this value are **never** merged,
+            even if their spatial overlap passes the Jaccard / K threshold.
+        save_segment_images: When ``True``, save each node's representative
+            masked-crop image as a JPEG to
+            ``outputs/{dataset}/graph_node_mask_images/``.
     """
     if intersection_type not in ("geometric", "id_based"):
         raise ValueError(
@@ -409,27 +681,56 @@ def build_object_mask_graph(
     if total_nodes:
         print(f"Average points per instance: {total_pts / total_nodes:.1f}")
 
-    # ----- Build edges ------------------------------------------------------
+    # ----- Pre-compute CLIP image embeddings --------------------------------
+    from ..colmap_io import load_colmap_model
+
+    colmap_model_dir = get_colmap_model_dir(config)
+    images_dir = get_images_dir(config)
+    masks_base_dir = obj_level_dir / "masks"
+
+    print(f"Loading COLMAP model for CLIP image embeddings from {colmap_model_dir}…")
+    cameras, images, points3D = load_colmap_model(str(colmap_model_dir))
+
+    all_nodes = list(per_instance_sets.keys())
+    print(
+        f"Computing CLIP image embeddings for {len(all_nodes)} node(s) "
+        f"(clip_distance_threshold={clip_distance_threshold})…"
+    )
+    save_dir: Optional[Path] = None
+    if save_segment_images:
+        save_dir = outputs_dir / "graph_node_mask_images"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        print(f"  Saving node mask images → {save_dir}")
+    clip_node_embeddings: Dict[Node, np.ndarray] = compute_clip_image_embeddings(
+        all_nodes,
+        per_instance_sets,
+        images,
+        masks_base_dir,
+        images_dir,
+        save_dir=save_dir,
+    )
+
+    # ----- Build edges -------------------------------------------------------
     print(
         f"\nBuilding edges (K={K}, tau={tau}, intersection_type={intersection_type!r})…"
     )
     if intersection_type == "geometric":
-        from ..colmap_io import load_colmap_model
-        from ..io_paths import get_colmap_model_dir
-
-        colmap_model_dir = get_colmap_model_dir(config)
-        print(
-            f"Loading COLMAP model for geometric intersection from {colmap_model_dir}…"
-        )
-        _, _, points3D = load_colmap_model(str(colmap_model_dir))
         edges = build_edges_geometric_intersection(
             per_instance_sets,
             points3D=points3D,
             voxel_size_cm=voxel_size_cm,
             tau=tau,
+            clip_node_embeddings=clip_node_embeddings,
+            clip_distance_threshold=clip_distance_threshold,
         )
     else:
-        edges = build_edges_scipy(per_instance_sets, K=K, tau=tau)
+        edges = build_edges_scipy(
+            per_instance_sets,
+            K=K,
+            tau=tau,
+            clip_node_embeddings=clip_node_embeddings,
+            clip_distance_threshold=clip_distance_threshold,
+        )
     print(f"Created {len(edges)} edges.")
 
     # ----- NetworkX graph ---------------------------------------------------
@@ -517,11 +818,42 @@ def build_object_mask_graph(
                     comp_id = next_new_id
                     next_new_id += 1
 
+            # Collect intra-component edges with their properties.
+            component_edges: List[Dict[str, Any]] = []
+            for node_a, node_b, edge_attrs in G.edges(component, data=True):
+                # G.edges(component) may yield edges twice for undirected graphs;
+                # only keep the canonical (node_a < node_b) direction.
+                if node_a > node_b:
+                    node_a, node_b = node_b, node_a
+                id_a = node_to_instance_id.get(node_a, "__".join(node_a))
+                id_b = node_to_instance_id.get(node_b, "__".join(node_b))
+                jaccard_val = edge_attrs.get(
+                    "jaccard", edge_attrs.get("geometric_jaccard")
+                )
+                component_edges.append(
+                    {
+                        "node1": id_a,
+                        "node2": id_b,
+                        "jaccard": jaccard_val,
+                        "clip_distance": edge_attrs.get("clip_distance"),
+                    }
+                )
+            # Deduplicate (node_a > node_b swap above may still produce duplicates
+            # if NetworkX yields the same edge from both endpoint views).
+            seen_edges: set = set()
+            deduped_edges: List[Dict[str, Any]] = []
+            for e in component_edges:
+                key = (e["node1"], e["node2"])
+                if key not in seen_edges:
+                    seen_edges.add(key)
+                    deduped_edges.append(e)
+
             components_list.append(
                 {
                     "connected_comp_id": comp_id,
                     "instance_ids": sorted_instances,
                     "set_of_point3DIds": sorted(point3d_union),
+                    "edges": deduped_edges,
                 }
             )
 
@@ -559,6 +891,7 @@ def build_object_mask_graph(
             "min_points_in_3d_segment": min_points_in_3d_segment,
             "intersection_type": intersection_type,
             "voxel_size_cm": voxel_size_cm,
+            "clip_distance_threshold": clip_distance_threshold,
         },
         "nodes": {"total": total_nodes},
         "edges": {"total": G.number_of_edges()},
@@ -623,6 +956,14 @@ def _parse_args() -> argparse.Namespace:
         help="Voxel side length in centimetres (used when --intersection-type=geometric). "
         "Point coordinates are assumed to be in metres.",
     )
+    parser.add_argument(
+        "--clip-distance-threshold",
+        type=float,
+        default=0.8,
+        metavar="DIST",
+        help="Maximum cosine distance between OpenCLIP ViT-H-14 image embeddings of two "
+        "nodes' mask crops for them to be allowed to merge.  Range (0, 1].",
+    )
     return parser.parse_args()
 
 
@@ -636,4 +977,5 @@ if __name__ == "__main__":
         min_points_in_3d_segment=args.min_points_segment,
         intersection_type=args.intersection_type,
         voxel_size_cm=args.voxel_size_cm,
+        clip_distance_threshold=args.clip_distance_threshold,
     )

@@ -23,6 +23,7 @@ from pathlib import Path
 from .associate2d3d import associate_per_object
 from .clean_components import clean_connected_components
 from .default_params import DEFAULT_PARAMETERS
+from .dummy_caption import generate_dummy_captions
 from .mask_graph import build_object_mask_graph
 from .segment_crops import segment_crops_cli
 from ..bbox_corners import get_all_bbox_corners_cli
@@ -60,6 +61,8 @@ def run_pipeline(
     min_points_in_3d_segment: int = DEFAULT_PARAMETERS["min_points_in_3d_segment"],
     intersection_type: str = DEFAULT_PARAMETERS["intersection_type"],
     voxel_size_cm: float = DEFAULT_PARAMETERS["voxel_size_cm"],
+    clip_distance_threshold: float = DEFAULT_PARAMETERS["clip_distance_threshold"],
+    save_segment_images: bool = DEFAULT_PARAMETERS["save_segment_images"],
     # Segment-level DBSCAN parameters (2D-3D association noise filtering)
     segment_dbscan_eps: float = DEFAULT_PARAMETERS["segment_dbscan_eps"],
     segment_dbscan_min_samples: int = DEFAULT_PARAMETERS["segment_dbscan_min_samples"],
@@ -111,6 +114,10 @@ def run_pipeline(
             Jaccard over 3D space) or "id_based" (Jaccard over raw point IDs)
         voxel_size_cm: Voxel side length in centimetres when intersection_type="geometric"
             (point coordinates are assumed to be in metres)
+        clip_distance_threshold: Max cosine distance between OpenCLIP ViT-H-14 image
+            embeddings of two mask images for them to be merged.  None disables the check.
+        save_segment_images: When True, save each node's representative masked-crop
+            image to outputs/{dataset}/graph_node_mask_images/ for visual inspection.
         segment_dbscan_eps: DBSCAN neighbourhood radius for segment-level noise filtering during 2D-3D association
         segment_dbscan_min_samples: DBSCAN minimum samples per core point for segment-level filtering
         discard_objects_list: Object labels (case-insensitive) to skip during 2D-3D association
@@ -169,6 +176,8 @@ def run_pipeline(
     print(f"  Mask graph intersection_type: {intersection_type}")
     if intersection_type == "geometric":
         print(f"  Mask graph voxel_size_cm: {voxel_size_cm}")
+    print(f"  Mask graph clip_distance_threshold: {clip_distance_threshold}")
+    print(f"  Mask graph save_segment_images: {save_segment_images}")
     if not skip_association:
         print(f"  Segment DBSCAN eps: {segment_dbscan_eps}")
         print(f"  Segment DBSCAN min_samples: {segment_dbscan_min_samples}")
@@ -218,6 +227,8 @@ def run_pipeline(
             "min_points_in_3d_segment": min_points_in_3d_segment,
             "intersection_type": intersection_type,
             "voxel_size_cm": voxel_size_cm,
+            "clip_distance_threshold": clip_distance_threshold,
+            "save_segment_images": save_segment_images,
             "segment_dbscan_eps": segment_dbscan_eps,
             "segment_dbscan_min_samples": segment_dbscan_min_samples,
             "discard_objects_list": discard_objects_list,
@@ -285,6 +296,8 @@ def run_pipeline(
                 min_points_in_3d_segment=min_points_in_3d_segment,
                 intersection_type=intersection_type,
                 voxel_size_cm=voxel_size_cm,
+                clip_distance_threshold=clip_distance_threshold,
+                save_segment_images=save_segment_images,
             )
 
             step_time = time.time() - step_start
@@ -401,10 +414,13 @@ def run_pipeline(
             }
             print_step_complete(step_time)
         else:
-            print("\nSkipping Step 6: VLM Captioning")
+            print("\nSkipping Step 6: VLM Captioning (generating dummy captions)")
+            step_start = time.time()
+            generate_dummy_captions(dataset_name=dataset_name)
+            step_time = time.time() - step_start
             runtime_stats["steps"]["6_caption_components"] = {
-                "duration_seconds": 0,
-                "status": "skipped",
+                "duration_seconds": step_time,
+                "status": "skipped_dummy",
             }
 
         # Step 7: Generate CLIP embeddings
@@ -613,6 +629,21 @@ Configuration:
         help=f"Voxel side length in centimetres used when --intersection-type=geometric "
         f"(point coordinates assumed in metres; default: {DEFAULT_PARAMETERS['voxel_size_cm']})",
     )
+    parser.add_argument(
+        "--clip-distance-threshold",
+        type=float,
+        default=DEFAULT_PARAMETERS["clip_distance_threshold"],
+        metavar="DIST",
+        help=f"Maximum cosine distance between OpenCLIP ViT-H-14 image embeddings for two "
+        f"nodes to be merged.  Range (0, 1] (default: {DEFAULT_PARAMETERS['clip_distance_threshold']}).",
+    )
+    parser.add_argument(
+        "--save-segment-images",
+        action="store_true",
+        default=DEFAULT_PARAMETERS["save_segment_images"],
+        help="Save each node's representative masked-crop image to "
+        "outputs/{dataset}/graph_node_mask_images/ for visual inspection.",
+    )
 
     # Clean components parameters (component-level DBSCAN)
     parser.add_argument(
@@ -788,4 +819,6 @@ Configuration:
         clip_device=args.clip_device,
         intersection_type=args.intersection_type,
         voxel_size_cm=args.voxel_size_cm,
+        clip_distance_threshold=args.clip_distance_threshold,
+        save_segment_images=args.save_segment_images,
     )

@@ -52,7 +52,16 @@ DEFAULT_PARAMETERS: dict = {
     #   point-ID sets; an edge is kept when Jaccard ≥ tau *or* overlap ≥ K.
     # When intersection_type="geometric": Jaccard is computed over voxel-
     #   occupancy sets; an edge is kept only when Jaccard ≥ tau (K is ignored).
-    "tau": 0.6,
+    "tau": 0.5,
+
+    # Maximum cosine distance allowed between OpenCLIP ViT-H-14 image embeddings
+    # of the two nodes' representative mask crops for an edge to be kept.
+    # Range: (0, 1].  Smaller values enforce stricter visual similarity.
+    "clip_distance_threshold": 0.2,
+
+    # When True, save each node's representative masked-crop image to
+    # outputs/{dataset}/graph_node_mask_images/ for visual inspection.
+    "save_segment_images": True,
 
     # Minimum number of 3D points a mask node must have to be included in the
     # graph at all.
