@@ -8,6 +8,11 @@ Prints two tables matching the output of temp.ipynb cell 2:
 
 Usage:
     python debug/inter_components.py --dataset_name <name> --comp_id_a <int> --comp_id_b <int>
+    python debug/inter_components.py --dataset_name <name> --comp_id_a <int> --comp_id_b <int> --fresh-calculate
+
+By default (no --fresh-calculate), only unmerged_edges.json is read; no COLMAP data or CLIP
+model is loaded.  Pass --fresh-calculate to also recompute voxel Jaccard, containment, and
+CLIP distance from scratch.
 
 Voxel size is taken from default_params.DEFAULT_PARAMETERS["voxel_size_cm"].
 """
@@ -54,6 +59,13 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_PARAMETERS["voxel_size_cm"],
         help=f"Voxel side length in cm (default: {DEFAULT_PARAMETERS['voxel_size_cm']})",
+    )
+    p.add_argument(
+        "--fresh-calculate",
+        action="store_true",
+        default=False,
+        help="Recompute voxel Jaccard and CLIP embeddings from scratch. "
+        "When omitted (default), values are read directly from unmerged_edges.json.",
     )
     return p.parse_args()
 
@@ -219,16 +231,9 @@ def main():
     comp_id_b = args.comp_id_b
     voxel_size_cm: float = args.voxel_size_cm
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    clip_model_name = DEFAULT_PARAMETERS["clip_model"]
-    clip_pretrained = DEFAULT_PARAMETERS["clip_pretrained"]
+    fresh_calculate: bool = args.fresh_calculate
 
-    # ── Load COLMAP model ─────────────────────────────────────────────────────
-    colmap_model_dir = BASE / "data" / dataset_name / "hloc_data" / "sfm_reconstruction"
-    _, _, points3D = load_colmap_model(str(colmap_model_dir))
-    print(f"Loaded {len(points3D)} COLMAP 3D points")
-
-    # ── Load connected components ─────────────────────────────────────────────
+    # ── Load connected components (always needed) ─────────────────────────────
     cc_path = BASE / "outputs" / dataset_name / "connected_components.json"
     with open(cc_path) as f:
         components = json.load(f)
@@ -242,80 +247,99 @@ def main():
     print(f"\nComponent {comp_id_a} instances: {comp_a_info['instance_ids']}")
     print(f"Component {comp_id_b} instances: {comp_b_info['instance_ids']}")
 
-    # ── Load object_3d_associations ───────────────────────────────────────────
-    assoc_path = (
-        BASE
-        / "outputs"
-        / dataset_name
-        / "object_level_masks"
-        / "object_3d_associations.json"
-    )
-    with open(assoc_path) as f:
-        obj_assoc = json.load(f)
-
-    # ── Voxel grid ────────────────────────────────────────────────────────────
-    all_scene_xyz = np.stack(
-        [np.array(pt.xyz, dtype=np.float64) for pt in points3D.values()]
-    )
-    min_xyz = all_scene_xyz.min(axis=0)
-    extent = all_scene_xyz.max(axis=0) - min_xyz
-    extent = np.where(extent == 0, 1.0, extent)
-    voxel_size_m = voxel_size_cm / 100.0
-    grid_xyz = np.maximum(np.ceil(extent / voxel_size_m).astype(np.int64), 1)
-    print(f"\nScene bbox: {min_xyz} → {min_xyz + extent}")
-    print(f"Voxel grid: {grid_xyz}  (voxel_size={voxel_size_cm} cm)")
-
-    # ── Load CLIP model ───────────────────────────────────────────────────────
-    print(f"\nLoading CLIP model {clip_model_name!r} ({clip_pretrained}) on {device} …")
-    clip_m, preprocess = load_clip(clip_model_name, clip_pretrained, device)
-
-    # ── Per-instance data ─────────────────────────────────────────────────────
-    print("\n── Instance data ────────────────────────────────────────────────────────")
-    instance_data: dict = {}
-    for iid, comp_id in all_instances:
-        img_path = instance_to_image_path(iid, dataset_name)
-        point_ids = instance_to_point_ids(iid, obj_assoc)
-        voxels = point_ids_to_voxels(point_ids, points3D, min_xyz, extent, grid_xyz)
-        clip_emb = clip_embedding(img_path, clip_m, preprocess, device)
-        instance_data[iid] = {
-            "comp": comp_id,
-            "pts": point_ids,
-            "voxels": voxels,
-            "clip": clip_emb,
-        }
-        img_ok = "✓" if img_path.exists() else "✗ MISSING"
-        print(
-            f"  [{comp_id:>3}] {iid:<30}  pts={len(point_ids):>5}  voxels={len(voxels):>4}  img={img_ok}"
-        )
-
-    # ── Cross-component pairs ─────────────────────────────────────────────────
     instances_a = [(iid, cid) for iid, cid in all_instances if cid == comp_id_a]
     instances_b = [(iid, cid) for iid, cid in all_instances if cid == comp_id_b]
 
-    # Section 1: Calculated values
-    print(
-        f"\n── Calculated values (comp {comp_id_a} \u2194 comp {comp_id_b}) "
-        "──────────────────────────────"
-    )
-    print(
-        f"{'Instance A':<30}  {'Instance B':<30}  {'Jaccard':>8}  {'Contain':>8}  {'CLIPdist':>10}"
-    )
-    print("-" * 92)
-    for iid_a, _ in instances_a:
-        for iid_b, _ in instances_b:
-            jac = voxel_jaccard(
-                instance_data[iid_a]["voxels"], instance_data[iid_b]["voxels"]
+    if fresh_calculate:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        clip_model_name = DEFAULT_PARAMETERS["clip_model"]
+        clip_pretrained = DEFAULT_PARAMETERS["clip_pretrained"]
+
+        # ── Load COLMAP model ─────────────────────────────────────────────────
+        colmap_model_dir = (
+            BASE / "data" / dataset_name / "hloc_data" / "sfm_reconstruction"
+        )
+        _, _, points3D = load_colmap_model(str(colmap_model_dir))
+        print(f"Loaded {len(points3D)} COLMAP 3D points")
+
+        # ── Load object_3d_associations ───────────────────────────────────────
+        assoc_path = (
+            BASE
+            / "outputs"
+            / dataset_name
+            / "object_level_masks"
+            / "object_3d_associations.json"
+        )
+        with open(assoc_path) as f:
+            obj_assoc = json.load(f)
+
+        # ── Voxel grid ────────────────────────────────────────────────────────
+        all_scene_xyz = np.stack(
+            [np.array(pt.xyz, dtype=np.float64) for pt in points3D.values()]
+        )
+        min_xyz = all_scene_xyz.min(axis=0)
+        extent = all_scene_xyz.max(axis=0) - min_xyz
+        extent = np.where(extent == 0, 1.0, extent)
+        voxel_size_m = voxel_size_cm / 100.0
+        grid_xyz = np.maximum(np.ceil(extent / voxel_size_m).astype(np.int64), 1)
+        print(f"\nScene bbox: {min_xyz} → {min_xyz + extent}")
+        print(f"Voxel grid: {grid_xyz}  (voxel_size={voxel_size_cm} cm)")
+
+        # ── Load CLIP model ───────────────────────────────────────────────────
+        print(
+            f"\nLoading CLIP model {clip_model_name!r} ({clip_pretrained}) on {device} …"
+        )
+        clip_m, preprocess = load_clip(clip_model_name, clip_pretrained, device)
+
+        # ── Per-instance data ─────────────────────────────────────────────────
+        print(
+            "\n── Instance data ────────────────────────────────────────────────────────"
+        )
+        instance_data: dict = {}
+        for iid, comp_id in all_instances:
+            img_path = instance_to_image_path(iid, dataset_name)
+            point_ids = instance_to_point_ids(iid, obj_assoc)
+            voxels = point_ids_to_voxels(point_ids, points3D, min_xyz, extent, grid_xyz)
+            clip_emb = clip_embedding(img_path, clip_m, preprocess, device)
+            instance_data[iid] = {
+                "comp": comp_id,
+                "pts": point_ids,
+                "voxels": voxels,
+                "clip": clip_emb,
+            }
+            img_ok = "✓" if img_path.exists() else "✗ MISSING"
+            print(
+                f"  [{comp_id:>3}] {iid:<30}  pts={len(point_ids):>5}  voxels={len(voxels):>4}  img={img_ok}"
             )
-            cnt = containment(
-                instance_data[iid_a]["voxels"], instance_data[iid_b]["voxels"]
-            )
-            ea, eb = instance_data[iid_a]["clip"], instance_data[iid_b]["clip"]
-            cdist = (
-                (1.0 - float(np.dot(ea, eb)))
-                if (ea is not None and eb is not None)
-                else float("nan")
-            )
-            print(f"{iid_a:<30}  {iid_b:<30}  {jac:>8.4f}  {cnt:>8.4f}  {cdist:>10.4f}")
+
+        # Section 1: Calculated values
+        print(
+            f"\n── Calculated values (comp {comp_id_a} \u2194 comp {comp_id_b}) "
+            "──────────────────────────────"
+        )
+        print(
+            f"{'Instance A':<30}  {'Instance B':<30}  {'Jaccard':>8}  {'Contain':>8}  {'CLIPdist':>10}"
+        )
+        print("-" * 92)
+        for iid_a, _ in instances_a:
+            for iid_b, _ in instances_b:
+                jac = voxel_jaccard(
+                    instance_data[iid_a]["voxels"], instance_data[iid_b]["voxels"]
+                )
+                cnt = containment(
+                    instance_data[iid_a]["voxels"], instance_data[iid_b]["voxels"]
+                )
+                ea, eb = instance_data[iid_a]["clip"], instance_data[iid_b]["clip"]
+                cdist = (
+                    (1.0 - float(np.dot(ea, eb)))
+                    if (ea is not None and eb is not None)
+                    else float("nan")
+                )
+                print(
+                    f"{iid_a:<30}  {iid_b:<30}  {jac:>8.4f}  {cnt:>8.4f}  {cdist:>10.4f}"
+                )
+    else:
+        print("\n(Skipping live calculation — use --fresh-calculate to recompute.)")
 
     # Section 2: Unmerged edges from file
     unmerged_lookup = load_unmerged_edges(dataset_name)
