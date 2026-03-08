@@ -690,6 +690,95 @@ def to_networkx(
 
 
 # ---------------------------------------------------------------------------
+# Constrained connected components
+# ---------------------------------------------------------------------------
+
+
+def constrained_connected_components(G: nx.Graph) -> List[Set[Node]]:
+    """
+    Compute connected components of *G* while enforcing the SAM3 distinctness
+    constraint: two nodes that share the same ``(seq_key, obj_slug)`` but have
+    different ``obj_id`` values are **never** placed in the same component,
+    even transitively through intermediate nodes.
+
+    Algorithm: union-find where merging two components is rejected when their
+    ``(seq_key, obj_slug)`` key-sets overlap.  This guarantees that for every
+    ``(seq_key, obj_slug)`` key, at most one ``obj_id`` appears in each
+    resulting component.
+
+    Returns a list of sets, one set per component (including singletons),
+    mirroring the output of :func:`networkx.connected_components`.
+    """
+    # Initialise each node as its own component.
+    parent: Dict[Node, Node] = {n: n for n in G.nodes()}
+    # For each root: the set of (seq_key, obj_slug) keys present in its component.
+    seq_slug_keys: Dict[Node, Set[Tuple[str, str]]] = {
+        n: {(n[0], n[1])} for n in G.nodes()
+    }
+    # For each root: the member-node set (used for final output).
+    members: Dict[Node, Set[Node]] = {n: {n} for n in G.nodes()}
+
+    def _find(x: Node) -> Node:
+        """Path-compressed root lookup."""
+        while parent[x] is not x:
+            parent[x] = parent[parent[x]]  # path halving
+            x = parent[x]
+        return x
+
+    def _union(a: Node, b: Node) -> bool:
+        """
+        Attempt to merge the components of *a* and *b*.
+
+        Returns ``True`` if the merge was performed (or they were already in
+        the same component), ``False`` if rejected by the constraint.
+        """
+        ra, rb = _find(a), _find(b)
+        if ra is rb:
+            return True  # already the same component
+        # Reject if the two components share any (seq_key, obj_slug) key —
+        # that means they both contain a node from the same sequence/slug
+        # pair, which by definition have different obj_ids (nodes are unique).
+        if seq_slug_keys[ra] & seq_slug_keys[rb]:
+            return False
+        # Union by size: merge the smaller component into the larger.
+        if len(members[ra]) < len(members[rb]):
+            ra, rb = rb, ra
+        parent[rb] = ra
+        seq_slug_keys[ra] |= seq_slug_keys[rb]
+        members[ra] |= members[rb]
+        del seq_slug_keys[rb]
+        del members[rb]
+        return True
+
+    # Sort edges by decreasing merge confidence so that the highest-quality
+    # association always wins when a conflict triangle forces a choice.
+    # Primary key: geometric_jaccard or jaccard (higher = more confident).
+    # Secondary key: clip_distance (lower = more similar images).
+    def _edge_sort_key(uvd: tuple) -> tuple:
+        attrs = uvd[2]
+        jac = attrs.get("geometric_jaccard", attrs.get("jaccard", 0.0)) or 0.0
+        clip = attrs.get("clip_distance") or 1.0
+        return (-jac, clip)
+
+    sorted_edges = sorted(G.edges(data=True), key=_edge_sort_key)
+
+    rejected = 0
+    for u, v, _ in sorted_edges:
+        if not _union(u, v):
+            rejected += 1
+
+    if rejected:
+        print(
+            f"  constrained_connected_components: blocked {rejected} transitive "
+            "merge(s) that would have joined SAM3-distinct instances."
+        )
+
+    # Collect one set per unique root.
+    roots = {_find(n) for n in G.nodes()}
+    return [members[r] for r in roots]
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -811,8 +900,8 @@ def build_object_mask_graph(
     G = to_networkx(nodes, edges, node_to_instance_id)
     print(f"Graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges.")
 
+    ccs = constrained_connected_components(G)
     if G.number_of_edges() > 0:
-        ccs = list(nx.connected_components(G))
         print(f"Connected components: {len(ccs)}")
         print(f"Largest component: {max(len(c) for c in ccs)} nodes")
         degrees = [d for _, d in G.degree()]
@@ -871,7 +960,6 @@ def build_object_mask_graph(
     components_list = []
 
     if G.number_of_nodes() > 0:
-        ccs = list(nx.connected_components(G))
         for component in ccs:
             point3d_union: Set[int] = set()
             instance_ids: List[str] = []
@@ -987,7 +1075,6 @@ def build_object_mask_graph(
         },
     }
     if G.number_of_edges() > 0:
-        ccs = list(nx.connected_components(G))
         degrees = [d for _, d in G.degree()]
         stats["graph_statistics"] = {
             "connected_components": len(ccs),
