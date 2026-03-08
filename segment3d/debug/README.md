@@ -62,3 +62,34 @@ python debug/inter_components.py --dataset_name <name> --comp_id_a <int> --comp_
    - `CLIPdist` — cosine distance (1 − dot product) between the two instances' CLIP image embeddings.
 
 2. **Unmerged edges from file** — the matching rows from `unmerged_edges.json` for these component pairs, showing the stored Jaccard, CLIP distance, and the rejection reason that prevented the merge.
+
+---
+
+## `inter_instance.py` — Trace a path between two instances within a component
+
+Finds and prints the shortest hop-count path between two instance IDs inside a
+single connected component, using the `edges` stored in `connected_components.json`.
+Each hop is annotated with its Jaccard similarity and CLIP distance.
+
+```bash
+python debug/inter_instance.py \
+    --dataset_name <name> \
+    --component_id <int> \
+    --source_inst_id <instance_id> \
+    --dest_inst_id <instance_id>
+```
+
+| Flag               | Default      | Description                                      |
+| ------------------ | ------------ | ------------------------------------------------ |
+| `--dataset_name`   | _(required)_ | Dataset folder name under `data/` and `outputs/` |
+| `--component_id`   | _(required)_ | `connected_comp_id` whose edge graph to search   |
+| `--source_inst_id` | _(required)_ | Starting instance ID (e.g. `battery_seq_0_1`)    |
+| `--dest_inst_id`   | _(required)_ | Destination instance ID (e.g. `battery_seq_0_2`) |
+
+**Output** — printed to stdout:
+
+- The path length (number of hops).
+- Each node in the path, with `▶` marking the source and `★` marking the destination.
+- Between each pair of nodes: the edge's `jaccard` and `clip_distance` values.
+- A warning if either instance ID is not listed in the component's `instance_ids`.
+- A clear message if no path exists (the two instances are in disconnected sub-graphs within the component).

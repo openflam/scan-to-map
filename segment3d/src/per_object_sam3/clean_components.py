@@ -62,6 +62,7 @@ def clean_component(
     comp_id = component["connected_comp_id"]
     instance_ids = component["instance_ids"]
     point3d_ids: List[int] = component["set_of_point3DIds"]
+    edges = component.get("edges", [])
 
     coords, valid_ids = _get_coords(point3d_ids, points3D)
 
@@ -71,7 +72,7 @@ def clean_component(
 
     if len(coords) == 1:
         # Can't run DBSCAN on a single point; keep as-is.
-        return [component]
+        return [{**component, "edges": edges}]
 
     labels = DBSCAN(eps=eps, min_samples=min_samples).fit_predict(coords)
     unique_labels = set(labels)
@@ -99,6 +100,7 @@ def clean_component(
                 "connected_comp_id": comp_id,
                 "instance_ids": instance_ids,
                 "set_of_point3DIds": kept_ids,
+                "edges": edges,
             }
         ]
 
@@ -122,6 +124,7 @@ def clean_component(
                 "connected_comp_id": comp_id,
                 "instance_ids": instance_ids,
                 "set_of_point3DIds": kept_ids,
+                "edges": edges,
             }
         ]
 
@@ -140,6 +143,7 @@ def clean_component(
                 "_split_from": comp_id,
                 "_split_sub": sub_idx,
                 "set_of_point3DIds": kept_ids,
+                "edges": edges,
             }
         )
     return sub_components
