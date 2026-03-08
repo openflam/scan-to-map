@@ -77,7 +77,7 @@ DEFAULT_PARAMETERS: dict = {
     # ------------------------------------------------------------------
 
     # Neighbourhood radius in world units.
-    "component_dbscan_eps": 1.0,
+    "component_dbscan_eps": 0.5,
 
     # Minimum samples per core point.
     "component_dbscan_min_samples": 5,
@@ -101,6 +101,12 @@ DEFAULT_PARAMETERS: dict = {
     # ------------------------------------------------------------------
     # Segment crops parameters
     # ------------------------------------------------------------------
+
+    # Cropping method.  Two options:
+    #   "segment" – use the per-object mask crops from segment_crops.py.
+    #   "bbox"    – project the 3D bounding box to 2D and crop to the projected
+    #               region, replicating the behaviour of the main.py pipeline.
+    "crop_type": "segment",
 
     # Number of top-ranked frames to crop per connected component.
     "top_n": 5,

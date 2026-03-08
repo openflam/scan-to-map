@@ -29,7 +29,9 @@ from .segment_crops import segment_crops_cli
 from ..bbox_corners import get_all_bbox_corners_cli
 from ..captioning import caption_all_components_cli
 from ..clip_embed import generate_clip_embeddings_cli
+from ..crop_images import crop_all_images_cli
 from ..io_paths import load_config
+from ..project_bbox import project_all_bboxes_cli
 from config import list_datasets
 
 
@@ -80,6 +82,7 @@ def run_pipeline(
     # Bounding box parameters
     percentile: float = DEFAULT_PARAMETERS["percentile"],
     # Segment crops parameters
+    crop_type: str = DEFAULT_PARAMETERS["crop_type"],
     top_n: int = DEFAULT_PARAMETERS["top_n"],
     min_fraction: float = DEFAULT_PARAMETERS["min_fraction"],
     # Captioning parameters
@@ -126,6 +129,9 @@ def run_pipeline(
         component_dbscan_min_points: Drop components with fewer than this many points after cleaning
         split_components: Split multi-cluster components into separate components (default: False)
         percentile: Percentile threshold for bbox outlier removal
+        crop_type: Cropping method – ``"segment"`` uses per-object mask crops
+            (segment_crops.py); ``"bbox"`` projects the 3D bounding box to 2D
+            and crops to that region (project_bbox + crop_images, as in main.py)
         top_n: Number of top frames to crop per component
         min_fraction: Minimum visibility fraction to consider a frame for cropping
         caption_n_images: Number of top images to use for captioning
@@ -189,6 +195,7 @@ def run_pipeline(
         print(f"  Split components: {split_components}")
     if not skip_bbox:
         print(f"  Bbox percentile: {percentile}")
+    print(f"  Crop type: {crop_type}")
     print(f"  Segment crops top_n: {top_n}")
     print(f"  Segment crops min_fraction: {min_fraction}")
     if not skip_caption:
@@ -237,6 +244,7 @@ def run_pipeline(
             "component_dbscan_min_points": component_dbscan_min_points,
             "split_components": split_components,
             "percentile": percentile,
+            "crop_type": crop_type,
             "top_n": top_n,
             "min_fraction": min_fraction,
             "caption_n_images": caption_n_images,
@@ -367,17 +375,25 @@ def run_pipeline(
                 "status": "skipped",
             }
 
-        # Step 5: Segment crops
+        # Step 5: Segment/crop images
         if not skip_segment_crops:
             current_step += 1
             print_step_header(current_step, total_steps, "Segment and Crop Images")
             step_start = time.time()
 
-            segment_crops_cli(
-                dataset_name=dataset_name,
-                top_n=top_n,
-                min_fraction=min_fraction,
-            )
+            if crop_type == "bbox":
+                project_all_bboxes_cli(
+                    dataset_name=dataset_name,
+                    min_fraction=min_fraction,
+                )
+                crop_all_images_cli(dataset_name=dataset_name)
+            else:
+                # crop_type == "segment" (default)
+                segment_crops_cli(
+                    dataset_name=dataset_name,
+                    top_n=top_n,
+                    min_fraction=min_fraction,
+                )
 
             step_time = time.time() - step_start
             runtime_stats["steps"]["5_segment_crops"] = {
@@ -681,6 +697,15 @@ Configuration:
 
     # Segment crops parameters
     parser.add_argument(
+        "--crop-type",
+        choices=["segment", "bbox"],
+        default=DEFAULT_PARAMETERS["crop_type"],
+        help=f"Cropping method: 'segment' uses per-object mask crops (segment_crops.py); "
+        f"'bbox' projects 3D bounding box to 2D and crops to that region "
+        f"(project_bbox + crop_images, as in main.py). "
+        f"(default: {DEFAULT_PARAMETERS['crop_type']})",
+    )
+    parser.add_argument(
         "--top-n",
         type=int,
         default=DEFAULT_PARAMETERS["top_n"],
@@ -806,6 +831,7 @@ Configuration:
         component_dbscan_min_points=args.component_dbscan_min_points,
         split_components=args.split_components,
         percentile=args.percentile,
+        crop_type=args.crop_type,
         top_n=args.top_n,
         min_fraction=args.min_fraction,
         caption_n_images=args.caption_n_images,
