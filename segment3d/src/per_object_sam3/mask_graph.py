@@ -606,9 +606,9 @@ def build_edges_geometric_intersection(
         node1 = valid_nodes[i]
         node2 = valid_nodes[j]
 
-        # # Do not merge objects identified as different instances by SAM3.
-        # if (node1[0] == node2[0]) and (node1[1] == node2[1]) and (node1[2] != node2[2]):
-        #     continue
+        # Do not merge objects identified as different instances by SAM3.
+        if (node1[0] == node2[0]) and (node1[1] == node2[1]) and (node1[2] != node2[2]):
+            continue
 
         union_size = set_sizes[i] + set_sizes[j] - overlap
         geo_jac = float(overlap / union_size) if union_size > 0 else 0.0
