@@ -179,7 +179,7 @@ def load_unmerged_edges(dataset_name: str) -> dict:
         key_ba = (entry["node2"], entry["node1"])
         lookup[key_ab] = entry
         lookup[key_ba] = entry
-    print(f"\n\nLoaded {len(entries)} unmerged edge(s) from {path}")
+    print(f"\n\nLoaded {len(entries)} unmerged edge(s)")
     return lookup
 
 
