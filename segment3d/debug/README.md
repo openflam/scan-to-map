@@ -32,6 +32,29 @@ Supports both connected-component formats:
 
 ---
 
+## `instance.py` — Visualize a single object instance in 3D
+
+Exports a PLY point cloud of the full scene with a specific object instance's 3D points highlighted in red and all other points in white.
+
+```bash
+python debug/instance.py --dataset_name <name> --instance_name <instance>
+```
+
+| Flag              | Default      | Description                                                                              |
+| ----------------- | ------------ | ---------------------------------------------------------------------------------------- |
+| `--dataset_name`  | _(required)_ | Dataset folder name under `data/` and `outputs/`                                         |
+| `--instance_name` | _(required)_ | Instance in the format `{object_name}_seq_{seq_id}_{object_id}` (e.g. `battery_seq_0_5`) |
+
+**Output** — `outputs/<dataset_name>/debug_component/instance_<instance_name>.ply`:
+
+- Binary PLY point cloud of the full scene.
+- Instance points coloured **red**; all other scene points **white**.
+- Open in MeshLab, CloudCompare, etc.
+
+Reads `outputs/<dataset_name>/object_level_masks/object_3d_associations.json` to resolve the instance's 3D point IDs.
+
+---
+
 ## `inter_components.py` — Compare instances across two connected components
 
 Inspects cross-component instance overlap between two connected components.
