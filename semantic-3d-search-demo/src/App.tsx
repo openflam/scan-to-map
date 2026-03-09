@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
 import SearchResult from "./SearchResult";
+import SearchComponentList from "./SearchComponentList";
 import { query, SEARCH_SERVER_URL } from "./query";
 import type { BoundingBox, SearchQuery, Route } from "./types/global";
 
@@ -29,6 +30,9 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
   const [route, setRoute] = useState<Route>([]);
+  const [focusedComponentIndex, setFocusedComponentIndex] = useState<
+    number | null
+  >(null);
 
   const handleAnnotationsDownloaded = (
     bboxes: BoundingBox[],
@@ -63,6 +67,7 @@ function App() {
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     setIsLoading(true);
     setSearchResult(undefined);
+    setFocusedComponentIndex(null);
     const result = await query(searchQuery, method, datasetName!);
     setRoute([]); // Clear any existing route
     // Extract bounding boxes, captions, and component IDs from components
@@ -86,6 +91,7 @@ function App() {
     setBoundingBox([sourceBBox, destinationBBox]);
     setCaptions(["Source", "Destination"]);
     setComponentIds([]); // Clear component IDs for directions mode
+    setFocusedComponentIndex(null);
     // Combine the reasons
     const combinedReason = `Source: ${sourceReason}\n\nDestination: ${destinationReason}`;
     setSearchResult(combinedReason);
@@ -116,19 +122,32 @@ function App() {
         />
       </Row>
       <Row style={{ height: "80vh" }}>
-        <Model3DViewer
-          source={`${SEARCH_SERVER_URL}/load_mesh?dataset_name=${encodeURIComponent(datasetName)}`}
-          boundingBox={boundingBox}
-          captions={captions}
-          componentIds={componentIds}
-          autoTagBBoxes={autoTagBBoxes}
-          showAutoTags={showAutoTags}
-          occupancyGrid={occupancyGrid}
-          showOccupancyGrid={showOccupancyGrid}
-          annotations={annotations}
-          route={route}
-          datasetName={datasetName}
-        />
+        <div style={{ display: "flex", height: "100%", padding: 0 }}>
+          <SearchComponentList
+            componentIds={componentIds}
+            captions={captions}
+            datasetName={datasetName}
+            onComponentClick={(i) => setFocusedComponentIndex(i)}
+            focusedComponentIndex={focusedComponentIndex}
+          />
+          <div style={{ flex: 1, minWidth: 0, height: "100%" }}>
+            <Model3DViewer
+              source={`${SEARCH_SERVER_URL}/load_mesh?dataset_name=${encodeURIComponent(datasetName)}`}
+              boundingBox={boundingBox}
+              captions={captions}
+              componentIds={componentIds}
+              autoTagBBoxes={autoTagBBoxes}
+              showAutoTags={showAutoTags}
+              occupancyGrid={occupancyGrid}
+              showOccupancyGrid={showOccupancyGrid}
+              annotations={annotations}
+              route={route}
+              datasetName={datasetName}
+              focusedBBoxIndex={focusedComponentIndex}
+              externalSelectedBBoxIndex={focusedComponentIndex}
+            />
+          </div>
+        </div>
       </Row>
       <Row>
         <SearchResult result={searchResult} isLoading={isLoading} />

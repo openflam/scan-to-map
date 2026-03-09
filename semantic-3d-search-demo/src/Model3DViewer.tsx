@@ -1,4 +1,4 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, KeyboardControls } from "@react-three/drei";
 import { Suspense, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
@@ -24,6 +24,41 @@ interface Model3DViewerProps {
   annotations?: string[];
   route?: Route;
   datasetName: string;
+  focusedBBoxIndex?: number | null;
+  externalSelectedBBoxIndex?: number | null;
+}
+
+/** Moves the camera to frame the given bounding box when it changes. */
+function FocusBBoxController({ bbox }: { bbox: BoundingBox | null }) {
+  const { camera, controls } = useThree();
+
+  useEffect(() => {
+    if (!bbox || !controls) return;
+    const center = new THREE.Vector3(
+      (bbox.x_min + bbox.x_max) / 2,
+      (bbox.y_min + bbox.y_max) / 2,
+      (bbox.z_min + bbox.z_max) / 2,
+    );
+    const size = Math.max(
+      bbox.x_max - bbox.x_min,
+      bbox.y_max - bbox.y_min,
+      bbox.z_max - bbox.z_min,
+    );
+    const distance = Math.max(size * 2.5, 0.5);
+
+    // Keep the current camera direction but re-anchor it on the new center
+    const orbitControls = controls as any;
+    const camDir = new THREE.Vector3()
+      .subVectors(camera.position, orbitControls.target)
+      .normalize();
+    if (camDir.lengthSq() < 0.001) camDir.set(1, 0.5, 1).normalize();
+
+    camera.position.copy(center).addScaledVector(camDir, distance);
+    orbitControls.target.copy(center);
+    orbitControls.update();
+  }, [bbox]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
 }
 
 const keyboardMap = [
@@ -46,6 +81,8 @@ export default function Model3DViewer({
   annotations,
   route,
   datasetName,
+  focusedBBoxIndex,
+  externalSelectedBBoxIndex,
 }: Model3DViewerProps) {
   const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
     null,
@@ -53,6 +90,15 @@ export default function Model3DViewer({
   const [selectedAutoTagId, setSelectedAutoTagId] = useState<string | null>(
     null,
   );
+
+  // Sync external selection (e.g. from the component list sidebar) into the
+  // internal selectedBBoxIndex so ComponentDetails is shown automatically.
+  useEffect(() => {
+    if (externalSelectedBBoxIndex !== undefined) {
+      setSelectedBBoxIndex(externalSelectedBBoxIndex ?? null);
+      setSelectedAutoTagId(null);
+    }
+  }, [externalSelectedBBoxIndex]);
   const [isEditing, setIsEditing] = useState(false);
   const [editedCaption, setEditedCaption] = useState("");
   const [componentImage, setComponentImage] = useState<string | null>(null);
@@ -268,6 +314,13 @@ export default function Model3DViewer({
           <OrbitControls makeDefault enabled={orbitEnabled} />
           <CameraController />
           <GlobalInputHandler onExit={handleDeselect} />
+          <FocusBBoxController
+            bbox={
+              focusedBBoxIndex != null && boundingBox
+                ? (boundingBox[focusedBBoxIndex] ?? null)
+                : null
+            }
+          />
 
           <Suspense fallback={null}>
             <Model url={source} />
