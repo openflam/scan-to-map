@@ -35,8 +35,3 @@ RUN python3.11 -m pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 5000
-
-# DATASET_NAME is optional.  When set, CLIP is pre-loaded at startup for that
-# dataset.  When empty / unset, CLIP is disabled and only text-based providers
-# (BM25, OpenAI) are available.
-CMD ["sh", "-c", "python3.11 app.py ${DATASET_NAME}"]

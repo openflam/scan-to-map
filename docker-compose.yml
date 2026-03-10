@@ -1,4 +1,25 @@
 services:
+  postgis:
+    image: postgis/postgis:16-3.4
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scantomap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scantomap}
+      POSTGRES_DB: ${POSTGRES_DB:-scantomap}
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-scantomap} -d ${POSTGRES_DB:-scantomap}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   search-server:
     build:
       context: ./search-server
@@ -19,6 +40,9 @@ services:
       # (Path(__file__).parent / ".." / "data"  →  /app/data)
       - ./data:/app/data:ro
       - ./outputs:/app/outputs
+    depends_on:
+      postgis:
+        condition: service_healthy
     env_file:
       # Loads OPENAI_API_KEY (and any other vars) from the search-server .env file.
       # Values set in the 'environment' block below take precedence.
@@ -27,6 +51,17 @@ services:
       # Set DATASET_NAME to pre-load CLIP at startup for a specific dataset.
       # Leave empty (the default) to disable CLIP and use only text-based providers.
       - DATASET_NAME=${DATASET_NAME:-}
+      # PostGIS connection (defaults match the postgis service above)
+      - POSTGRES_HOST=postgis
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-scantomap}
+      - POSTGRES_USER=${POSTGRES_USER:-scantomap}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-scantomap}
+    command: >
+      sh -c "
+        python3.11 /app/search-server/spatial-db/create_tables.py &&
+        python3.11 app.py ${DATASET_NAME}
+      "
     deploy:
       resources:
         reservations:
@@ -35,3 +70,6 @@ services:
               count: 1
               capabilities: [gpu]
     restart: unless-stopped
+
+volumes:
+  postgis_data:
