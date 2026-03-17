@@ -11,7 +11,7 @@ function SearchResult({ result, thinking, isLoading }: SearchResultProps) {
     <Card className="mt-3">
       <Card.Body>
         {thinking && (
-          <Accordion className="mb-3">
+          <Accordion className="mb-3" defaultActiveKey="0">
             <Accordion.Item eventKey="0">
               <Accordion.Header>
                 <div className="d-flex align-items-center">
