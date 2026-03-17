@@ -1,13 +1,15 @@
 from typing import Dict, Any, List
 import json
-import sqlite3
+import sys
+from pathlib import Path
 from semantic_search import SemanticSearchProvider
 import time
 
+from spatial_db import database
 
 def process_query(
     query: str,
-    db_path: str,
+    dataset_name: str,
     provider: SemanticSearchProvider,
 ) -> Dict[str, Any]:
     """
@@ -15,7 +17,7 @@ def process_query(
 
     Args:
         query: The search query string
-        db_path: Path to the SQLite components database
+        dataset_name: Name of the dataset
         provider: Semantic search provider to use for matching
 
     Returns:
@@ -37,18 +39,13 @@ def process_query(
     invalid_ids = []
 
     if component_ids:
-        con = sqlite3.connect(db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        placeholders = ",".join("?" * len(component_ids))
-        cur.execute(
-            f"SELECT component_id, bbox_json FROM components WHERE component_id IN ({placeholders})",
-            component_ids,
-        )
-        bbox_map = {
-            row["component_id"]: json.loads(row["bbox_json"]) for row in cur.fetchall()
-        }
-        con.close()
+        rows = database.fetch_components_by_ids(dataset_name, component_ids)
+        bbox_map = {}
+        for row in rows:
+            try:
+                bbox_map[row["component_id"]] = json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+            except json.JSONDecodeError:
+                bbox_map[row["component_id"]] = {}
 
         for component_id in component_ids:
             if component_id in bbox_map:
@@ -60,16 +57,12 @@ def process_query(
     # Handle cases where no valid bboxes were found
     if not valid_bboxes:
         print("Warning: No valid component IDs found. Using first component.")
-        con = sqlite3.connect(db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        cur.execute(
-            "SELECT component_id, bbox_json FROM components ORDER BY component_id LIMIT 1"
-        )
-        row = cur.fetchone()
-        con.close()
+        row = database.fetch_first_component(dataset_name)
         if row:
-            valid_bboxes = [json.loads(row["bbox_json"])]
+            try:
+                valid_bboxes = [json.loads(row["bbox_json"]) if row["bbox_json"] else {}]
+            except json.JSONDecodeError:
+                valid_bboxes = [{}]
             valid_component_ids = [row["component_id"]]
     elif invalid_ids:
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")

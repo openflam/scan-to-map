@@ -2,7 +2,8 @@
 
 import os
 import json
-import sqlite3
+import sys
+from pathlib import Path
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,6 +12,8 @@ from .base import SemanticSearchProvider
 from .bm25_provider import BM25Provider
 
 from prompts import OPENAI_RAG_QUERY_REWRITE_PROMPT, OPENAI_RAG_RERANK_PROMPT
+
+from spatial_db import database
 
 # Load variables from .env into os.environ
 load_dotenv()
@@ -28,7 +31,7 @@ class OpenAIRAGProvider(SemanticSearchProvider):
 
     def __init__(
         self,
-        db_path: str,
+        dataset_name: str,
         model: str = "gpt-5-mini",
         api_key: str = None,
         bm25_top_k: int = 20,
@@ -37,18 +40,18 @@ class OpenAIRAGProvider(SemanticSearchProvider):
         Initialize the OpenAI RAG provider.
 
         Args:
-            db_path: Path to the SQLite components database
+            dataset_name: Dataset to search
             model: The OpenAI model to use
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env variable)
             bm25_top_k: Number of candidates to retrieve from BM25 (default: 20)
         """
-        self.db_path = db_path
+        super().__init__(dataset_name)
         self.model = model
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
 
-        # Initialize BM25 provider for retrieval (also uses db_path)
+        # Initialize BM25 provider for retrieval
         self.bm25_provider = BM25Provider(
-            db_path=db_path,
+            dataset_name=dataset_name,
             top_k=bm25_top_k,
             gap_threshold=float("inf"),  # Disable elbow detection to get all top_k
             ratio_threshold=0.0,
@@ -141,18 +144,10 @@ class OpenAIRAGProvider(SemanticSearchProvider):
             Dictionary with re-ranked component_ids and reason
         """
         # Fetch captions for candidates fresh from DB
-        con = sqlite3.connect(self.db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        placeholders = ",".join("?" * len(candidate_ids))
-        cur.execute(
-            f"SELECT component_id, caption FROM components WHERE component_id IN ({placeholders})",
-            candidate_ids,
-        )
+        rows = database.fetch_components_by_ids(self.dataset_name, candidate_ids)
         caption_map = {
-            row["component_id"]: row["caption"] or "" for row in cur.fetchall()
+            row["component_id"]: row["caption"] or "" for row in rows
         }
-        con.close()
 
         # Build candidate descriptions
         candidates_text = ""

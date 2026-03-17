@@ -7,6 +7,9 @@ from typing import Dict, Any, Optional
 class SemanticSearchProvider(ABC):
     """Abstract base class for semantic search providers."""
 
+    def __init__(self, dataset_name: str):
+        self.dataset_name = dataset_name
+
     @abstractmethod
     def match_components(self, query: str) -> Dict[str, Any]:
         """

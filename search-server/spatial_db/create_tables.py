@@ -2,9 +2,8 @@
 create_tables.py
 
 Connects to the PostGIS service and creates one table per dataset found in
-../outputs/.  Each table mirrors the SQLite schema from create_database.py but
-stores the bounding box as a native PostGIS 3-D geometry so it can be
-spatially indexed and queried.
+../outputs/.  Each table stores the bounding box as a native PostGIS 3-D 
+geometry so it can be spatially indexed and queried.
 
 Spatial design
 --------------

@@ -9,10 +9,12 @@ from flask import (
 from flask_cors import CORS
 import argparse
 import json
-import sqlite3
+import sys
 from pathlib import Path
 import numpy as np
 import base64
+
+from spatial_db import database
 from process_query import process_query
 from semantic_search import (
     OpenAIProvider,
@@ -126,28 +128,23 @@ def transform_bbox(bbox):
     }
 
 
-def get_db_path(dataset_name):
-    """Return the Path to the components.db for the given dataset."""
-    return Path(__file__).parent / ".." / "outputs" / dataset_name / "components.db"
-
-
-def initialize_provider(method, db_path, dataset_name):
+def initialize_provider(method, dataset_name):
     """
     Initialize and return the appropriate search provider for the given method.
 
     Non-CLIP providers (OpenAI, BM25) are cheap to initialize and are created
-    fresh per request from the given db_path.
+    fresh per request from the given dataset_name.
 
     CLIP is expensive to initialize, so it is pre-loaded at startup for a single
     dataset.  It is only returned here when the requested dataset_name matches
     CLIP_DATASET_NAME and the provider was successfully initialized at startup.
     """
     if method == "gpt-5-mini [Full]":
-        return OpenAIProvider(str(db_path), model="gpt-5-mini")
+        return OpenAIProvider(dataset_name, model="gpt-5-mini")
     elif method == "BM25":
-        return BM25Provider(str(db_path))
+        return BM25Provider(dataset_name)
     elif method == "gpt-5-mini [RAG]":
-        return OpenAIRAGProvider(str(db_path), model="gpt-5-mini", bm25_top_k=20)
+        return OpenAIRAGProvider(dataset_name, model="gpt-5-mini", bm25_top_k=20)
     elif method == "CLIP ViT-H-14":
         if clip_provider is None:
             return None  # CLIP was not initialized at startup
@@ -184,19 +181,18 @@ def search():
     if not search_query or len(search_query) == 0:
         return jsonify({"error": "No query provided"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
         )
 
     # Initialize the appropriate provider
-    provider = initialize_provider(method, db_path, dataset_name)
+    provider = initialize_provider(method, dataset_name)
     if provider is None:
         if method == "CLIP ViT-H-14":
             return (
@@ -254,7 +250,7 @@ def search():
         return jsonify({"error": "Use /search_stream for gpt-5.4-tools"}), 400
 
     # Find the most relevant component bounding boxes and reason using the selected provider
-    result_data = process_query(query_input, str(db_path), provider)
+    result_data = process_query(query_input, dataset_name, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     component_ids = result_data["component_ids"]  # List of component IDs
     reason = result_data["reason"]
@@ -262,16 +258,7 @@ def search():
 
     # Fetch fresh captions from the database for the returned component IDs
     if component_ids:
-        placeholders = ",".join("?" * len(component_ids))
-        con = sqlite3.connect(db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        cur.execute(
-            f"SELECT component_id, caption FROM components WHERE component_id IN ({placeholders})",
-            component_ids,
-        )
-        caption_rows = cur.fetchall()
-        con.close()
+        caption_rows = database.fetch_components_by_ids(dataset_name, component_ids)
         id_to_caption = {row["component_id"]: row["caption"] for row in caption_rows}
     else:
         id_to_caption = {}
@@ -312,12 +299,11 @@ def search_stream():
     if not search_query or len(search_query) == 0:
         return jsonify({"error": "No query provided"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
@@ -378,24 +364,18 @@ def search_stream():
                 invalid_ids = []
 
                 if component_ids:
-                    con_thread = sqlite3.connect(db_path)
-                    con_thread.row_factory = sqlite3.Row
-                    cur_thread = con_thread.cursor()
-                    placeholders = ",".join("?" * len(component_ids))
-                    cur_thread.execute(
-                        f"SELECT component_id, bbox_json, caption FROM components WHERE component_id IN ({placeholders})",
-                        component_ids,
-                    )
-                    rows = cur_thread.fetchall()
-                    con_thread.close()
+                    rows = database.fetch_components_by_ids(dataset_name, component_ids)
 
-                    bbox_map = {
-                        row["component_id"]: {
-                            "bbox": json.loads(row["bbox_json"]),
+                    bbox_map = {}
+                    for row in rows:
+                        try:
+                            bbox = json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                        except json.JSONDecodeError:
+                            bbox = {}
+                        bbox_map[row["component_id"]] = {
+                            "bbox": bbox,
                             "caption": row["caption"]
                         }
-                        for row in rows
-                    }
 
                     for comp_id in component_ids:
                         if comp_id in bbox_map:
@@ -406,18 +386,14 @@ def search_stream():
                 
                 if not valid_bboxes:
                     print("Warning: No valid component IDs found for gpt-5.4-tools. Using first component.")
-                    con_thread = sqlite3.connect(db_path)
-                    con_thread.row_factory = sqlite3.Row
-                    cur_thread = con_thread.cursor()
-                    cur_thread.execute(
-                        "SELECT component_id, bbox_json, caption FROM components ORDER BY component_id LIMIT 1"
-                    )
-                    row = cur_thread.fetchone()
-                    con_thread.close()
+                    row = database.fetch_first_component(dataset_name)
                     if row:
-                        valid_bboxes = [json.loads(row["bbox_json"])]
+                        try:
+                            bbox = json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                        except json.JSONDecodeError:
+                            bbox = {}
+                        valid_bboxes = [bbox]
                         valid_component_ids = [row["component_id"]]
-                        # Need to set up the map for the fallback
                         bbox_map = {row["component_id"]: {"caption": row["caption"]}}
 
                 # Build components array with transformed bboxes and captions
@@ -462,12 +438,11 @@ def get_route():
     if not method:
         return jsonify({"error": "Method is required"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
@@ -488,7 +463,7 @@ def get_route():
     floor_height_file = str(floor_height_path) if floor_height_path.exists() else None
 
     # Initialize the appropriate provider
-    provider = initialize_provider(method, db_path, dataset_name)
+    provider = initialize_provider(method, dataset_name)
     if provider is None:
         if method == "CLIP ViT-H-14":
             return (
@@ -521,11 +496,11 @@ def get_route():
     )
 
     # Process source query
-    source_result = process_query(source_input, str(db_path), provider)
+    source_result = process_query(source_input, dataset_name, provider)
     source_bboxes = source_result["bbox"]
 
     # Process destination query
-    destination_result = process_query(destination_input, str(db_path), provider)
+    destination_result = process_query(destination_input, dataset_name, provider)
     destination_bboxes = destination_result["bbox"]
 
     # Use the first bounding box from each result
@@ -583,12 +558,11 @@ def update_component():
     if not dataset_name:
         return jsonify({"error": "dataset_name is required"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
@@ -611,25 +585,7 @@ def update_component():
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
 
-    fields, params = [], []
-    if new_caption is not None:
-        fields.append("caption = ?")
-        params.append(new_caption)
-    if new_bbox is not None:
-        fields.append("bbox_json = ?")
-        params.append(json.dumps(new_bbox))
-    params.append(comp_id_int)
-
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    cur = con.cursor()
-    cur.execute(
-        f"UPDATE components SET {', '.join(fields)} WHERE component_id = ?",
-        params,
-    )
-    con.commit()
-    updated = cur.rowcount
-    con.close()
+    updated = database.update_component(dataset_name, comp_id_int, new_caption, new_bbox)
 
     if updated == 0:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
@@ -658,12 +614,11 @@ def delete_component():
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
@@ -674,12 +629,7 @@ def delete_component():
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
 
-    con = sqlite3.connect(db_path)
-    cur = con.cursor()
-    cur.execute("DELETE FROM components WHERE component_id = ?", (comp_id_int,))
-    con.commit()
-    deleted = cur.rowcount
-    con.close()
+    deleted = database.delete_component(dataset_name, comp_id_int)
 
     if deleted == 0:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
@@ -702,12 +652,11 @@ def get_component_info():
     if not component_id:
         return jsonify({"error": "No component_id provided"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
@@ -719,15 +668,7 @@ def get_component_info():
     except ValueError:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
 
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    cur = con.cursor()
-    cur.execute(
-        "SELECT caption, best_crop FROM components WHERE component_id = ?",
-        (comp_id_int,),
-    )
-    row = cur.fetchone()
-    con.close()
+    row = database.fetch_component_info(dataset_name, comp_id_int)
 
     if row is None:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
@@ -794,27 +735,28 @@ def download_all_components():
     if not dataset_name:
         return jsonify({"error": "dataset_name query parameter is required"}), 400
 
-    db_path = get_db_path(dataset_name)
-    if not db_path.exists():
+    if not database.check_dataset_exists(dataset_name):
         return (
             jsonify(
                 {
-                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                    "error": f"Dataset '{dataset_name}' not found in database."
                 }
             ),
             404,
         )
 
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    cur = con.cursor()
-    cur.execute("SELECT component_id, bbox_json FROM components")
-    rows = cur.fetchall()
-    con.close()
+    rows = database.fetch_all_components(dataset_name)
 
     result = []
     for row in rows:
-        bbox = json.loads(row["bbox_json"])
+        if row.get("bbox_json"):
+            try:
+                bbox = json.loads(row["bbox_json"])
+            except json.JSONDecodeError:
+                bbox = {}
+        else:
+            bbox = {}
+            
         result.append(
             {
                 "connected_comp_id": row["component_id"],

@@ -2,7 +2,8 @@
 
 import os
 import json
-import sqlite3
+import sys
+from pathlib import Path
 from typing import Dict, Any, List, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -11,6 +12,8 @@ from .base import SemanticSearchProvider
 
 from prompts import OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT
 from prompts import OPENAI_FULL_CONTEXT_SYSTEM_PROMPT
+
+from spatial_db import database
 
 # Load variables from .env into os.environ
 load_dotenv()
@@ -21,7 +24,7 @@ class OpenAIProvider(SemanticSearchProvider):
 
     def __init__(
         self,
-        db_path: str,
+        dataset_name: str,
         model: str = "gpt-5-mini",
         max_completion_tokens: int = 1000,
         api_key: str = None,
@@ -30,12 +33,12 @@ class OpenAIProvider(SemanticSearchProvider):
         Initialize the OpenAI provider.
 
         Args:
-            db_path: Path to the SQLite components database
+            dataset_name: Dataset to search
             model: The OpenAI model to use
             max_completion_tokens: Maximum tokens in response
             api_key: OpenAI API key (defaults to OPENAI_API_KEY env variable)
         """
-        self.db_path = db_path
+        super().__init__(dataset_name)
         self.model = model
         self.max_completion_tokens = max_completion_tokens
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
@@ -47,14 +50,7 @@ class OpenAIProvider(SemanticSearchProvider):
         Returns:
             Tuple of (formatted components text, set of valid component IDs)
         """
-        con = sqlite3.connect(self.db_path)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        cur.execute(
-            "SELECT component_id, caption FROM components ORDER BY component_id"
-        )
-        rows = cur.fetchall()
-        con.close()
+        rows = database.fetch_all_components(self.dataset_name)
 
         components_text = ""
         valid_ids = set()
