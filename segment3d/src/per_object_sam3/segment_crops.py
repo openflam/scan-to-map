@@ -225,7 +225,7 @@ def load_instance_mask(
 
 
 def apply_mask_white_background(
-    image: np.ndarray, mask: np.ndarray
+    image: np.ndarray, mask: np.ndarray, only_masked: bool = False
 ) -> Tuple[np.ndarray, Tuple[int, int, int, int]]:
     """
     Apply a binary mask to an image, setting masked-out pixels to white.
@@ -254,7 +254,8 @@ def apply_mask_white_background(
     x_max += 1
 
     out = image.copy()
-    out[mask == 0] = 255  # white background
+    if only_masked:
+        out[mask == 0] = 255  # white background
 
     return out, (x_min, y_min, x_max, y_max)
 

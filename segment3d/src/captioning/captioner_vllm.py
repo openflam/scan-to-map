@@ -5,9 +5,10 @@ vLLM-based captioner implementation using HuggingFace AutoProcessor.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
-from ..prompts import CAPTION_IMAGE_PROMPT
+from ..prompts import CAPTION_IMAGE_PROMPT, CAPTION_OBJECT_IN_IMAGE_PROMPT
 from .captioner_base import CaptionResult
 
 
@@ -102,8 +103,21 @@ class VLLMCaptioner:
         if not image_paths:
             return [], None
 
+        # Extract object name if present
+        object_name = None
+        for crop_info in top_images:
+            crop_filename = crop_info["crop_filename"]
+            # Check for pattern like "frame_00161_stool_seq_1_5_masked_crop.jpg"
+            match = re.search(r'frame_\d+_(.+?)_seq_', crop_filename)
+            if match:
+                object_name = match.group(1).replace('_', ' ')
+                break
+
         # Create messages in the format expected by AutoProcessor
-        question = CAPTION_IMAGE_PROMPT
+        if object_name:
+            question = CAPTION_OBJECT_IN_IMAGE_PROMPT.format(object_name=object_name)
+        else:
+            question = CAPTION_IMAGE_PROMPT
 
         # Build placeholders for each image
         placeholders = [{"type": "image", "image": img} for img in pil_images]
