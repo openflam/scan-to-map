@@ -19,7 +19,7 @@ full 3-D extent.  Two indexes are created:
   * 2-D GIST (default)               — accelerates the && operator and all
     standard PostGIS 2-D spatial functions on the XY footprint.
 
-Schema (one table per dataset, named <dataset>_components):
+Schema (one table per dataset, named after the sanitized dataset name):
     component_id   INTEGER  PRIMARY KEY
     caption        TEXT
     bbox_json      TEXT     -- raw bbox JSON kept for backwards-compatibility
@@ -202,7 +202,19 @@ def _create_table(cur: psycopg2.extensions.cursor, table: str) -> None:
         """
     )
 
-    print(f"  Created table '{table}' with nd-GIST (3-D) and 2-D GIST spatial indexes")
+    # ── Caption lexical index ──────────────────────────────────────────────
+    # Supports fast candidate prefiltering on caption text before BM25 scoring.
+    cur.execute(
+        f"""
+        CREATE INDEX "{table}_caption_fts_idx"
+        ON "{table}"
+        USING GIN (to_tsvector('english', COALESCE(caption, '')));
+        """
+    )
+
+    print(
+        f"  Created table '{table}' with nd-GIST (3-D), 2-D GIST, and caption FTS indexes"
+    )
 
 
 def _insert_rows(

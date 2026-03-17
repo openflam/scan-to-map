@@ -5,7 +5,7 @@ import SearchBar from "./SearchBar";
 import Model3DViewer from "./Model3DViewer";
 import SearchResult from "./SearchResult";
 import SearchComponentList from "./SearchComponentList";
-import { query, SEARCH_SERVER_URL } from "./query";
+import { query, queryStream, SEARCH_SERVER_URL } from "./query";
 import type { BoundingBox, SearchQuery, Route } from "./types/global";
 
 /** Read the dataset name from the `dataset_name` query parameter, e.g. "?dataset_name=ProjectLabNeg" */
@@ -27,6 +27,7 @@ function App() {
   const [searchResult, setSearchResult] = useState<string | undefined>(
     undefined,
   );
+  const [thinking, setThinking] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTime, setSearchTime] = useState<number | undefined>(undefined);
   const [route, setRoute] = useState<Route>([]);
@@ -67,16 +68,45 @@ function App() {
   const handleSearch = async (searchQuery: SearchQuery, method: string) => {
     setIsLoading(true);
     setSearchResult(undefined);
+    setThinking(undefined);
     setFocusedComponentIndex(null);
-    const result = await query(searchQuery, method, datasetName!);
     setRoute([]); // Clear any existing route
-    // Extract bounding boxes, captions, and component IDs from components
-    setBoundingBox(result.components.map((c) => c.bbox));
-    setCaptions(result.components.map((c) => c.caption));
-    setComponentIds(result.components.map((c) => c.component_id));
-    setSearchResult(result.reason);
-    setSearchTime(result.search_time_ms);
-    setIsLoading(false);
+
+    if (method === "gpt-5.4-tools") {
+      let currentThinking = "";
+      try {
+        await queryStream(searchQuery, method, datasetName!, (event) => {
+          if (event.type === "thinking") {
+            currentThinking += event.content;
+            setThinking(currentThinking);
+          } else if (event.type === "result") {
+            const result = event.data;
+            setBoundingBox(result.components.map((c: any) => c.bbox));
+            setCaptions(result.components.map((c: any) => c.caption));
+            setComponentIds(result.components.map((c: any) => c.component_id));
+            setSearchResult(result.reason);
+            setSearchTime(result.search_time_ms);
+          } else if (event.type === "error") {
+            console.error("Stream error:", event.error);
+            setSearchResult(`Error: ${event.error}`);
+          }
+        });
+      } catch (e) {
+        console.error("Query stream failed:", e);
+        setSearchResult("Search failed due to a network or server error.");
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      const result = await query(searchQuery, method, datasetName!);
+      // Extract bounding boxes, captions, and component IDs from components
+      setBoundingBox(result.components.map((c) => c.bbox));
+      setCaptions(result.components.map((c) => c.caption));
+      setComponentIds(result.components.map((c) => c.component_id));
+      setSearchResult(result.reason);
+      setSearchTime(result.search_time_ms);
+      setIsLoading(false);
+    }
   };
 
   const handleDirections = (
@@ -150,7 +180,11 @@ function App() {
         </div>
       </Row>
       <Row>
-        <SearchResult result={searchResult} isLoading={isLoading} />
+        <SearchResult
+          result={searchResult}
+          thinking={thinking}
+          isLoading={isLoading}
+        />
       </Row>
     </Container>
   );

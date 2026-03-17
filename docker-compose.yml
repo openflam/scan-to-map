@@ -59,7 +59,6 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-scantomap}
     command: >
       sh -c "
-        python3.11 /app/search-server/spatial-db/create_tables.py &&
         python3.11 app.py ${DATASET_NAME}
       "
     deploy:

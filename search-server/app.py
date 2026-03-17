@@ -21,6 +21,9 @@ from semantic_search import (
 )
 from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
+import queue
+import threading
+from llm_reasoning.llm_agent import LLMAgent
 
 STATIC_DIR = Path(__file__).parent / "front-end-build"
 
@@ -84,7 +87,7 @@ def get_providers_list():
     Returns the list of available search provider names.
     CLIP ViT-H-14 is only listed when it was pre-initialized at startup.
     """
-    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]"]
+    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]", "gpt-5.4-tools"]
     if clip_provider is not None:
         providers.append("CLIP ViT-H-14")
     return jsonify({"providers": providers})
@@ -151,6 +154,8 @@ def initialize_provider(method, db_path, dataset_name):
         if dataset_name != CLIP_DATASET_NAME:
             return None  # CLIP is only available for the startup dataset
         return clip_provider
+    elif method == "gpt-5.4-tools":
+        return "streaming"  # Return a dummy string so it's not None
     return None
 
 
@@ -245,6 +250,9 @@ def search():
             )
         query_input = query_value
 
+    if method == "gpt-5.4-tools":
+        return jsonify({"error": "Use /search_stream for gpt-5.4-tools"}), 400
+
     # Find the most relevant component bounding boxes and reason using the selected provider
     result_data = process_query(query_input, str(db_path), provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
@@ -285,6 +293,152 @@ def search():
     }
 
     return jsonify(result)
+
+
+@app.route("/search_stream", methods=["POST"])
+def search_stream():
+    """
+    Search endpoint that streams reasoning and search results using Server-Sent Events (SSE).
+    Currently only supports the gpt-5.4-tools method.
+    """
+    # Get search query, method, and dataset_name
+    dataset_name = request.json.get("dataset_name")
+    search_query = request.json.get("query")
+    method = request.json.get("method")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
+
+    if not search_query or len(search_query) == 0:
+        return jsonify({"error": "No query provided"}), 400
+
+    db_path = get_db_path(dataset_name)
+    if not db_path.exists():
+        return (
+            jsonify(
+                {
+                    "error": f"Dataset '{dataset_name}' not found. Run: python create_database.py {dataset_name}"
+                }
+            ),
+            404,
+        )
+
+    # Unpack the search query (assume only one entry for now)
+    query_item = search_query[0]
+    query_type = query_item.get("type")
+    
+    if query_type != "text":
+        return jsonify({"error": "Streaming only supports text queries"}), 400
+
+    if method != "gpt-5.4-tools":
+        return jsonify({"error": "Streaming currently only supports gpt-5.4-tools"}), 400
+
+    query_input = query_item.get("value")
+    if not query_input:
+        return jsonify({"error": "No query string provided for gpt-5.4-tools"}), 400
+
+    q = queue.Queue()
+
+    def on_stream_event(event):
+        q.put({"type": "event", "data": event})
+
+    def run_agent():
+        try:
+            agent = LLMAgent(model="gpt-5.4")
+            result = agent.answer_query_stream(
+                query=query_input, dataset_name=dataset_name, on_stream_event=on_stream_event
+            )
+            q.put({"type": "result", "data": result})
+        except Exception as e:
+            q.put({"type": "error", "error": str(e)})
+
+    t = threading.Thread(target=run_agent)
+    t.start()
+
+    def generate():
+        import time
+        start_time = time.perf_counter()
+        while True:
+            item = q.get()
+            if item["type"] == "event":
+                yield f"data: {json.dumps(item['data'])}\n\n"
+            elif item["type"] == "error":
+                yield f"data: {json.dumps({'type': 'error', 'error': item['error']})}\n\n"
+                break
+            elif item["type"] == "result":
+                result = item["data"]
+                end_time = time.perf_counter()
+                search_time_ms = (end_time - start_time) * 1000
+
+                component_ids = result.get("component_ids", [])
+                reason = result.get("reason", "")
+
+                valid_bboxes = []
+                valid_component_ids = []
+                invalid_ids = []
+
+                if component_ids:
+                    con_thread = sqlite3.connect(db_path)
+                    con_thread.row_factory = sqlite3.Row
+                    cur_thread = con_thread.cursor()
+                    placeholders = ",".join("?" * len(component_ids))
+                    cur_thread.execute(
+                        f"SELECT component_id, bbox_json, caption FROM components WHERE component_id IN ({placeholders})",
+                        component_ids,
+                    )
+                    rows = cur_thread.fetchall()
+                    con_thread.close()
+
+                    bbox_map = {
+                        row["component_id"]: {
+                            "bbox": json.loads(row["bbox_json"]),
+                            "caption": row["caption"]
+                        }
+                        for row in rows
+                    }
+
+                    for comp_id in component_ids:
+                        if comp_id in bbox_map:
+                            valid_bboxes.append(bbox_map[comp_id]["bbox"])
+                            valid_component_ids.append(comp_id)
+                        else:
+                            invalid_ids.append(comp_id)
+                
+                if not valid_bboxes:
+                    print("Warning: No valid component IDs found for gpt-5.4-tools. Using first component.")
+                    con_thread = sqlite3.connect(db_path)
+                    con_thread.row_factory = sqlite3.Row
+                    cur_thread = con_thread.cursor()
+                    cur_thread.execute(
+                        "SELECT component_id, bbox_json, caption FROM components ORDER BY component_id LIMIT 1"
+                    )
+                    row = cur_thread.fetchone()
+                    con_thread.close()
+                    if row:
+                        valid_bboxes = [json.loads(row["bbox_json"])]
+                        valid_component_ids = [row["component_id"]]
+                        # Need to set up the map for the fallback
+                        bbox_map = {row["component_id"]: {"caption": row["caption"]}}
+
+                # Build components array with transformed bboxes and captions
+                components = []
+                for bbox, comp_id in zip(valid_bboxes, valid_component_ids):
+                    transformed_bbox = transform_bbox(bbox)
+                    caption = bbox_map.get(comp_id, {}).get("caption") or "No caption available"
+                    components.append(
+                        {"bbox": transformed_bbox, "caption": caption, "component_id": str(comp_id)}
+                    )
+                
+                final_result = {
+                    "reason": reason,
+                    "search_time_ms": search_time_ms,
+                    "components": components,
+                }
+                
+                yield f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"
+                break
+
+    return app.response_class(generate(), mimetype="text/event-stream")
 
 
 @app.route("/get_route", methods=["POST"])

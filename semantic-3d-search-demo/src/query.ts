@@ -54,6 +54,64 @@ export async function query(
   }
 }
 
+export async function queryStream(
+  searchQuery: SearchQuery,
+  method: string,
+  datasetName: string,
+  onEvent: (eventData: any) => void
+): Promise<void> {
+  console.log("Streaming query with:", searchQuery, "using method:", method);
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/search_stream`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        query: searchQuery,
+        method: method,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(
+        `Search stream request failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+
+      buffer = lines.pop() || ""; // Keep the last incomplete line in the buffer
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6);
+          try {
+            const data = JSON.parse(dataStr);
+            onEvent(data);
+          } catch (e) {
+            console.error("Error parsing stream data:", e, dataStr);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error streaming search server:", error);
+    throw error;
+  }
+}
+
 export async function queryDirections(
   source: SearchQuery,
   destination: SearchQuery,
