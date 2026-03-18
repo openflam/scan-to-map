@@ -62,6 +62,26 @@ def fetch_components_by_ids(dataset_name: str, component_ids: list[int]) -> list
     finally:
         con.close()
 
+def fetch_components_in_radius(dataset_name: str, component_id: int, radius: float) -> list[dict]:
+    """Fetch components within a given radius of a target component using 3D spatial index."""
+    table = get_table_name(dataset_name)
+    con = _pg_conn()
+    try:
+        with con.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f'''
+                SELECT c2.component_id, c2.caption, c2.bbox_json, c2.best_crop
+                FROM "{table}" c1
+                JOIN "{table}" c2
+                ON ST_3DDWithin(c1.bbox_geom, c2.bbox_geom, %s)
+                WHERE c1.component_id = %s AND c2.component_id != %s
+                ''',
+                (radius, component_id, component_id)
+            )
+            return cur.fetchall()
+    finally:
+        con.close()
+
 def fetch_first_component(dataset_name: str) -> dict | None:
     table = get_table_name(dataset_name)
     con = _pg_conn()
@@ -126,7 +146,7 @@ def delete_component(dataset_name: str, component_id: int) -> int:
     finally:
         con.close()
 
-def search_components_tsvector(dataset_name: str, prefilter_query: str, prefilter_limit: int = 1000) -> list[tuple]:
+def search_components_tsvector(dataset_name: str, prefilter_query: str, prefilter_limit: int = 1000, candidate_ids: list[int] | None = None) -> list[tuple]:
     table = get_table_name(dataset_name)
     con = _pg_conn()
     
@@ -134,18 +154,29 @@ def search_components_tsvector(dataset_name: str, prefilter_query: str, prefilte
     parts = [p.strip() for p in prefilter_query.split() if p.strip()]
     or_query = " OR ".join(parts)
     
+    where_clauses = ["to_tsvector('english', COALESCE(caption, '')) @@ websearch_to_tsquery('english', %s)"]
+    params = [or_query]
+    
+    if candidate_ids is not None:
+        if not candidate_ids:
+            return []
+        where_clauses.append("component_id = ANY(%s)")
+        params.append(candidate_ids)
+        
+    where_str = " AND ".join(where_clauses)
+    params.append(prefilter_limit)
+    
     try:
         with con.cursor() as cur:
             cur.execute(
                 f'''
                 SELECT component_id, caption, bbox_json, best_crop
                 FROM "{table}"
-                WHERE to_tsvector('english', COALESCE(caption, ''))
-                    @@ websearch_to_tsquery('english', %s)
+                WHERE {where_str}
                 ORDER BY component_id
                 LIMIT %s
                 ''',
-                (or_query, prefilter_limit),
+                tuple(params),
             )
             return cur.fetchall()
     finally:
@@ -158,6 +189,7 @@ def bm25_search(
     apply_elbow: bool = False,
     gap_threshold: float = 1.0,
     ratio_threshold: float = 0.7,
+    candidate_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     import bm25s
     import Stemmer
@@ -180,7 +212,7 @@ def bm25_search(
             "reason": "No valid search terms were provided."
         }
         
-    rows = search_components_tsvector(dataset_name, prefilter_query, prefilter_limit=1000)
+    rows = search_components_tsvector(dataset_name, prefilter_query, prefilter_limit=1000, candidate_ids=candidate_ids)
     
     if not rows:
         return {
