@@ -25,4 +25,9 @@ When you have finished using tools and are ready to provide your final answer, r
 "reason": "<one-sentence explanation of why these components match based on tool output>"
 }
 
+**Rules for formatting the "reason" string:**
+
+1. Do not mention component ID numbers in the reason. Refer to them using their real-world object names (e.g., "drill press").
+2. Whenever a component is mentioned in the reason, enclose it in a tag which will be parsed later. The tag should have the format <component_ID>object_name</component_ID>. It should flow naturally with the sentence. For example, "The <component_4>coffee machine</component_4> can be used to make a beverage".
+
 If no components match after your search attempts, use an empty list for "component_ids".

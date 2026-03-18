@@ -184,6 +184,8 @@ function App() {
           result={searchResult}
           thinking={thinking}
           isLoading={isLoading}
+          componentIds={componentIds}
+          onComponentClick={(i: number) => setFocusedComponentIndex(i)}
         />
       </Row>
     </Container>
