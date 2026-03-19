@@ -26,7 +26,6 @@ export default function SearchComponentList({
   focusedComponentIndex,
 }: SearchComponentListProps) {
   const [entries, setEntries] = useState<ComponentEntry[]>([]);
-  const [collapsed, setCollapsed] = useState(false);
   const fetchKeyRef = useRef(0);
 
   useEffect(() => {
@@ -75,56 +74,44 @@ export default function SearchComponentList({
   return (
     <div style={styles.root}>
       {/* Scrollable image list */}
-      {!collapsed && (
-        <div style={styles.list}>
-          {entries.map((entry) => {
-            const isFocused = focusedComponentIndex === entry.index;
-            const compId = componentIds[entry.index];
-            return (
-              <div
-                key={entry.index}
-                onClick={() => onComponentClick(entry.index)}
-                title={entry.caption}
-                style={{
-                  ...styles.card,
-                  ...(isFocused
-                    ? styles.cardBorderFocused
-                    : styles.cardBorderDefault),
-                }}
-              >
-                {!entry.loaded ? (
-                  <Spinner
-                    animation="border"
-                    size="sm"
-                    variant="secondary"
-                    role="status"
-                  />
-                ) : entry.imageBase64 ? (
-                  <img
-                    src={`data:image/jpeg;base64,${entry.imageBase64}`}
-                    alt={entry.caption}
-                    style={styles.image}
-                  />
-                ) : (
-                  <span style={styles.noImage}>No image</span>
-                )}
-                {/* Component ID badge — top-left */}
-                {compId && <div style={styles.componentIdBadge}>{compId}</div>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Collapse/expand tab */}
-      <button
-        onClick={() => setCollapsed((c) => !c)}
-        title={collapsed ? "Show components" : "Hide components"}
-        style={styles.collapseButton}
-        aria-label={collapsed ? "Show components" : "Hide components"}
-      >
-        {collapsed ? "▶" : "◀"}
-      </button>
+      <div style={styles.list}>
+        {entries.map((entry) => {
+          const isFocused = focusedComponentIndex === entry.index;
+          const compId = componentIds[entry.index];
+          return (
+            <div
+              key={entry.index}
+              onClick={() => onComponentClick(entry.index)}
+              title={entry.caption}
+              style={{
+                ...styles.card,
+                ...(isFocused
+                  ? styles.cardBorderFocused
+                  : styles.cardBorderDefault),
+              }}
+            >
+              {!entry.loaded ? (
+                <Spinner
+                  animation="border"
+                  size="sm"
+                  variant="secondary"
+                  role="status"
+                />
+              ) : entry.imageBase64 ? (
+                <img
+                  src={`data:image/jpeg;base64,${entry.imageBase64}`}
+                  alt={entry.caption}
+                  style={styles.image}
+                />
+              ) : (
+                <span style={styles.noImage}>No image</span>
+              )}
+              {/* Component ID badge — top-left */}
+              {compId && <div style={styles.componentIdBadge}>{compId}</div>}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

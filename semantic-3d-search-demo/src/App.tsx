@@ -1,4 +1,5 @@
-import { Container, Row } from "react-bootstrap";
+import { Container } from "react-bootstrap";
+import { styles } from "./appStyles";
 import { useState, useEffect, useMemo } from "react";
 
 import SearchBar from "./SearchBar";
@@ -34,6 +35,7 @@ function App() {
   const [focusedComponentIndex, setFocusedComponentIndex] = useState<
     number | null
   >(null);
+  const [isLeftColumnCollapsed, setIsLeftColumnCollapsed] = useState(false);
 
   const handleAnnotationsDownloaded = (
     bboxes: BoundingBox[],
@@ -137,8 +139,9 @@ function App() {
   }
 
   return (
-    <Container className="pt-3">
-      <Row>
+    <div style={styles.rootContainer}>
+      {/* Top Search Bar Area */}
+      <div style={styles.topBarArea}>
         <SearchBar
           onSearch={handleSearch}
           onDirections={handleDirections}
@@ -150,45 +153,69 @@ function App() {
           searchTime={searchTime}
           datasetName={datasetName}
         />
-      </Row>
-      <Row style={{ height: "80vh" }}>
-        <div style={{ display: "flex", height: "100%", padding: 0 }}>
-          <SearchComponentList
-            componentIds={componentIds}
-            captions={captions}
-            datasetName={datasetName}
-            onComponentClick={(i) => setFocusedComponentIndex(i)}
-            focusedComponentIndex={focusedComponentIndex}
-          />
-          <div style={{ flex: 1, minWidth: 0, height: "100%" }}>
-            <Model3DViewer
-              source={`${SEARCH_SERVER_URL}/load_mesh?dataset_name=${encodeURIComponent(datasetName)}`}
-              boundingBox={boundingBox}
-              captions={captions}
+      </div>
+
+      {/* Main Content Area */}
+      <div style={styles.mainContentArea}>
+        
+        {/* Collapsible Left Column */}
+        <div style={{ 
+          ...styles.leftColumnBase,
+          width: isLeftColumnCollapsed ? "0px" : "460px", 
+          borderRight: isLeftColumnCollapsed ? "none" : "1px solid #dee2e6",
+        }}>
+          {/* Search Result Box */}
+          <div style={styles.searchResultBox}>
+            <SearchResult
+              result={searchResult}
+              thinking={thinking}
+              isLoading={isLoading}
               componentIds={componentIds}
-              autoTagBBoxes={autoTagBBoxes}
-              showAutoTags={showAutoTags}
-              occupancyGrid={occupancyGrid}
-              showOccupancyGrid={showOccupancyGrid}
-              annotations={annotations}
-              route={route}
+              onComponentClick={(i: number) => setFocusedComponentIndex(i)}
+            />
+          </div>
+          
+          {/* Search Component List */}
+          <div style={styles.searchComponentListWrapper}>
+            <SearchComponentList
+              componentIds={componentIds}
+              captions={captions}
               datasetName={datasetName}
-              focusedBBoxIndex={focusedComponentIndex}
-              externalSelectedBBoxIndex={focusedComponentIndex}
+              onComponentClick={(i) => setFocusedComponentIndex(i)}
+              focusedComponentIndex={focusedComponentIndex}
             />
           </div>
         </div>
-      </Row>
-      <Row>
-        <SearchResult
-          result={searchResult}
-          thinking={thinking}
-          isLoading={isLoading}
-          componentIds={componentIds}
-          onComponentClick={(i: number) => setFocusedComponentIndex(i)}
-        />
-      </Row>
-    </Container>
+
+        {/* Collapse Toggle Button */}
+        <button
+          onClick={() => setIsLeftColumnCollapsed(!isLeftColumnCollapsed)}
+          style={styles.collapseToggleButton}
+          title={isLeftColumnCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isLeftColumnCollapsed ? "▶" : "◀"}
+        </button>
+
+        {/* 3D Viewer */}
+        <div style={styles.viewerContainer}>
+          <Model3DViewer
+            source={`${SEARCH_SERVER_URL}/load_mesh?dataset_name=${encodeURIComponent(datasetName)}`}
+            boundingBox={boundingBox}
+            captions={captions}
+            componentIds={componentIds}
+            autoTagBBoxes={autoTagBBoxes}
+            showAutoTags={showAutoTags}
+            occupancyGrid={occupancyGrid}
+            showOccupancyGrid={showOccupancyGrid}
+            annotations={annotations}
+            route={route}
+            datasetName={datasetName}
+            focusedBBoxIndex={focusedComponentIndex}
+            externalSelectedBBoxIndex={focusedComponentIndex}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
