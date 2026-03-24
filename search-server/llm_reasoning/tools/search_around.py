@@ -85,3 +85,5 @@ SEARCH_AROUND_COMPONENT_TOOL = {
         },
     },
 }
+
+SEARCH_AROUND_COMPONENT_THINKING_TEXT = "Searching for objects around a target object..."

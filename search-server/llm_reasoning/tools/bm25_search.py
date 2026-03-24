@@ -68,3 +68,5 @@ SEARCH_TERMS_TOOL = {
         },
     },
 }
+
+SEARCH_THINKING_TEXT = "Searching for relevant objects..."

@@ -10,7 +10,7 @@ import sys
 from typing import Any, Callable, Sequence
 
 from .llm_call import DEFAULT_MODEL, LLMCaller
-from .tools import TOOL_FUNCTIONS, TOOLS
+from .tools import TOOL_FUNCTIONS, TOOLS, THINKING_TEXTS
 
 from prompts import TOOL_CALLING_SYSTEM_PROMPT
 
@@ -57,17 +57,22 @@ class LLMAgent:
 
         wrapped_on_stream_event = None
         if on_stream_event:
-            def _wrapped_handler(event: dict[str, Any]) -> None:
+            def _wrapped_handler(event: dict[str, Any], redacted_thinking: bool = False) -> None:
                 event_type = event.get("type")
                 if event_type == "assistant_reasoning_delta":
                     on_stream_event({"type": "thinking", "content": event.get("delta", "")})
                 elif event_type == "tool_call_delta":
                     name_delta = event.get("name_delta")
-                    if name_delta:
-                        on_stream_event({"type": "thinking", "content": f"\n\n> Using tool: {name_delta}\n> Arguments: "})
-                    args_delta = event.get("arguments_delta")
-                    if args_delta:
-                        on_stream_event({"type": "thinking", "content": args_delta})
+
+                    if not redacted_thinking:
+                        if name_delta:
+                            on_stream_event({"type": "thinking", "content": f"\n\n> Using tool: {name_delta}\n> Arguments: "})
+                        args_delta = event.get("arguments_delta")
+                        if args_delta:
+                            on_stream_event({"type": "thinking", "content": args_delta})
+                    else:
+                        if name_delta and name_delta in THINKING_TEXTS:
+                            on_stream_event({"type": "thinking", "content": f"\n\n> {THINKING_TEXTS[name_delta]}"})
                 # elif event_type == "assistant_text_delta":
                 #     delta = event.get("delta", "")
                 #     if delta:

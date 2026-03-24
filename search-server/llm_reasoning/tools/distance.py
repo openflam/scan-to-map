@@ -88,3 +88,6 @@ GET_DISTANCE_TOOL = {
         },
     },
 }
+
+GET_DISTANCE_THINKING_TEXT = "Calculating distance between objects..."
+
