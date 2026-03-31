@@ -35,6 +35,24 @@ def check_dataset_exists(dataset_name: str) -> bool:
     finally:
         con.close()
 
+def list_dataset_tables() -> list[str]:
+    """Return dataset table names from the PostGIS database."""
+    con = _pg_conn()
+    try:
+        with con.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+                """
+            )
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        con.close()
+
 def fetch_all_components(dataset_name: str) -> list[dict]:
     """Fetch all components fresh from the database."""
     table = get_table_name(dataset_name)

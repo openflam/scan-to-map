@@ -183,11 +183,7 @@ def search():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -301,23 +297,22 @@ def search_stream():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
     # Unpack the search query (assume only one entry for now)
     query_item = search_query[0]
     query_type = query_item.get("type")
-    
+
     if query_type != "text":
         return jsonify({"error": "Streaming only supports text queries"}), 400
 
     if method != "gpt-5.4-tools":
-        return jsonify({"error": "Streaming currently only supports gpt-5.4-tools"}), 400
+        return (
+            jsonify({"error": "Streaming currently only supports gpt-5.4-tools"}),
+            400,
+        )
 
     query_input = query_item.get("value")
     if not query_input:
@@ -332,7 +327,9 @@ def search_stream():
         try:
             agent = LLMAgent(model="gpt-5.4")
             result = agent.answer_query_stream(
-                query=query_input, dataset_name=dataset_name, on_stream_event=on_stream_event
+                query=query_input,
+                dataset_name=dataset_name,
+                on_stream_event=on_stream_event,
             )
             q.put({"type": "result", "data": result})
         except Exception as e:
@@ -343,6 +340,7 @@ def search_stream():
 
     def generate():
         import time
+
         start_time = time.perf_counter()
         while True:
             item = q.get()
@@ -369,12 +367,14 @@ def search_stream():
                     bbox_map = {}
                     for row in rows:
                         try:
-                            bbox = json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                            bbox = (
+                                json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                            )
                         except json.JSONDecodeError:
                             bbox = {}
                         bbox_map[row["component_id"]] = {
                             "bbox": bbox,
-                            "caption": row["caption"]
+                            "caption": row["caption"],
                         }
 
                     for comp_id in component_ids:
@@ -383,13 +383,17 @@ def search_stream():
                             valid_component_ids.append(comp_id)
                         else:
                             invalid_ids.append(comp_id)
-                
+
                 if not valid_bboxes:
-                    print("Warning: No valid component IDs found for gpt-5.4-tools. Using first component.")
+                    print(
+                        "Warning: No valid component IDs found for gpt-5.4-tools. Using first component."
+                    )
                     row = database.fetch_first_component(dataset_name)
                     if row:
                         try:
-                            bbox = json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                            bbox = (
+                                json.loads(row["bbox_json"]) if row["bbox_json"] else {}
+                            )
                         except json.JSONDecodeError:
                             bbox = {}
                         valid_bboxes = [bbox]
@@ -400,17 +404,24 @@ def search_stream():
                 components = []
                 for bbox, comp_id in zip(valid_bboxes, valid_component_ids):
                     transformed_bbox = transform_bbox(bbox)
-                    caption = bbox_map.get(comp_id, {}).get("caption") or "No caption available"
-                    components.append(
-                        {"bbox": transformed_bbox, "caption": caption, "component_id": str(comp_id)}
+                    caption = (
+                        bbox_map.get(comp_id, {}).get("caption")
+                        or "No caption available"
                     )
-                
+                    components.append(
+                        {
+                            "bbox": transformed_bbox,
+                            "caption": caption,
+                            "component_id": str(comp_id),
+                        }
+                    )
+
                 final_result = {
                     "reason": reason,
                     "search_time_ms": search_time_ms,
                     "components": components,
                 }
-                
+
                 yield f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"
                 break
 
@@ -440,11 +451,7 @@ def get_route():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -560,11 +567,7 @@ def update_component():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -585,7 +588,9 @@ def update_component():
     except (ValueError, TypeError):
         return jsonify({"error": f"Invalid component_id: {component_id}"}), 400
 
-    updated = database.update_component(dataset_name, comp_id_int, new_caption, new_bbox)
+    updated = database.update_component(
+        dataset_name, comp_id_int, new_caption, new_bbox
+    )
 
     if updated == 0:
         return jsonify({"error": f"Component ID {component_id} not found"}), 404
@@ -616,11 +621,7 @@ def delete_component():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -654,11 +655,7 @@ def get_component_info():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -737,11 +734,7 @@ def download_all_components():
 
     if not database.check_dataset_exists(dataset_name):
         return (
-            jsonify(
-                {
-                    "error": f"Dataset '{dataset_name}' not found in database."
-                }
-            ),
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
             404,
         )
 
@@ -756,7 +749,7 @@ def download_all_components():
                 bbox = {}
         else:
             bbox = {}
-            
+
         result.append(
             {
                 "connected_comp_id": row["component_id"],
@@ -774,8 +767,8 @@ def index():
     """
     Root route.
     If a dataset_name query parameter is supplied, serve the Vite-built React app.
-    Otherwise, render the dataset picker page, discovering available datasets by
-    scanning the outputs directory for subdirectories that contain a components.db.
+    Otherwise, render the dataset picker page using the datasets currently loaded
+    into the PostGIS database.
     """
     dataset_name = request.args.get("dataset_name")
 
@@ -793,16 +786,19 @@ def index():
         )
 
     # No dataset selected — show the picker
+    dataset_dir_names: dict[str, str] = {}
     outputs_root = Path(__file__).parent / ".." / "outputs"
-    datasets = (
-        sorted(
-            d.name
-            for d in outputs_root.iterdir()
-            if d.is_dir() and (d / "components.db").exists()
-        )
-        if outputs_root.exists()
-        else []
-    )
+    if outputs_root.exists():
+        for directory in outputs_root.iterdir():
+            if directory.is_dir():
+                dataset_dir_names.setdefault(
+                    database.get_table_name(directory.name), directory.name
+                )
+
+    datasets = [
+        dataset_dir_names.get(table_name, table_name)
+        for table_name in database.list_dataset_tables()
+    ]
 
     return render_template("dataset_picker.html", datasets=datasets)
 
