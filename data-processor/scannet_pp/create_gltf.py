@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import open3d as o3d
+import numpy as np
+import trimesh
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,14 +29,24 @@ def create_gltf(data_dir: str | Path) -> Path:
     if not mesh_path.is_file():
         raise FileNotFoundError(f"Mesh file not found: {mesh_path}")
 
-    mesh = o3d.io.read_triangle_mesh(str(mesh_path))
-    if mesh.is_empty():
-        raise ValueError(f"Open3D could not read any mesh data from {mesh_path}")
+    mesh = trimesh.load(str(mesh_path), force='mesh')
+    if mesh.is_empty:
+        raise ValueError(f"Trimesh could not read any mesh data from {mesh_path}")
+
+    # --- FIX: Rotate -90 degrees around X-axis to convert Z-up to Y-up ---
+    # This aligns the ScanNet++ data with the GLTF standard.
+    R = trimesh.transformations.rotation_matrix(-np.pi / 2, [1, 0, 0])
+    mesh.apply_transform(R)
+    # --------------------------------------------------------------------
+
+    # --- FIX: Rotate -90 degrees around Y-axis for some tansformations that happen
+    # in the viewer ---
+    R = trimesh.transformations.rotation_matrix(-np.pi / 2, [0, 1, 0])
+    mesh.apply_transform(R)
+    # --------------------------------------------------------------------
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    success = o3d.io.write_triangle_mesh(str(output_path), mesh)
-    if not success:
-        raise RuntimeError(f"Open3D failed to write GLB mesh to {output_path}")
+    mesh.export(str(output_path))
 
     print(f"Saved GLB mesh to {output_path}")
     return output_path

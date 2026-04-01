@@ -157,13 +157,14 @@ function App() {
 
       {/* Main Content Area */}
       <div style={styles.mainContentArea}>
-        
         {/* Collapsible Left Column */}
-        <div style={{ 
-          ...styles.leftColumnBase,
-          width: isLeftColumnCollapsed ? "0px" : "460px", 
-          borderRight: isLeftColumnCollapsed ? "none" : "1px solid #dee2e6",
-        }}>
+        <div
+          style={{
+            ...styles.leftColumnBase,
+            width: isLeftColumnCollapsed ? "0px" : "460px",
+            borderRight: isLeftColumnCollapsed ? "none" : "1px solid #dee2e6",
+          }}
+        >
           {/* Search Result Box */}
           <div style={styles.searchResultBox}>
             <SearchResult
@@ -174,7 +175,7 @@ function App() {
               onComponentClick={(i: number) => setFocusedComponentIndex(i)}
             />
           </div>
-          
+
           {/* Search Component List */}
           <div style={styles.searchComponentListWrapper}>
             <SearchComponentList
