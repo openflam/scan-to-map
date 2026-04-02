@@ -803,6 +803,44 @@ def index():
     return render_template("dataset_picker.html", datasets=datasets)
 
 
+@app.route("/benchmark_collection")
+def benchmark_collection():
+    """
+    Benchmark route.
+    If a dataset_name query parameter is supplied, serve the benchmark.html file.
+    Otherwise, render the dataset picker page using the datasets currently loaded
+    into the PostGIS database.
+    """
+    dataset_name = request.args.get("dataset_name")
+
+    if dataset_name:
+        if STATIC_DIR.exists():
+            return send_from_directory(str(STATIC_DIR), "benchmark.html")
+        return (
+            jsonify(
+                {
+                    "error": "Frontend not built. Run: npm run build in semantic-3d-search-demo/"
+                }
+            ),
+            404,
+        )
+
+    dataset_dir_names: dict[str, str] = {}
+    outputs_root = Path(__file__).parent / ".." / "outputs"
+    if outputs_root.exists():
+        for directory in outputs_root.iterdir():
+            if directory.is_dir():
+                dataset_dir_names.setdefault(
+                    database.get_table_name(directory.name), directory.name
+                )
+
+    datasets = [
+        dataset_dir_names.get(table_name, table_name)
+        for table_name in database.list_dataset_tables()
+    ]
+
+    return render_template("dataset_picker.html", datasets=datasets, target_url="/benchmark_collection")
+
 @app.route("/<path:path>")
 def serve_frontend(path: str):
     """

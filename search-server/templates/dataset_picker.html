@@ -125,7 +125,7 @@
     <h1>Select a Dataset</h1>
     <p class="subtitle">Choose which scene you want to explore.</p>
 
-    <form method="GET" action="/">
+    <form method="GET" action="{{ target_url|default('/') }}">
       <label for="dataset-select">Dataset</label>
 
       {% if datasets %}
