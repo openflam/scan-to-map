@@ -4,6 +4,7 @@ import { Suspense, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
 import ComponentDetails from "./ComponentDetails";
+import BenchmarkComponentDetails from "./benchmark-collection-ui/BenchmarkComponentDetails";
 import type { GizmoMode } from "./ComponentDetails";
 import Model from "./viewer/Model";
 import BoundingBoxMesh from "./viewer/BoundingBoxMesh";
@@ -26,6 +27,7 @@ interface Model3DViewerProps {
   datasetName: string;
   focusedBBoxIndex?: number | null;
   externalSelectedBBoxIndex?: number | null;
+  isBenchmark?: boolean;
 }
 
 /** Moves the camera to frame the given bounding box when it changes. */
@@ -83,6 +85,7 @@ export default function Model3DViewer({
   datasetName,
   focusedBBoxIndex,
   externalSelectedBBoxIndex,
+  isBenchmark,
 }: Model3DViewerProps) {
   const [selectedBBoxIndex, setSelectedBBoxIndex] = useState<number | null>(
     null,
@@ -271,37 +274,55 @@ export default function Model3DViewer({
       <KeyboardControls map={keyboardMap}>
         {/* --- HTML OVERLAY --- */}
         {hasSelection && (
-          <ComponentDetails
-            editedCaption={editedCaption}
-            setEditedCaption={setEditedCaption}
-            isEditing={isEditing}
-            setIsEditing={setIsEditing}
-            onDismiss={handleDeselect}
-            onSave={handleSave}
-            onDelete={
-              currentComponentId
-                ? async () => {
-                    try {
-                      const { deleteComponent } = await import("./query");
-                      await deleteComponent(currentComponentId, datasetName);
-                      setDeletedIds((prev) =>
-                        new Set(prev).add(currentComponentId),
-                      );
-                      handleDeselect();
-                    } catch (error) {
-                      console.error("Error deleting component:", error);
+          isBenchmark ? (
+            <BenchmarkComponentDetails
+              editedCaption={editedCaption}
+              setEditedCaption={setEditedCaption}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onDismiss={handleDeselect}
+              onSave={handleSave}
+              saveWarning={saveWarning}
+              componentId={currentComponentId}
+              imageBase64={componentImage}
+              isLoading={isLoadingComponent}
+              editedBBox={editedBBox}
+              gizmoMode={gizmoMode}
+              onGizmoModeChange={setGizmoMode}
+            />
+          ) : (
+            <ComponentDetails
+              editedCaption={editedCaption}
+              setEditedCaption={setEditedCaption}
+              isEditing={isEditing}
+              setIsEditing={setIsEditing}
+              onDismiss={handleDeselect}
+              onSave={handleSave}
+              onDelete={
+                currentComponentId
+                  ? async () => {
+                      try {
+                        const { deleteComponent } = await import("./query");
+                        await deleteComponent(currentComponentId, datasetName);
+                        setDeletedIds((prev) =>
+                          new Set(prev).add(currentComponentId),
+                        );
+                        handleDeselect();
+                      } catch (error) {
+                        console.error("Error deleting component:", error);
+                      }
                     }
-                  }
-                : undefined
-            }
-            saveWarning={saveWarning}
-            componentId={currentComponentId}
-            imageBase64={componentImage}
-            isLoading={isLoadingComponent}
-            editedBBox={editedBBox}
-            gizmoMode={gizmoMode}
-            onGizmoModeChange={setGizmoMode}
-          />
+                  : undefined
+              }
+              saveWarning={saveWarning}
+              componentId={currentComponentId}
+              imageBase64={componentImage}
+              isLoading={isLoadingComponent}
+              editedBBox={editedBBox}
+              gizmoMode={gizmoMode}
+              onGizmoModeChange={setGizmoMode}
+            />
+          )
         )}
 
         {/* --- 3D SCENE --- */}

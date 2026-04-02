@@ -9,6 +9,68 @@ interface SearchResultProps {
   onComponentClick?: (index: number) => void;
 }
 
+export const parseResult = (
+  text: string,
+  componentIds?: string[],
+  onComponentClick?: (index: number) => void
+) => {
+  const regex = /<component_(\d+)>(.*?)<\/component_\1>/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+
+    const componentId = match[1];
+    const componentName = match[2];
+
+    const index = componentIds?.findIndex((id) => String(id) === componentId);
+
+    if (index !== undefined && index !== -1) {
+      parts.push(
+        <a
+          key={match.index}
+          href="#"
+          className="text-decoration-none fw-bold"
+          onClick={(e) => {
+            e.preventDefault();
+            if (onComponentClick) onComponentClick(index);
+          }}
+        >
+          {componentName}
+        </a>,
+      );
+    } else {
+      parts.push(
+        <span
+          key={match.index}
+          className="fw-bold text-decoration-underline"
+          style={{ cursor: "pointer" }}
+          onClick={() =>
+            console.warn(
+              "Component ID not found in results list",
+              componentId,
+            )
+          }
+        >
+          {componentName}
+        </span>,
+      );
+    }
+
+    lastIndex = regex.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts;
+};
+
 function SearchResult({
   result,
   thinking,
@@ -16,63 +78,6 @@ function SearchResult({
   componentIds,
   onComponentClick,
 }: SearchResultProps) {
-  const parseResult = (text: string) => {
-    const regex = /<component_(\d+)>(.*?)<\/component_\1>/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
-      }
-
-      const componentId = match[1];
-      const componentName = match[2];
-
-      const index = componentIds?.findIndex((id) => String(id) === componentId);
-
-      if (index !== undefined && index !== -1) {
-        parts.push(
-          <a
-            key={match.index}
-            href="#"
-            className="text-decoration-none fw-bold"
-            onClick={(e) => {
-              e.preventDefault();
-              if (onComponentClick) onComponentClick(index);
-            }}
-          >
-            {componentName}
-          </a>,
-        );
-      } else {
-        parts.push(
-          <span
-            key={match.index}
-            className="fw-bold text-decoration-underline"
-            style={{ cursor: "pointer" }}
-            onClick={() =>
-              console.warn(
-                "Component ID not found in results list",
-                componentId,
-              )
-            }
-          >
-            {componentName}
-          </span>,
-        );
-      }
-
-      lastIndex = regex.lastIndex;
-    }
-
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
-
-    return parts;
-  };
 
   return (
     <>
@@ -115,7 +120,7 @@ function SearchResult({
             </div>
           ) : result ? (
             <p className="mb-0" style={{ whiteSpace: "pre-line" }}>
-              {parseResult(result)}
+              {parseResult(result, componentIds, onComponentClick)}
             </p>
           ) : !thinking ? (
             <p className="text-muted mb-0">No search results yet</p>

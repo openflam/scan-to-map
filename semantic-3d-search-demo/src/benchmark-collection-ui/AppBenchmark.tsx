@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 
 import BenchmarkSearchBar from "./BenchmarkSearchBar";
 import Model3DViewer from "../Model3DViewer";
-import BenchmarkResult from "./BenchmarkResult";
+import BenchmarkInput from "./BenchmarkInput";
 import SearchComponentList from "../SearchComponentList";
 import { query, queryStream, SEARCH_SERVER_URL } from "../query";
 import type { BoundingBox, SearchQuery, Route } from "../types/global";
@@ -143,9 +143,12 @@ function AppBenchmark() {
             borderRight: isLeftColumnCollapsed ? "none" : "1px solid #dee2e6",
           }}
         >
-          {/* Search Result Box */}
+          {/* Benchmark Input Box */}
           <div style={styles.searchResultBox}>
-            <BenchmarkResult />
+            <BenchmarkInput 
+              componentIds={componentIds}
+              onComponentClick={(i: number) => setFocusedComponentIndex(i)}
+            />
           </div>
 
           {/* Search Component List */}
@@ -185,6 +188,7 @@ function AppBenchmark() {
             datasetName={datasetName}
             focusedBBoxIndex={focusedComponentIndex}
             externalSelectedBBoxIndex={focusedComponentIndex}
+            isBenchmark={true}
           />
         </div>
       </div>
