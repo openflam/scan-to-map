@@ -146,6 +146,7 @@ function AppBenchmark() {
           {/* Benchmark Input Box */}
           <div style={styles.searchResultBox}>
             <BenchmarkInput 
+              datasetName={datasetName}
               componentIds={componentIds}
               onComponentClick={(i: number) => setFocusedComponentIndex(i)}
             />

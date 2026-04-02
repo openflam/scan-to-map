@@ -25,7 +25,7 @@ from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
 import queue
 import threading
-from llm_reasoning.llm_agent import LLMAgent
+from llm_reasoning.llm_agent import LLMAgent, call_tool
 
 STATIC_DIR = Path(__file__).parent / "front-end-build"
 
@@ -760,6 +760,27 @@ def download_all_components():
     response = jsonify(result)
     response.headers["Content-Disposition"] = "attachment; filename=bbox_corners.json"
     return response
+
+
+@app.route("/call_tool", methods=["POST"])
+def call_tool_route():
+    """
+    Endpoint to explicitly execute a specific reasoning tool.
+    Expects a JSON payload with 'tool_name' and optionally 'arguments' and 'dataset_name'.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON payload provided"}), 400
+
+    tool_name = data.get("tool_name")
+    arguments = data.get("arguments", {})
+    dataset_name = data.get("dataset_name")
+
+    if not tool_name:
+        return jsonify({"error": "tool_name is required"}), 400
+
+    result = call_tool(tool_name, arguments, dataset_name=dataset_name)
+    return jsonify({"result": result})
 
 
 @app.route("/")
