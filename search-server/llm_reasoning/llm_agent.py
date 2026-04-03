@@ -15,6 +15,34 @@ from .tools import TOOL_FUNCTIONS, TOOLS, THINKING_TEXTS
 from prompts import TOOL_CALLING_SYSTEM_PROMPT
 
 
+def call_tool(tool_name: str, arguments: str | dict[str, Any], dataset_name: str | None = None) -> dict[str, Any]:
+    """Execute a registered tool by name with the given JSON-encoded arguments."""
+    if tool_name not in TOOL_FUNCTIONS:
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    tool_fn = TOOL_FUNCTIONS[tool_name]
+
+    if isinstance(arguments, str):
+        try:
+            tool_args = json.loads(arguments or "{}")
+        except json.JSONDecodeError as exc:
+            return {"error": f"Invalid tool arguments: {exc}"}
+    else:
+        tool_args = arguments
+
+    if not isinstance(tool_args, dict):
+        return {"error": "Tool arguments must decode to a JSON object"}
+
+    if dataset_name is not None and "dataset_name" in inspect.signature(tool_fn).parameters:
+        tool_args = tool_args.copy()
+        tool_args["dataset_name"] = dataset_name
+
+    try:
+        return tool_fn(**tool_args)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
 class LLMAgent:
     """Runs a tool-calling loop with the configured LLM."""
 
@@ -127,30 +155,11 @@ class LLMAgent:
                 fn = call.get("function", {}) if isinstance(call, dict) else {}
                 tool_name = fn.get("name")
                 tool_call_id = call.get("id") or f"tool_call_{idx}"
-                if tool_name not in TOOL_FUNCTIONS:
-                    tool_output: dict[str, Any] = {
-                        "error": f"Unknown tool: {tool_name}",
-                    }
-                else:
-                    tool_fn = TOOL_FUNCTIONS[tool_name]
-                    try:
-                        tool_args = json.loads(fn.get("arguments") or "{}")
-                    except json.JSONDecodeError as exc:
-                        tool_args = None
-                        tool_output = {"error": f"Invalid tool arguments: {exc}"}
-
-                    if tool_args is not None:
-                        if not isinstance(tool_args, dict):
-                            tool_output = {
-                                "error": "Tool arguments must decode to a JSON object"
-                            }
-                        else:
-                            if "dataset_name" in inspect.signature(tool_fn).parameters:
-                                tool_args["dataset_name"] = dataset_name
-                            try:
-                                tool_output = tool_fn(**tool_args)
-                            except Exception as exc:
-                                tool_output = {"error": str(exc)}
+                tool_output = call_tool(
+                    tool_name=tool_name or "", 
+                    arguments=fn.get("arguments", "{}"), 
+                    dataset_name=dataset_name
+                )
 
                 if on_stream_event:
                     on_stream_event(
