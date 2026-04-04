@@ -70,24 +70,22 @@ def get_images(
 
 GET_IMAGES_TOOL = {
     "type": "function",
-    "function": {
-        "name": "get_images",
-        "description": "Get the top N views of a specific component. The images show the component from different angles. Returns a dictionary containing an 'images' list with Base64 encoded data URLs.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "component_id": {
-                    "type": "integer",
-                    "description": "The ID of the component to get images for.",
-                },
-                "num_images": {
-                    "type": "integer",
-                    "description": "The number of images to return.",
-                },
+    "name": "get_images",
+    "description": "Get the top N views of a specific component. The images show the component from different angles. Returns a dictionary containing an 'images' list with Base64 encoded data URLs.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "component_id": {
+                "type": "integer",
+                "description": "The ID of the component to get images for.",
             },
-            "required": ["component_id", "num_images"],
-            "additionalProperties": False,
+            "num_images": {
+                "type": "integer",
+                "description": "The number of images to return.",
+            },
         },
+        "required": ["component_id", "num_images"],
+        "additionalProperties": False,
     },
 }
 

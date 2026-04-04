@@ -68,24 +68,22 @@ def get_distance(
 
 GET_DISTANCE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "get_distance",
-        "description": "Calculate the Euclidean distance between the centers of two components' bounding boxes in meters.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "component_id_1": {
-                    "type": "integer",
-                    "description": "The ID of the first component.",
-                },
-                "component_id_2": {
-                    "type": "integer",
-                    "description": "The ID of the second component.",
-                },
+    "name": "get_distance",
+    "description": "Calculate the Euclidean distance between the centers of two components' bounding boxes in meters.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "component_id_1": {
+                "type": "integer",
+                "description": "The ID of the first component.",
             },
-            "required": ["component_id_1", "component_id_2"],
-            "additionalProperties": False,
+            "component_id_2": {
+                "type": "integer",
+                "description": "The ID of the second component.",
+            },
         },
+        "required": ["component_id_1", "component_id_2"],
+        "additionalProperties": False,
     },
 }
 

@@ -41,31 +41,29 @@ def search_terms(
 
 SEARCH_TERMS_TOOL = {
     "type": "function",
-    "function": {
-        "name": "search_terms",
-        "description": (
-            "Search component captions using BM25 over the current dataset table and "
-            "return the most relevant components."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query_terms": {
-                    "type": "array",
-                    "description": "List of text terms to search for.",
-                    "items": {"type": "string"},
-                    "minItems": 1,
-                },
-                "top_k": {
-                    "type": "integer",
-                    "description": "Maximum number of ranked components to return.",
-                    "default": 10,
-                    "minimum": 1,
-                },
+    "name": "search_terms",
+    "description": (
+        "Search component captions using BM25 over the current dataset table and "
+        "return the most relevant components."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query_terms": {
+                "type": "array",
+                "description": "List of text terms to search for.",
+                "items": {"type": "string"},
+                "minItems": 1,
             },
-            "required": ["query_terms"],
-            "additionalProperties": False,
+            "top_k": {
+                "type": "integer",
+                "description": "Maximum number of ranked components to return.",
+                "default": 10,
+                "minimum": 1,
+            },
         },
+        "required": ["query_terms"],
+        "additionalProperties": False,
     },
 }
 
