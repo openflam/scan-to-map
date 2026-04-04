@@ -97,6 +97,7 @@ def create_crops(
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     output_name: str | None = None,
     min_fraction: float = 0.3,
+    max_crops_per_component: int = 5,
 ) -> Path:
     data_dir = Path(data_dir).resolve()
     dataset_name = output_name or data_dir.name
@@ -133,6 +134,22 @@ def create_crops(
         print(f"Using outputs directory: {outputs_dir}")
         print("Projecting 3D bounding boxes into image crops...")
         project_all_bboxes_cli(dataset_name=dataset_name, min_fraction=min_fraction)
+        
+        crop_coords_path = outputs_dir / "image_crop_coordinates.json"
+        if crop_coords_path.is_file():
+            import json
+            print(f"Limiting to top {max_crops_per_component} crops per component...")
+            with crop_coords_path.open("r", encoding="utf-8") as f:
+                coords_dict = json.load(f)
+            
+            for comp_id in coords_dict:
+                crops = coords_dict[comp_id]
+                crops.sort(key=lambda x: x.get("fraction_visible", 0.0), reverse=True)
+                coords_dict[comp_id] = crops[:max_crops_per_component]
+                
+            with crop_coords_path.open("w", encoding="utf-8") as f:
+                json.dump(coords_dict, f, indent=2)
+
         print("Cropping projected image regions...")
         crop_all_images_cli(dataset_name=dataset_name)
 
@@ -180,6 +197,12 @@ def main() -> None:
         default=0.1,
         help="Minimum visible 3D-point fraction for projecting a bbox to an image.",
     )
+    parser.add_argument(
+        "--max-crops-per-component",
+        type=int,
+        default=5,
+        help="Maximum number of crops to generate per component.",
+    )
 
     args = parser.parse_args()
 
@@ -189,6 +212,7 @@ def main() -> None:
         output_root=args.output_root,
         output_name=args.output_name,
         min_fraction=args.min_fraction,
+        max_crops_per_component=args.max_crops_per_component,
     )
     print(f"Saved crops to {crops_dir}")
 
