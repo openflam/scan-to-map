@@ -34,11 +34,25 @@ def run_pipeline(
 ) -> None:
     data_dir = Path(data_dir).resolve()
     
+    if output_name is None:
+        if not data_dir.name.startswith("scannetpp_"):
+            output_name = f"scannetpp_{data_dir.name}"
+        else:
+            output_name = data_dir.name
+
     print(f"\n--- Running create_gltf on {data_dir} ---")
-    create_gltf(data_dir=data_dir)
+    create_gltf(
+        data_dir=data_dir,
+        output_root=output_root,
+        output_name=output_name,
+    )
 
     print(f"\n--- Running create_bboxes on {data_dir} ---")
-    get_bounding_boxes(data_dir=data_dir, output_root=output_root)
+    get_bounding_boxes(
+        data_dir=data_dir,
+        output_root=output_root,
+        output_name=output_name,
+    )
 
     print(f"\n--- Running create_crops on {data_dir} ---")
     create_crops(

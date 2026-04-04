@@ -70,16 +70,19 @@ def load_mesh():
     dataset_name = request.args.get("dataset_name")
     if not dataset_name:
         return jsonify({"error": "dataset_name query parameter is required"}), 400
-    mesh_path = (
-        Path(__file__).parent
-        / ".."
-        / "data"
-        / dataset_name
-        / "polycam_data"
-        / "raw.glb"
-    )
+
+    base_dir = Path(__file__).parent / ".."
+
+    # First try: outputs directory
+    output_mesh_path = base_dir / "outputs" / dataset_name / "raw.glb"
+    if output_mesh_path.exists():
+        return send_file(output_mesh_path, mimetype="model/gltf-binary")
+
+    # Second try: old polycam_data directory
+    mesh_path = base_dir / "data" / dataset_name / "polycam_data" / "raw.glb"
     if not mesh_path.exists():
-        return jsonify({"error": f"Mesh file not found at {mesh_path}"}), 404
+        return jsonify({"error": f"Mesh file not found for dataset {dataset_name}"}), 404
+
     return send_file(mesh_path, mimetype="model/gltf-binary")
 
 

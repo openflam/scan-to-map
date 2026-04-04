@@ -87,6 +87,7 @@ def _compute_bbox(points_xyz: np.ndarray) -> dict[str, list[list[float]] | list[
 def get_bounding_boxes(
     data_dir: str | Path,
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
+    output_name: str | None = None,
 ) -> list[dict[str, Any]]:
     data_dir = Path(data_dir).resolve()
     scan_dir = data_dir / "scans"
@@ -185,7 +186,10 @@ def get_bounding_boxes(
             }
         )
 
-    output_dir = Path(output_root).resolve() / data_dir.name
+    if output_name is None:
+        output_name = data_dir.name
+        
+    output_dir = Path(output_root).resolve() / output_name
     output_dir.mkdir(parents=True, exist_ok=True)
     bbox_output_path = output_dir / "bbox_corners.json"
     components_output_path = output_dir / "connected_components.json"
@@ -233,7 +237,10 @@ def main() -> None:
     if not data_dir.is_dir():
         raise FileNotFoundError(f"Scene directory not found: {data_dir}")
 
-    get_bounding_boxes(data_dir=data_dir, output_root=args.output_root)
+    get_bounding_boxes(
+        data_dir=data_dir,
+        output_root=args.output_root,
+    )
 
 
 if __name__ == "__main__":
