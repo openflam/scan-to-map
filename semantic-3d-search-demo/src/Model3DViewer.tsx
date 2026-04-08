@@ -344,7 +344,7 @@ export default function Model3DViewer({
           />
 
           <Suspense fallback={null}>
-            <Model url={source} />
+            <Model url={source} datasetName={datasetName} />
           </Suspense>
 
           {boundingBox?.map((bbox, i) => {
