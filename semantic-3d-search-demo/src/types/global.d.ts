@@ -2,12 +2,7 @@ import type * as React from "react";
 
 // Define BoundingBox interface
 export interface BoundingBox {
-  x_min: number;
-  y_min: number;
-  z_min: number;
-  x_max: number;
-  y_max: number;
-  z_max: number;
+  corners: [number, number, number][];
 }
 
 // Define Route type - list of 3D coordinates

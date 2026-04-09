@@ -13,7 +13,7 @@ def get_distance(
     component_id_1: int,
     component_id_2: int,
     dataset_name: str | None = None,
-) -> float:
+) -> dict[str, float]:
     """
     Calculate the Euclidean distance between the centers of two components.
 
@@ -63,7 +63,7 @@ def get_distance(
         (center1[2] - center2[2]) ** 2
     )
 
-    return distance
+    return {"distance": distance}
 
 
 GET_DISTANCE_TOOL = {

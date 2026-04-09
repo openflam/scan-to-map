@@ -8,6 +8,8 @@ import psycopg2
 import psycopg2.extensions
 from psycopg2.extras import RealDictCursor
 
+from spatial_db.create_tables import _linestring_z
+
 def _pg_conn() -> psycopg2.extensions.connection:
     """Open a Postgres/PostGIS connection from environment variables."""
     return psycopg2.connect(
@@ -135,6 +137,11 @@ def update_component(dataset_name: str, component_id: int, caption: str | None, 
     if bbox is not None:
         fields.append("bbox_json = %s")
         params.append(json.dumps(bbox))
+        
+        geom_wkt = _linestring_z(bbox)
+        if geom_wkt:
+            fields.append("bbox_geom = ST_GeomFromText(%s, 0)")
+            params.append(geom_wkt)
     
     if not fields:
         return 0

@@ -36,16 +36,28 @@ function FocusBBoxController({ bbox }: { bbox: BoundingBox | null }) {
 
   useEffect(() => {
     if (!bbox || !controls) return;
-    const center = new THREE.Vector3(
-      (bbox.x_min + bbox.x_max) / 2,
-      (bbox.y_min + bbox.y_max) / 2,
-      (bbox.z_min + bbox.z_max) / 2,
-    );
-    const size = Math.max(
-      bbox.x_max - bbox.x_min,
-      bbox.y_max - bbox.y_min,
-      bbox.z_max - bbox.z_min,
-    );
+    const center = new THREE.Vector3();
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
+
+    for (const p of bbox.corners) {
+      center.x += p[0];
+      center.y += p[1];
+      center.z += p[2];
+      minX = Math.min(minX, p[0]);
+      minY = Math.min(minY, p[1]);
+      minZ = Math.min(minZ, p[2]);
+      maxX = Math.max(maxX, p[0]);
+      maxY = Math.max(maxY, p[1]);
+      maxZ = Math.max(maxZ, p[2]);
+    }
+    center.divideScalar(8);
+
+    const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
     const distance = Math.max(size * 2.5, 0.5);
 
     // Keep the current camera direction but re-anchor it on the new center
@@ -182,17 +194,16 @@ export default function Model3DViewer({
       const { updateComponent } = await import("./query");
       const updates: {
         caption: string;
-        bbox?: { min: number[]; max: number[] };
+        bbox?: { corners: [number, number, number][] };
       } = {
         caption: captionToSave,
       };
       if (bboxToSave) {
-        // Invert the axis swap applied in App.tsx when loading from the server:
+        // Invert the axis swap applied when loading from the server:
         //   viewer.x = server[1], viewer.y = server[2], viewer.z = server[0]
         // → server[0] = viewer.z, server[1] = viewer.x, server[2] = viewer.y
         updates.bbox = {
-          min: [bboxToSave.z_min, bboxToSave.x_min, bboxToSave.y_min],
-          max: [bboxToSave.z_max, bboxToSave.x_max, bboxToSave.y_max],
+          corners: bboxToSave.corners.map(c => [c[2], c[0], c[1]]) as [number, number, number][]
         };
       }
       await updateComponent(currentComponentId, updates, datasetName);
@@ -273,8 +284,8 @@ export default function Model3DViewer({
     >
       <KeyboardControls map={keyboardMap}>
         {/* --- HTML OVERLAY --- */}
-        {hasSelection && (
-          isBenchmark ? (
+        {hasSelection &&
+          (isBenchmark ? (
             <BenchmarkComponentDetails
               editedCaption={editedCaption}
               setEditedCaption={setEditedCaption}
@@ -322,8 +333,7 @@ export default function Model3DViewer({
               gizmoMode={gizmoMode}
               onGizmoModeChange={setGizmoMode}
             />
-          )
-        )}
+          ))}
 
         {/* --- 3D SCENE --- */}
         <Canvas

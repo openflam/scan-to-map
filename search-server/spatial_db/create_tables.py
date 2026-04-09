@@ -45,6 +45,7 @@ import json
 import os
 import re
 import sys
+import numpy as np
 from pathlib import Path
 
 import psycopg2
@@ -78,17 +79,21 @@ def _table_name(dataset_name: str) -> str:
 
 def _linestring_z(bbox: dict) -> str | None:
     """
-    Build a WKT LINESTRING Z from the min/max corners of an AABB.
+    Build a WKT LINESTRING Z from the corners of an OBB.
 
     The space diagonal min→max has the exact same 3-D bounding box as the
     full axis-aligned box, so a GIST nd-index on this geometry is equivalent
     to indexing the box itself without storing all eight corners.
     """
-    mn = bbox.get("min")
-    mx = bbox.get("max")
-    if not mn or not mx or len(mn) < 3 or len(mx) < 3:
+    corners = bbox.get("corners")
+    if not corners or not isinstance(corners, list) or len(corners) == 0:
         return None
-    return f"LINESTRING Z ({mn[0]} {mn[1]} {mn[2]}, {mx[0]} {mx[1]} {mx[2]})"
+        
+    corners_np = np.array(corners)
+    min_coords = corners_np.min(axis=0)
+    max_coords = corners_np.max(axis=0)
+    
+    return f"LINESTRING Z ({min_coords[0]} {min_coords[1]} {min_coords[2]}, {max_coords[0]} {max_coords[1]} {max_coords[2]})"
 
 
 def _best_crop(manifest_data: dict, comp_id: int) -> str | None:

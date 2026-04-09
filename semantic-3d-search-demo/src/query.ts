@@ -237,7 +237,7 @@ export async function deleteComponent(
 export async function downloadAllComponents(
   datasetName: string,
 ): Promise<
-  Array<{ connected_comp_id: number; bbox: { min: number[]; max: number[] } }>
+  Array<{ connected_comp_id: number; bbox: { corners: [number, number, number][] } }>
 > {
   console.log("Downloading all components...");
 
@@ -264,7 +264,7 @@ export async function downloadAllComponents(
 
 export async function updateComponent(
   componentId: string,
-  updates: { caption?: string; bbox?: { min: number[]; max: number[] } },
+  updates: { caption?: string; bbox?: { corners: [number, number, number][] } },
   datasetName: string,
 ): Promise<{ component_id: string; caption?: string; bbox?: object }> {
   console.log("Updating component:", componentId, updates);

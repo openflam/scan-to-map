@@ -116,18 +116,15 @@ def transform_bbox(bbox):
     Transform bounding box from COLMAP coordinate system to Model3DViewer coordinate system.
 
     Args:
-        bbox: Bounding box dictionary with 'min' and 'max' keys
+        bbox: Bounding box dictionary with 'corners' key
 
     Returns:
-        Transformed bounding box dictionary with x_min, y_min, z_min, x_max, y_max, z_max
+        Transformed bounding box dictionary with 'corners'
     """
     return {
-        "x_min": bbox["min"][1],
-        "y_min": bbox["min"][2],
-        "z_min": bbox["min"][0],
-        "x_max": bbox["max"][1],
-        "y_max": bbox["max"][2],
-        "z_max": bbox["max"][0],
+        "corners": [
+            [c[1], c[2], c[0]] for c in bbox.get("corners", [])
+        ]
     }
 
 
@@ -557,7 +554,7 @@ def update_component():
     Update component endpoint.
     Updates the caption and/or bounding box for a given component ID in the database.
     At least one of 'caption' or 'bbox' must be provided.
-    bbox must be in the format: {"min": [x, y, z], "max": [x, y, z]}
+    bbox must be in the format: {"corners": [[x, y, z], ...]}
     """
     data = request.json
     dataset_name = data.get("dataset_name")
@@ -583,8 +580,8 @@ def update_component():
             400,
         )
 
-    if new_bbox is not None and ("min" not in new_bbox or "max" not in new_bbox):
-        return jsonify({"error": "bbox must have 'min' and 'max' keys"}), 400
+    if new_bbox is not None and "corners" not in new_bbox:
+        return jsonify({"error": "bbox must have 'corners' key"}), 400
 
     try:
         comp_id_int = int(component_id)
@@ -726,7 +723,7 @@ def download_all_components():
     [
       {
         "connected_comp_id": <int>,
-        "bbox": {"min": [x, y, z], "max": [x, y, z]}
+        "bbox": {"corners": [[x, y, z], ...]}
       },
       ...
     ]

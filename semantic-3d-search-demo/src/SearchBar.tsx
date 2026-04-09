@@ -70,13 +70,8 @@ function SearchBar({
     setIsDownloadingAnnotations(true);
     try {
       const data = await downloadAllComponents(datasetName);
-      const bboxes: BoundingBox[] = data.map((item) => ({
-        x_min: item.bbox.min[1],
-        y_min: item.bbox.min[2],
-        z_min: item.bbox.min[0],
-        x_max: item.bbox.max[1],
-        y_max: item.bbox.max[2],
-        z_max: item.bbox.max[0],
+      const bboxes: BoundingBox[] = data.map((item: any) => ({
+        corners: item.bbox.corners.map((c: number[]) => [c[1], c[2], c[0]]),
       }));
       const annotationList: string[] = data.map((item) =>
         item.connected_comp_id.toString(),
