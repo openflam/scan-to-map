@@ -237,7 +237,7 @@ export async function deleteComponent(
 export async function downloadAllComponents(
   datasetName: string,
 ): Promise<
-  Array<{ connected_comp_id: number; bbox: { min: number[]; max: number[] } }>
+  Array<{ connected_comp_id: number; bbox: { corners: [number, number, number][] } }>
 > {
   console.log("Downloading all components...");
 
@@ -264,7 +264,7 @@ export async function downloadAllComponents(
 
 export async function updateComponent(
   componentId: string,
-  updates: { caption?: string; bbox?: { min: number[]; max: number[] } },
+  updates: { caption?: string; bbox?: { corners: [number, number, number][] } },
   datasetName: string,
 ): Promise<{ component_id: string; caption?: string; bbox?: object }> {
   console.log("Updating component:", componentId, updates);
@@ -294,6 +294,42 @@ export async function updateComponent(
     return data;
   } catch (error) {
     console.error("Error updating component:", error);
+    throw error;
+  }
+}
+
+export async function callTool(
+  toolName: string,
+  args: any,
+  datasetName: string,
+): Promise<any> {
+  console.log("Calling tool:", toolName, args);
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/call_tool`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        tool_name: toolName,
+        arguments: args,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Call tool request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Tool result:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error calling tool:", error);
     throw error;
   }
 }

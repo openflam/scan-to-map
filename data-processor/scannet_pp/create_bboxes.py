@@ -16,6 +16,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from segment3d.src.utils.read_write_model import read_model
+from segment3d.src.utils.bbox_from_points import bbox_from_points
 
 
 DEFAULT_DATA_ROOT = REPO_ROOT / "data"
@@ -55,25 +56,25 @@ def _load_colmap_points(model_dir: Path) -> tuple[np.ndarray, np.ndarray]:
     return point_ids, point_xyz
 
 
-def _compute_bbox(points_xyz: np.ndarray) -> dict[str, list[list[float]] | list[float]]:
-    bbox_min = points_xyz.min(axis=0)
-    bbox_max = points_xyz.max(axis=0)
-    center = (bbox_min + bbox_max) / 2.0
-    size = bbox_max - bbox_min
-
-    corners = np.array(
-        [
-            [bbox_min[0], bbox_min[1], bbox_min[2]],
-            [bbox_max[0], bbox_min[1], bbox_min[2]],
-            [bbox_max[0], bbox_max[1], bbox_min[2]],
-            [bbox_min[0], bbox_max[1], bbox_min[2]],
-            [bbox_min[0], bbox_min[1], bbox_max[2]],
-            [bbox_max[0], bbox_min[1], bbox_max[2]],
-            [bbox_max[0], bbox_max[1], bbox_max[2]],
-            [bbox_min[0], bbox_max[1], bbox_max[2]],
-        ],
-        dtype=np.float64,
-    )
+def _compute_bbox(points_xyz: np.ndarray) -> tuple[dict[str, list[list[float]] | list[float]], int]:
+    num_filtered = 0
+    inlier_points = points_xyz
+    
+    if len(points_xyz) >= 10:
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points_xyz)
+        cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+        if len(ind) >= 4:
+            inlier_points = points_xyz[ind]
+            num_filtered = len(points_xyz) - len(inlier_points)
+    
+    obb = bbox_from_points(inlier_points)
+    corners = obb["corners"]
+    
+    bbox_min = corners.min(axis=0)
+    bbox_max = corners.max(axis=0)
+    center = obb["center"]
+    size = obb["extents"]
 
     return {
         "corners": corners.tolist(),
@@ -81,12 +82,13 @@ def _compute_bbox(points_xyz: np.ndarray) -> dict[str, list[list[float]] | list[
         "max": bbox_max.astype(np.float64).tolist(),
         "center": center.astype(np.float64).tolist(),
         "size": size.astype(np.float64).tolist(),
-    }
+    }, num_filtered
 
 
 def get_bounding_boxes(
     data_dir: str | Path,
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
+    output_name: str | None = None,
 ) -> list[dict[str, Any]]:
     data_dir = Path(data_dir).resolve()
     scan_dir = data_dir / "scans"
@@ -168,13 +170,15 @@ def get_bounding_boxes(
             }
         )
 
+        bbox_dict, num_filtered = _compute_bbox(component_xyz)
+
         bbox_results.append(
             {
                 "connected_comp_id": connected_comp_id,
                 "num_point3d_ids": int(component_point3d_ids.shape[0]),
-                "num_points_used": int(component_xyz.shape[0]),
-                "num_filtered": 0,
-                "bbox": _compute_bbox(component_xyz),
+                "num_points_used": int(component_xyz.shape[0]) - num_filtered,
+                "num_filtered": num_filtered,
+                "bbox": bbox_dict,
                 "label": group.get("label"),
                 "num_vertices": int(component_xyz.shape[0]),
                 "num_segments": int(len(group.get("segments", []))),
@@ -185,7 +189,10 @@ def get_bounding_boxes(
             }
         )
 
-    output_dir = Path(output_root).resolve() / data_dir.name
+    if output_name is None:
+        output_name = data_dir.name
+        
+    output_dir = Path(output_root).resolve() / output_name
     output_dir.mkdir(parents=True, exist_ok=True)
     bbox_output_path = output_dir / "bbox_corners.json"
     components_output_path = output_dir / "connected_components.json"
@@ -233,7 +240,10 @@ def main() -> None:
     if not data_dir.is_dir():
         raise FileNotFoundError(f"Scene directory not found: {data_dir}")
 
-    get_bounding_boxes(data_dir=data_dir, output_root=args.output_root)
+    get_bounding_boxes(
+        data_dir=data_dir,
+        output_root=args.output_root,
+    )
 
 
 if __name__ == "__main__":

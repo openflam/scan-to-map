@@ -9,6 +9,7 @@ import trimesh
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATA_ROOT = REPO_ROOT / "data"
+DEFAULT_OUTPUT_ROOT = REPO_ROOT / "outputs"
 
 
 def _resolve_data_dir(scene_dir: str, data_root: Path = DEFAULT_DATA_ROOT) -> Path:
@@ -18,10 +19,19 @@ def _resolve_data_dir(scene_dir: str, data_root: Path = DEFAULT_DATA_ROOT) -> Pa
     return (data_root / scene_dir).resolve()
 
 
-def create_gltf(data_dir: str | Path) -> Path:
+def create_gltf(
+    data_dir: str | Path,
+    output_root: str | Path = DEFAULT_OUTPUT_ROOT,
+    output_name: str | None = None,
+) -> Path:
     data_dir = Path(data_dir).resolve()
     mesh_path = data_dir / "scans" / "mesh_aligned_0.05.ply"
-    output_dir = data_dir / "polycam_data"
+    
+    output_root = Path(output_root).resolve()
+    if output_name is None:
+        output_name = data_dir.name
+        
+    output_dir = output_root / output_name
     output_path = output_dir / "raw.glb"
 
     if not data_dir.is_dir():
@@ -73,9 +83,29 @@ def main() -> None:
         help=f"Base data directory (default: {DEFAULT_DATA_ROOT})",
     )
 
+    parser.add_argument(
+        "--output-root",
+        type=Path,
+        default=DEFAULT_OUTPUT_ROOT,
+        help=f"Base outputs directory (default: {DEFAULT_OUTPUT_ROOT})",
+    )
+    parser.add_argument(
+        "--output-name",
+        type=str,
+        default=None,
+        help=(
+            "Output directory name under output-root. Defaults to the scene "
+            "directory name."
+        ),
+    )
+
     args = parser.parse_args()
     data_dir = _resolve_data_dir(args.scene_dir, data_root=args.data_root)
-    create_gltf(data_dir)
+    create_gltf(
+        data_dir=data_dir,
+        output_root=args.output_root,
+        output_name=args.output_name,
+    )
 
 
 if __name__ == "__main__":

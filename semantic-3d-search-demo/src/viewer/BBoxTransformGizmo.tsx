@@ -26,17 +26,45 @@ export default function BBoxTransformGizmo({
   useLayoutEffect(() => {
     const m = meshRef.current;
     if (!m) return;
-    const { x_min, y_min, z_min, x_max, y_max, z_max } = initialBBox;
-    m.position.set(
-      (x_min + x_max) / 2,
-      (y_min + y_max) / 2,
-      (z_min + z_max) / 2,
-    );
-    m.scale.set(
-      Math.abs(x_max - x_min),
-      Math.abs(y_max - y_min),
-      Math.abs(z_max - z_min),
-    );
+    const { corners } = initialBBox;
+
+    // prettier-ignore
+    let cx = 0, cy = 0, cz = 0;
+    for (const c of corners) {
+      cx += c[0];
+      cy += c[1];
+      cz += c[2];
+    }
+    cx /= 8;
+    cy /= 8;
+    cz /= 8;
+
+    // Create a new BufferGeometry centered at origin
+    const geo = new THREE.BufferGeometry();
+    const vertices = new Float32Array(24);
+    for (let i = 0; i < 8; i++) {
+      vertices[i * 3] = corners[i][0] - cx;
+      vertices[i * 3 + 1] = corners[i][1] - cy;
+      vertices[i * 3 + 2] = corners[i][2] - cz;
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+
+    // prettier-ignore
+    const indices = [
+      0, 1, 2,  0, 2, 3, // Bottom
+      4, 5, 6,  4, 6, 7, // Top
+      0, 1, 5,  0, 5, 4, // Front
+      3, 2, 6,  3, 6, 7, // Back
+      0, 3, 7,  0, 7, 4, // Left
+      1, 2, 6,  1, 6, 5  // Right
+    ];
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    m.geometry = geo;
+
+    m.position.set(cx, cy, cz);
+    m.rotation.set(0, 0, 0);
+    m.scale.set(1, 1, 1);
     m.updateMatrixWorld(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
@@ -49,14 +77,23 @@ export default function BBoxTransformGizmo({
     const onObjectChange = () => {
       const m = meshRef.current;
       if (!m) return;
-      liveBBoxRef.current = {
-        x_min: m.position.x - m.scale.x / 2,
-        x_max: m.position.x + m.scale.x / 2,
-        y_min: m.position.y - m.scale.y / 2,
-        y_max: m.position.y + m.scale.y / 2,
-        z_min: m.position.z - m.scale.z / 2,
-        z_max: m.position.z + m.scale.z / 2,
-      };
+
+      const geom = m.geometry;
+      const posAttr = geom.getAttribute("position");
+      const newCorners: [number, number, number][] = [];
+      m.updateMatrixWorld(true);
+
+      for (let i = 0; i < 8; i++) {
+        const v = new THREE.Vector3(
+          posAttr.getX(i),
+          posAttr.getY(i),
+          posAttr.getZ(i),
+        );
+        v.applyMatrix4(m.matrixWorld);
+        newCorners.push([v.x, v.y, v.z]);
+      }
+
+      liveBBoxRef.current = { corners: newCorners };
     };
 
     const onDraggingChanged = (e: any) => {
@@ -81,7 +118,7 @@ export default function BBoxTransformGizmo({
       {/* No position/scale JSX props – set imperatively above so re-renders
           from onCommit → setEditedBBox never reset the Three.js transform */}
       <mesh ref={meshRef}>
-        <boxGeometry args={[1, 1, 1]} />
+        {/* Geometry is attached imperatively in useLayoutEffect */}
         <meshStandardMaterial
           color="#3b82f6"
           transparent

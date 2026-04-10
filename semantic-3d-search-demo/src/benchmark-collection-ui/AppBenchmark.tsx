@@ -48,12 +48,7 @@ function AppBenchmark() {
         // Extract bounding boxes from the JSON data.
         // Swap axes as needed -- results of trial and error.
         const bboxes: BoundingBox[] = data.map((item: any) => ({
-          x_min: item.bbox.min[1],
-          y_min: item.bbox.min[2],
-          z_min: item.bbox.min[0],
-          x_max: item.bbox.max[1],
-          y_max: item.bbox.max[2],
-          z_max: item.bbox.max[0],
+          corners: item.bbox.corners.map((c: number[]) => [c[1], c[2], c[0]]),
         }));
         setOccupancyGrid(bboxes);
       })
@@ -145,7 +140,8 @@ function AppBenchmark() {
         >
           {/* Benchmark Input Box */}
           <div style={styles.searchResultBox}>
-            <BenchmarkInput 
+            <BenchmarkInput
+              datasetName={datasetName}
               componentIds={componentIds}
               onComponentClick={(i: number) => setFocusedComponentIndex(i)}
             />

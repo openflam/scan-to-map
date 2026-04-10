@@ -61,28 +61,26 @@ def search_around_component(
 
 SEARCH_AROUND_COMPONENT_TOOL = {
     "type": "function",
-    "function": {
-        "name": "search_around_component",
-        "description": "Find components within a specific radius of a target component, optionally filtered by a search term.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "component_id": {
-                    "type": "integer",
-                    "description": "The ID of the target component to search around.",
-                },
-                "radius": {
-                    "type": "number",
-                    "description": "The search radius in meters.",
-                },
-                "search_term": {
-                    "type": "string",
-                    "description": "Optional text to filter the neighboring components by.",
-                },
+    "name": "search_around_component",
+    "description": "Find components within a specific radius of a target component, optionally filtered by a search term.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "component_id": {
+                "type": "integer",
+                "description": "The ID of the target component to search around.",
             },
-            "required": ["component_id", "radius"],
-            "additionalProperties": False,
+            "radius": {
+                "type": "number",
+                "description": "The search radius in meters.",
+            },
+            "search_term": {
+                "type": "string",
+                "description": "Optional text to filter the neighboring components by.",
+            },
         },
+        "required": ["component_id", "radius"],
+        "additionalProperties": False,
     },
 }
 

@@ -13,7 +13,7 @@ def get_distance(
     component_id_1: int,
     component_id_2: int,
     dataset_name: str | None = None,
-) -> float:
+) -> dict[str, float]:
     """
     Calculate the Euclidean distance between the centers of two components.
 
@@ -63,29 +63,27 @@ def get_distance(
         (center1[2] - center2[2]) ** 2
     )
 
-    return distance
+    return {"distance": distance}
 
 
 GET_DISTANCE_TOOL = {
     "type": "function",
-    "function": {
-        "name": "get_distance",
-        "description": "Calculate the Euclidean distance between the centers of two components' bounding boxes in meters.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "component_id_1": {
-                    "type": "integer",
-                    "description": "The ID of the first component.",
-                },
-                "component_id_2": {
-                    "type": "integer",
-                    "description": "The ID of the second component.",
-                },
+    "name": "get_distance",
+    "description": "Calculate the Euclidean distance between the centers of two components' bounding boxes in meters.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "component_id_1": {
+                "type": "integer",
+                "description": "The ID of the first component.",
             },
-            "required": ["component_id_1", "component_id_2"],
-            "additionalProperties": False,
+            "component_id_2": {
+                "type": "integer",
+                "description": "The ID of the second component.",
+            },
         },
+        "required": ["component_id_1", "component_id_2"],
+        "additionalProperties": False,
     },
 }
 

@@ -26,7 +26,7 @@ from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
 import queue
 import threading
-from llm_reasoning.llm_agent import LLMAgent
+from llm_reasoning.llm_agent import LLMAgent, call_tool
 
 STATIC_DIR = Path(__file__).parent / "front-end-build"
 
@@ -92,16 +92,19 @@ def load_mesh():
     dataset_name = request.args.get("dataset_name")
     if not dataset_name:
         return jsonify({"error": "dataset_name query parameter is required"}), 400
-    mesh_path = (
-        Path(__file__).parent
-        / ".."
-        / "data"
-        / dataset_name
-        / "polycam_data"
-        / "raw.glb"
-    )
+
+    base_dir = Path(__file__).parent / ".."
+
+    # First try: outputs directory
+    output_mesh_path = base_dir / "outputs" / dataset_name / "raw.glb"
+    if output_mesh_path.exists():
+        return send_file(output_mesh_path, mimetype="model/gltf-binary")
+
+    # Second try: old polycam_data directory
+    mesh_path = base_dir / "data" / dataset_name / "polycam_data" / "raw.glb"
     if not mesh_path.exists():
-        return jsonify({"error": f"Mesh file not found at {mesh_path}"}), 404
+        return jsonify({"error": f"Mesh file not found for dataset {dataset_name}"}), 404
+
     return send_file(mesh_path, mimetype="model/gltf-binary")
 
 
@@ -135,18 +138,15 @@ def transform_bbox(bbox):
     Transform bounding box from COLMAP coordinate system to Model3DViewer coordinate system.
 
     Args:
-        bbox: Bounding box dictionary with 'min' and 'max' keys
+        bbox: Bounding box dictionary with 'corners' key
 
     Returns:
-        Transformed bounding box dictionary with x_min, y_min, z_min, x_max, y_max, z_max
+        Transformed bounding box dictionary with 'corners'
     """
     return {
-        "x_min": bbox["min"][1],
-        "y_min": bbox["min"][2],
-        "z_min": bbox["min"][0],
-        "x_max": bbox["max"][1],
-        "y_max": bbox["max"][2],
-        "z_max": bbox["max"][0],
+        "corners": [
+            [c[1], c[2], c[0]] for c in bbox.get("corners", [])
+        ]
     }
 
 
@@ -578,7 +578,7 @@ def update_component():
     Update component endpoint.
     Updates the caption and/or bounding box for a given component ID in the database.
     At least one of 'caption' or 'bbox' must be provided.
-    bbox must be in the format: {"min": [x, y, z], "max": [x, y, z]}
+    bbox must be in the format: {"corners": [[x, y, z], ...]}
     """
     data = request.json
     dataset_name = data.get("dataset_name")
@@ -604,8 +604,8 @@ def update_component():
             400,
         )
 
-    if new_bbox is not None and ("min" not in new_bbox or "max" not in new_bbox):
-        return jsonify({"error": "bbox must have 'min' and 'max' keys"}), 400
+    if new_bbox is not None and "corners" not in new_bbox:
+        return jsonify({"error": "bbox must have 'corners' key"}), 400
 
     try:
         comp_id_int = int(component_id)
@@ -747,7 +747,7 @@ def download_all_components():
     [
       {
         "connected_comp_id": <int>,
-        "bbox": {"min": [x, y, z], "max": [x, y, z]}
+        "bbox": {"corners": [[x, y, z], ...]}
       },
       ...
     ]
@@ -784,6 +784,27 @@ def download_all_components():
     response = jsonify(result)
     response.headers["Content-Disposition"] = "attachment; filename=bbox_corners.json"
     return response
+
+
+@app.route("/call_tool", methods=["POST"])
+def call_tool_route():
+    """
+    Endpoint to explicitly execute a specific reasoning tool.
+    Expects a JSON payload with 'tool_name' and optionally 'arguments' and 'dataset_name'.
+    """
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON payload provided"}), 400
+
+    tool_name = data.get("tool_name")
+    arguments = data.get("arguments", {})
+    dataset_name = data.get("dataset_name")
+
+    if not tool_name:
+        return jsonify({"error": "tool_name is required"}), 400
+
+    result = call_tool(tool_name, arguments, dataset_name=dataset_name)
+    return jsonify({"result": result})
 
 
 @app.route("/")

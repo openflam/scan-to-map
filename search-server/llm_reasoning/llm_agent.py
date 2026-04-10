@@ -15,6 +15,63 @@ from .tools import TOOL_FUNCTIONS, TOOLS, THINKING_TEXTS
 from prompts import TOOL_CALLING_SYSTEM_PROMPT
 
 
+def call_tool(tool_name: str, arguments: str | dict[str, Any], dataset_name: str | None = None) -> dict[str, Any]:
+    """Execute a registered tool by name with the given JSON-encoded arguments."""
+    if tool_name not in TOOL_FUNCTIONS:
+        return {"error": f"Unknown tool: {tool_name}"}
+
+    tool_fn = TOOL_FUNCTIONS[tool_name]
+
+    if isinstance(arguments, str):
+        try:
+            tool_args = json.loads(arguments or "{}")
+        except json.JSONDecodeError as exc:
+            return {"error": f"Invalid tool arguments: {exc}"}
+    else:
+        tool_args = arguments
+
+    if not isinstance(tool_args, dict):
+        return {"error": "Tool arguments must decode to a JSON object"}
+
+    if dataset_name is not None and "dataset_name" in inspect.signature(tool_fn).parameters:
+        tool_args = tool_args.copy()
+        tool_args["dataset_name"] = dataset_name
+
+    try:
+        return tool_fn(**tool_args)
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _build_tool_output(tool_output: dict[str, Any]) -> str | list[dict[str, Any]]:
+    """Build the ``output`` value for a ``function_call_output`` item.
+
+    The Responses API ``function_call_output`` supports multimodal content
+    natively.  When the tool result contains images, we return a list with
+    ``input_image`` entries so the model can analyse them.
+
+    For regular (non-image) results the output is a plain JSON string.
+    """
+    images: list[str] = tool_output.get("images") or []
+    if not images:
+        return json.dumps(tool_output)
+
+    # Build a multimodal output list for the Responses API
+    non_image_fields = {k: v for k, v in tool_output.items() if k != "images"}
+    parts: list[dict[str, Any]] = []
+
+    if non_image_fields:
+        parts.append({"type": "input_text", "text": json.dumps(non_image_fields)})
+
+    for data_url in images:
+        parts.append({
+            "type": "input_image",
+            "image_url": data_url,
+        })
+
+    return parts
+
+
 class LLMAgent:
     """Runs a tool-calling loop with the configured LLM."""
 
@@ -73,14 +130,10 @@ class LLMAgent:
                     else:
                         if name_delta and name_delta in THINKING_TEXTS:
                             on_stream_event({"type": "thinking", "content": f"\n\n> {THINKING_TEXTS[name_delta]}"})
-                # elif event_type == "assistant_text_delta":
-                #     delta = event.get("delta", "")
-                #     if delta:
-                #         on_stream_event({"type": "thinking", "content": delta})
 
             wrapped_on_stream_event = _wrapped_handler
 
-        messages: list[dict[str, Any]] = [
+        input_items: list[dict[str, Any]] = [
             {"role": "system", "content": self.system_prompt},
             {
                 "role": "user",
@@ -95,13 +148,14 @@ class LLMAgent:
 
         for _ in range(self.max_tool_rounds):
             message_payload = self.caller.stream_chat(
-                messages=messages,
+                input=input_items,
                 tools=TOOLS,
                 on_stream_event=wrapped_on_stream_event,
             )
 
             assistant_content = (message_payload.get("content") or "").strip()
             tool_calls = message_payload.get("tool_calls", [])
+            output_items = message_payload.get("output_items", [])
 
             if not tool_calls:
                 component_ids, reason = _parse_final_response(assistant_content)
@@ -115,50 +169,26 @@ class LLMAgent:
                     "tool_trace": tool_trace,
                 }
 
-            messages.append(
-                {
-                    "role": "assistant",
-                    "content": assistant_content,
-                    "tool_calls": tool_calls,
-                }
-            )
+            # Append the model's output items back to input for multi-turn
+            for item in output_items:
+                input_items.append(item)
 
-            for idx, call in enumerate(tool_calls):
-                fn = call.get("function", {}) if isinstance(call, dict) else {}
-                tool_name = fn.get("name")
-                tool_call_id = call.get("id") or f"tool_call_{idx}"
-                if tool_name not in TOOL_FUNCTIONS:
-                    tool_output: dict[str, Any] = {
-                        "error": f"Unknown tool: {tool_name}",
-                    }
-                else:
-                    tool_fn = TOOL_FUNCTIONS[tool_name]
-                    try:
-                        tool_args = json.loads(fn.get("arguments") or "{}")
-                    except json.JSONDecodeError as exc:
-                        tool_args = None
-                        tool_output = {"error": f"Invalid tool arguments: {exc}"}
-
-                    if tool_args is not None:
-                        if not isinstance(tool_args, dict):
-                            tool_output = {
-                                "error": "Tool arguments must decode to a JSON object"
-                            }
-                        else:
-                            if "dataset_name" in inspect.signature(tool_fn).parameters:
-                                tool_args["dataset_name"] = dataset_name
-                            try:
-                                tool_output = tool_fn(**tool_args)
-                            except Exception as exc:
-                                tool_output = {"error": str(exc)}
+            for call in tool_calls:
+                tool_name = call.get("name", "")
+                call_id = call.get("id", "")
+                tool_output = call_tool(
+                    tool_name=tool_name,
+                    arguments=call.get("arguments", "{}"),
+                    dataset_name=dataset_name,
+                )
 
                 if on_stream_event:
                     on_stream_event(
                         {
                             "type": "tool_call_result",
                             "tool_name": tool_name,
-                            "tool_call_id": tool_call_id,
-                            "arguments": fn.get("arguments", "{}"),
+                            "tool_call_id": call_id,
+                            "arguments": call.get("arguments", "{}"),
                             "output": tool_output,
                         }
                     )
@@ -166,16 +196,19 @@ class LLMAgent:
                 tool_trace.append(
                     {
                         "tool_name": tool_name,
-                        "arguments": fn.get("arguments", "{}"),
+                        "arguments": call.get("arguments", "{}"),
                         "output": tool_output,
                     }
                 )
 
-                messages.append(
+                # Build the function_call_output content
+                output_content = _build_tool_output(tool_output)
+
+                input_items.append(
                     {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(tool_output),
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": output_content,
                     }
                 )
 

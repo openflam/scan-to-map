@@ -5,11 +5,13 @@ A Flask server that provides a search API for the semantic 3D search demo. Uses 
 ## Installation
 
 1. Install dependencies:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 2. Set your OpenAI API key:
+
 ```bash
 export OPENAI_API_KEY='your-api-key-here'
 ```
@@ -25,12 +27,15 @@ The server will start on `http://localhost:5000`
 ## API Endpoints
 
 ### POST/GET /search
+
 Returns a bounding box for the search query.
 
 **Parameters:**
+
 - `query` (string): The search query
 
 **Response:**
+
 ```json
 {
   "x_min": -0.1641819722126625,
@@ -43,6 +48,7 @@ Returns a bounding box for the search query.
 ```
 
 **Example:**
+
 ```bash
 # GET request
 curl "http://localhost:5000/search?query=printer"
@@ -56,6 +62,7 @@ curl -X POST http://localhost:5000/search \
 ## How It Works
 
 The search endpoint uses OpenAI's GPT-4o-mini model to:
+
 1. Analyze the search query
 2. Compare it against captions from all available 3D components
 3. Return the bounding box of the most relevant component
@@ -65,3 +72,17 @@ The component captions are loaded from `/outputs/PrintersNoNeg/component_caption
 ## CORS
 
 CORS is enabled for all routes to allow the frontend to make requests from a different origin.
+
+# Updating database
+
+Get container id:
+
+```
+docker ps
+```
+
+Run the script:
+
+```
+docker exec <container_id> python3.11 /app/search-server/spatial_db/create_tables.py <dataset_name>
+```
