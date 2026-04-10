@@ -1,0 +1,2 @@
+{"answers": ["right kitchen wall"], "object_ids": [42], "object_names": ["cabinet"], "question": "On what part of the cabinet is the beige cabinet placed?", "question_id": "train-scene0000-8", "scene_id": "scene0000_00", "_category": "others"}
+{"answers": ["brown wooden cabinet and television"], "object_ids": [8, 15, 56], "object_names": ["cabinet", "tv", "shelf"], "question": "The beige wooden bookshelf is placed next to what else?", "question_id": "train-scene0000-9", "scene_id": "scene0000_00", "_category": "others"}

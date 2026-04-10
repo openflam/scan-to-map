@@ -9,6 +9,7 @@ from flask import (
 from flask_cors import CORS
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 import numpy as np
@@ -33,6 +34,17 @@ app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="")
 CORS(app, methods=["GET", "POST", "DELETE", "OPTIONS"])  # Enable CORS for all routes
 
 # Parse command line arguments
+def _default_listen_port() -> int:
+    for key in ("PORT", "FLASK_RUN_PORT"):
+        raw = os.environ.get(key)
+        if raw:
+            try:
+                return int(raw)
+            except ValueError:
+                pass
+    return 5000
+
+
 parser = argparse.ArgumentParser(description="Search server for scan-to-map")
 parser.add_argument(
     "dataset_name",
@@ -43,7 +55,17 @@ parser.add_argument(
         "If omitted, CLIP is disabled."
     ),
 )
+parser.add_argument(
+    "--port",
+    type=int,
+    default=None,
+    help=(
+        "HTTP listen port (default: PORT or FLASK_RUN_PORT env, else 5000). "
+        "Use when 5000 is already in use, e.g. --port 5001."
+    ),
+)
 args = parser.parse_args()
+LISTEN_PORT = args.port if args.port is not None else _default_listen_port()
 
 # CLIP state: pre-initialized at startup for a single dataset (if provided).
 # If no dataset name is given, CLIP is disabled.
@@ -274,6 +296,8 @@ def search():
         "search_time_ms": search_time_ms,
         "components": components,
     }
+    if result_data.get("answer_selection") is not None:
+        result["answer_selection"] = result_data["answer_selection"]
 
     return jsonify(result)
 
@@ -859,4 +883,5 @@ def serve_frontend(path: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5000)
+    print(f"HTTP server: http://0.0.0.0:{LISTEN_PORT}/")
+    app.run(debug=False, host="0.0.0.0", port=LISTEN_PORT)

@@ -1,0 +1,13 @@
+{
+  "source_json": "/home/ziyongma/Desktop/scan-to-map/ScanQA/data/scannet/ScanQA_v1.0_val.json",
+  "scene_id": "scene0000_00",
+  "total_in_file": 4675,
+  "total_for_scene": 0,
+  "by_category": {
+    "object_retrieval": 0,
+    "location": 0,
+    "color": 0,
+    "number": 0,
+    "others": 0
+  }
+}

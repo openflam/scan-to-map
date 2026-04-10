@@ -1,0 +1,47 @@
+# Conda environment for bbox_search_eval.py (scan-to-map × ScanQA bbox retrieval eval)
+#
+# Create:  conda env create -f eval/environment.yml
+# Activate: conda activate scan-to-map-eval
+#
+# GPU note: built for CUDA 12.x (RTX A6000 / driver ≥ 525).
+# If you only have a CPU, replace the torch/faiss pip lines with:
+#   - torch>=2.1.0
+#   - faiss-cpu
+
+name: scan-to-map-eval
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.9          # 3.9+ required for built-in generic type hints
+  - pip>=23.0
+
+  # numpy<2.0 required: faiss-gpu and several other compiled packages
+  # (pycocotools, ultralytics) were built against NumPy 1.x API
+  - numpy>=1.24,<2.0
+  - scipy>=1.10
+
+  # Pillow (used by scannet.py read_intrinsics)
+  - pillow>=10.0
+
+  - pip:
+    # PyTorch with CUDA 12.4 (compatible with CUDA 12.8 driver)
+    - --extra-index-url https://download.pytorch.org/whl/cu124
+    - torch>=2.2.0
+    - torchvision>=0.17.0
+
+    # OpenCLIP — text encoder for question embedding
+    - open-clip-torch>=2.24.0
+
+    # FAISS with GPU support for CUDA 12
+    # Switch to faiss-cpu if you don't need GPU search
+    - faiss-gpu-cu12>=1.8.0
+
+    # Open3D — reads _vh_clean_2.ply for GT bbox construction
+    # (bbox_search_eval.py has a pure-Python PLY fallback if this is absent)
+    - open3d>=0.18.0
+
+    # Used by scannet.py data-processor (listed here for completeness)
+    - scipy>=1.10.0

@@ -1,0 +1,3 @@
+{"answers": ["light brown"], "object_ids": [7], "object_names": ["desk"], "question": "What color table is on the left side of the cabinet?", "question_id": "train-scene0000-1", "scene_id": "scene0000_00", "_category": "color"}
+{"answers": ["blue"], "object_ids": [62], "object_names": ["object"], "question": "What color is the plastic clothes handler?", "question_id": "train-scene0000-7", "scene_id": "scene0000_00", "_category": "color"}
+{"answers": ["gray"], "object_ids": [34], "object_names": ["coffee table"], "question": "What color is the coffee table in front of a couch?", "question_id": "train-scene0000-16", "scene_id": "scene0000_00", "_category": "color"}

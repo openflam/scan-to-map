@@ -21,7 +21,6 @@ import sys
 import time
 from pathlib import Path
 
-from src.sam_runner import run_sam_on_images
 from src.fast_sam_runner import run_fastsam_on_images
 from src.associate2d3d import associate_all_images
 from src.mask_graph import build_mask_graph_cli
@@ -212,6 +211,7 @@ def run_pipeline(
             step_start = time.time()
 
             if use_full_sam:
+                from src.sam_runner import run_sam_on_images  # requires segment_anything
                 run_sam_on_images(dataset_name=dataset_name)
             else:
                 run_fastsam_on_images(

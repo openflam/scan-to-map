@@ -46,6 +46,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -76,7 +77,7 @@ def _table_name(dataset_name: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", dataset_name.lower())
 
 
-def _linestring_z(bbox: dict) -> str | None:
+def _linestring_z(bbox: dict) -> Optional[str]:
     """
     Build a WKT LINESTRING Z from the min/max corners of an AABB.
 
@@ -91,7 +92,7 @@ def _linestring_z(bbox: dict) -> str | None:
     return f"LINESTRING Z ({mn[0]} {mn[1]} {mn[2]}, {mx[0]} {mx[1]} {mx[2]})"
 
 
-def _best_crop(manifest_data: dict, comp_id: int) -> str | None:
+def _best_crop(manifest_data: dict, comp_id: int) -> Optional[str]:
     entry = manifest_data.get(str(comp_id)) or manifest_data.get(comp_id)
     if not entry:
         return None
@@ -105,12 +106,12 @@ def _best_crop(manifest_data: dict, comp_id: int) -> str | None:
 # ── data loading ──────────────────────────────────────────────────────────────
 
 
-def _load_dataset(dataset_name: str) -> list[tuple]:
+def _load_dataset(dataset_name: str) -> List[Tuple]:
     """
     Read component_captions.json, bbox_corners.json and crops/manifest.json
     from outputs/<dataset_name>/ and return a list of row tuples:
 
-        (component_id, caption, bbox_json, best_crop, bbox_wkt | None)
+        (component_id, caption, bbox_json, best_crop, bbox_wkt or None)
     """
     outputs_dir = OUTPUTS_DIR / dataset_name
 
@@ -139,7 +140,7 @@ def _load_dataset(dataset_name: str) -> list[tuple]:
     # connected_comp_id → bbox dict
     bbox_lookup = {item["connected_comp_id"]: item["bbox"] for item in bbox_data}
 
-    rows: list[tuple] = []
+    rows: List[Tuple] = []
     for item in captions_list:
         comp_id = item["component_id"]
         caption = item.get("caption", "")
@@ -217,7 +218,7 @@ def _create_table(cur: psycopg2.extensions.cursor, table: str) -> None:
 
 
 def _insert_rows(
-    cur: psycopg2.extensions.cursor, table: str, rows: list[tuple]
+    cur: psycopg2.extensions.cursor, table: str, rows: List[Tuple]
 ) -> None:
     execute_values(
         cur,
@@ -254,7 +255,7 @@ def process_dataset(con: psycopg2.extensions.connection, dataset_name: str) -> N
 # ── discovery & entrypoint ────────────────────────────────────────────────────
 
 
-def discover_datasets() -> list[str]:
+def discover_datasets() -> List[str]:
     """Return all dataset names that have a component_captions.json file."""
     if not OUTPUTS_DIR.exists():
         return []

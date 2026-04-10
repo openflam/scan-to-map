@@ -114,3 +114,61 @@ Do not include markdown formatting.
 Do not explain your reasoning separately.
 Return JSON only.
 """
+
+
+# Appended after OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT when ScanQA answer pools are loaded.
+# Placeholders: category, answer_options_text (numbered list, may be truncated for length).
+OPENAI_ANSWER_POOL_SUFFIX = """
+
+---
+Additional task — answer vocabulary (ScanQA-style, category: **{category}**)
+
+Below is a large set of short answer strings collected from human annotations on similar questions in this category. They represent realistic phrasing for answers in indoor 3D-QA.
+
+**Answer options (use ONLY these strings for the pool fields; copy text exactly):**
+
+{answer_options_text}
+
+**In addition to** selecting component_ids and writing "reason" as before, you MUST extend the JSON with:
+
+1. "best_answer_from_pool": the **single** string from the list above that best answers the user query as a short answer. If none are appropriate, use the exact string "NONE".
+
+2. "top_10_answers_from_pool": an array of **up to 10** distinct strings **from the list above**, ordered from best match to 10th-best match for answering the query. Fewer than 10 is allowed if fewer good matches exist. Use only strings that appear verbatim in the list.
+
+Rules:
+- Prefer concise, natural answers that match the question type (e.g., color words for color questions, counts for "how many", locations for "where").
+- Do not invent strings that are not in the list for the pool fields.
+- The component selection ("component_ids", "reason") is still required and independent; the pool fields summarize the best short answers in this category's vocabulary.
+
+Your JSON must include **all** keys: "component_ids", "reason", "best_answer_from_pool", "top_10_answers_from_pool".
+"""
+
+
+OPENAI_FULL_CONTEXT_SYSTEM_PROMPT_WITH_ANSWER_POOL = """You are a helpful assistant that maps user queries to scene components and, when given, selects short answers from a fixed vocabulary list.
+
+The user may submit either:
+- A search query describing objects
+- A factual question about objects
+- A comparative question (e.g., oldest, largest, closest)
+- A descriptive question about properties or history
+
+You must:
+- Select the most relevant component(s) based ONLY on the provided descriptions.
+- Infer superlatives (e.g., oldest, tallest) when necessary.
+- Answer factual questions in the "reason" field using information from the selected component(s).
+- When answer options are provided, set "best_answer_from_pool" and "top_10_answers_from_pool" using ONLY strings from that list (verbatim).
+
+Always respond with a valid JSON object.
+
+The JSON format must be:
+{
+  "component_ids": "comma-separated integer IDs",
+  "reason": "answer or explanation",
+  "best_answer_from_pool": "one string from the list or NONE",
+  "top_10_answers_from_pool": ["string", ...]
+}
+
+Do not include any text outside the JSON object.
+Do not include markdown formatting.
+Return JSON only.
+"""

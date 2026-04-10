@@ -4,19 +4,44 @@ import os
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from .base import SemanticSearchProvider
 
-from prompts import OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT
-from prompts import OPENAI_FULL_CONTEXT_SYSTEM_PROMPT
+from prompts import (
+    OPENAI_ANSWER_POOL_SUFFIX,
+    OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT,
+    OPENAI_FULL_CONTEXT_SYSTEM_PROMPT,
+    OPENAI_FULL_CONTEXT_SYSTEM_PROMPT_WITH_ANSWER_POOL,
+)
 
 from spatial_db import database
+from utils.scanqa_category import bucket
 
 # Load variables from .env into os.environ
 load_dotenv()
+
+_DEFAULT_POOLS_PATH = Path(__file__).resolve().parents[1] / "data" / "scanqa_answer_pools" / "pools.json"
+
+
+def _load_answer_pools_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.is_file():
+        return None
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    pools = data.get("pools")
+    if not isinstance(pools, dict):
+        return None
+    return data
+
+
+def _format_numbered_answer_list(strings: List[str]) -> str:
+    lines = []
+    for i, s in enumerate(strings, start=1):
+        lines.append(f"{i}. {s}")
+    return "\n".join(lines)
 
 
 class OpenAIProvider(SemanticSearchProvider):
@@ -42,6 +67,16 @@ class OpenAIProvider(SemanticSearchProvider):
         self.model = model
         self.max_completion_tokens = max_completion_tokens
         self.client = OpenAI(api_key=api_key or os.environ.get("OPENAI_API_KEY"))
+
+        pool_path = os.environ.get("SCANQA_ANSWER_POOLS_JSON")
+        self._answer_pools_data = _load_answer_pools_json(
+            Path(pool_path).expanduser()
+            if pool_path
+            else _DEFAULT_POOLS_PATH
+        )
+        self._answer_pool_max_lines = int(
+            os.environ.get("SCANQA_ANSWER_POOL_MAX_LINES", "600")
+        )
 
     def _load_components(self) -> Tuple[str, set]:
         """
@@ -81,13 +116,27 @@ class OpenAIProvider(SemanticSearchProvider):
         prompt = OPENAI_FULL_CONTEXT_COMPONENT_MATCHING_PROMPT.format(
             query=query, components_text=components_text
         )
+        system_prompt = OPENAI_FULL_CONTEXT_SYSTEM_PROMPT
+
+        if self._answer_pools_data:
+            pools = self._answer_pools_data.get("pools") or {}
+            cat = bucket(query)
+            pool_list = pools.get(cat)
+            if isinstance(pool_list, list) and len(pool_list) > 0:
+                trimmed = pool_list[: self._answer_pool_max_lines]
+                answer_options_text = _format_numbered_answer_list(trimmed)
+                prompt += OPENAI_ANSWER_POOL_SUFFIX.format(
+                    category=cat,
+                    answer_options_text=answer_options_text,
+                )
+                system_prompt = OPENAI_FULL_CONTEXT_SYSTEM_PROMPT_WITH_ANSWER_POOL
 
         try:
             # Call OpenAI API
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": OPENAI_FULL_CONTEXT_SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 max_completion_tokens=self.max_completion_tokens,
@@ -107,8 +156,20 @@ class OpenAIProvider(SemanticSearchProvider):
             # Parse comma-separated component IDs and validate against DB
             component_ids = self._parse_component_ids(component_ids_str, valid_ids)
 
-            # Use the LLM's reasoning as the reason
-            return {"component_ids": component_ids, "reason": llm_reason}
+            out: Dict[str, Any] = {"component_ids": component_ids, "reason": llm_reason}
+            best = parsed_result.get("best_answer_from_pool")
+            top10 = parsed_result.get("top_10_answers_from_pool")
+            if best is not None or top10 is not None:
+                sel: Dict[str, Any] = {"category": bucket(query)}
+                if best is not None:
+                    sel["best_answer_from_pool"] = best
+                if isinstance(top10, list):
+                    sel["top_10_answers_from_pool"] = top10[:10]
+                elif top10 is not None:
+                    sel["top_10_answers_from_pool"] = top10
+                out["answer_selection"] = sel
+
+            return out
 
         except Exception as e:
             print(f"Error processing query with OpenAI: {e}")

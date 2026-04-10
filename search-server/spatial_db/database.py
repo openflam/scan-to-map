@@ -2,7 +2,7 @@ import os
 import re
 import json
 from collections import defaultdict
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import psycopg2
 import psycopg2.extensions
@@ -35,7 +35,7 @@ def check_dataset_exists(dataset_name: str) -> bool:
     finally:
         con.close()
 
-def list_dataset_tables() -> list[str]:
+def list_dataset_tables() -> List[str]:
     """Return dataset table names from the PostGIS database."""
     con = _pg_conn()
     try:
@@ -53,7 +53,7 @@ def list_dataset_tables() -> list[str]:
     finally:
         con.close()
 
-def fetch_all_components(dataset_name: str) -> list[dict]:
+def fetch_all_components(dataset_name: str) -> List[dict]:
     """Fetch all components fresh from the database."""
     table = get_table_name(dataset_name)
     con = _pg_conn()
@@ -64,7 +64,7 @@ def fetch_all_components(dataset_name: str) -> list[dict]:
     finally:
         con.close()
 
-def fetch_components_by_ids(dataset_name: str, component_ids: list[int]) -> list[dict]:
+def fetch_components_by_ids(dataset_name: str, component_ids: List[int]) -> List[dict]:
     if not component_ids:
         return []
     table = get_table_name(dataset_name)
@@ -80,7 +80,7 @@ def fetch_components_by_ids(dataset_name: str, component_ids: list[int]) -> list
     finally:
         con.close()
 
-def fetch_components_in_radius(dataset_name: str, component_id: int, radius: float) -> list[dict]:
+def fetch_components_in_radius(dataset_name: str, component_id: int, radius: float) -> List[dict]:
     """Fetch components within a given radius of a target component using 3D spatial index."""
     table = get_table_name(dataset_name)
     con = _pg_conn()
@@ -100,7 +100,7 @@ def fetch_components_in_radius(dataset_name: str, component_id: int, radius: flo
     finally:
         con.close()
 
-def fetch_first_component(dataset_name: str) -> dict | None:
+def fetch_first_component(dataset_name: str) -> Optional[dict]:
     table = get_table_name(dataset_name)
     con = _pg_conn()
     try:
@@ -112,7 +112,7 @@ def fetch_first_component(dataset_name: str) -> dict | None:
     finally:
         con.close()
 
-def fetch_component_info(dataset_name: str, component_id: int) -> dict | None:
+def fetch_component_info(dataset_name: str, component_id: int) -> Optional[dict]:
     table = get_table_name(dataset_name)
     con = _pg_conn()
     try:
@@ -125,7 +125,9 @@ def fetch_component_info(dataset_name: str, component_id: int) -> dict | None:
     finally:
         con.close()
 
-def update_component(dataset_name: str, component_id: int, caption: str | None, bbox: dict | None) -> int:
+def update_component(
+    dataset_name: str, component_id: int, caption: Optional[str], bbox: Optional[dict]
+) -> int:
     table = get_table_name(dataset_name)
     fields = []
     params = []
@@ -164,7 +166,12 @@ def delete_component(dataset_name: str, component_id: int) -> int:
     finally:
         con.close()
 
-def search_components_tsvector(dataset_name: str, prefilter_query: str, prefilter_limit: int = 1000, candidate_ids: list[int] | None = None) -> list[tuple]:
+def search_components_tsvector(
+    dataset_name: str,
+    prefilter_query: str,
+    prefilter_limit: int = 1000,
+    candidate_ids: Optional[List[int]] = None,
+) -> List[Tuple]:
     table = get_table_name(dataset_name)
     con = _pg_conn()
     
@@ -202,13 +209,13 @@ def search_components_tsvector(dataset_name: str, prefilter_query: str, prefilte
 
 def bm25_search(
     dataset_name: str,
-    search_terms: str | list[str],
+    search_terms: Union[str, List[str]],
     top_k: int = 10,
     apply_elbow: bool = False,
     gap_threshold: float = 1.0,
     ratio_threshold: float = 0.7,
-    candidate_ids: list[int] | None = None,
-) -> dict[str, Any]:
+    candidate_ids: Optional[List[int]] = None,
+) -> Dict[str, Any]:
     import bm25s
     import Stemmer
     

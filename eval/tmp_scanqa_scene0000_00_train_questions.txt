@@ -1,0 +1,19 @@
+# ScanQA train, scene_id=scene0000_00, 18 questions (one per line)
+What is in the right corner of room by curtains?
+What color table is on the left side of the cabinet?
+What is on the left of the tv?
+Where is the beige wooden working table placed?
+What is in the corner of the bath?
+What is placed next to the fridge?
+Where is the silver bread toaster placed?
+What color is the plastic clothes handler?
+On what part of the cabinet is the beige cabinet placed?
+The beige wooden bookshelf is placed next to what else?
+How many trash cans can be seen on your right when you enter?
+Where is the large wooden bookshelf placed?
+What is the white wooden door?
+Where is the brown wooden cabinet located?
+What is placed next to the fridge on the upper side of the cabinets?
+On what side of the cabinets is the microwave located?
+What color is the coffee table in front of a couch?
+What is the coffee table in front of?

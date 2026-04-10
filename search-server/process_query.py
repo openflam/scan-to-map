@@ -22,7 +22,8 @@ def process_query(
 
     Returns:
         A dictionary with "bbox" (list of bounding boxes), "reason" (explanation for the choice),
-        and "search_time_ms" (time taken to match components in milliseconds)
+        "search_time_ms" (time taken to match components in milliseconds), and optionally
+        "answer_selection" when the provider returns ScanQA pool-based answers (OpenAI with pools).
     """
     # Get matched component IDs from the provider and measure time
     start_time = time.perf_counter()
@@ -32,6 +33,7 @@ def process_query(
 
     component_ids = result["component_ids"]
     reason = result["reason"]
+    answer_selection = result.get("answer_selection")
 
     # Fetch bounding boxes for matched components from the DB
     valid_bboxes = []
@@ -68,9 +70,12 @@ def process_query(
         print(f"Warning: Some invalid component IDs were ignored: {invalid_ids}")
 
     # Return the list of bounding boxes, component IDs, reason, and search time
-    return {
+    out = {
         "bbox": valid_bboxes,
         "component_ids": valid_component_ids,
         "reason": reason,
         "search_time_ms": search_time_ms,
     }
+    if answer_selection is not None:
+        out["answer_selection"] = answer_selection
+    return out

@@ -1,0 +1,568 @@
+{
+  "split": "train",
+  "top_k": 10,
+  "n_evaluated": 18,
+  "gt_missing": 0,
+  "metrics": {
+    "recall_at1_iou0.25": 0.0,
+    "recall_at1_iou0.5": 0.0,
+    "recall_at5_iou0.25": 0.0,
+    "recall_at5_iou0.5": 0.0,
+    "recall_at10_iou0.25": 0.0,
+    "recall_at10_iou0.5": 0.0,
+    "mean_top1_iou": 0.0005416199112181891,
+    "mean_top1_dist": 3.367272370391422
+  },
+  "per_question": [
+    {
+      "question_id": "train-scene0000-0",
+      "scene_id": "scene0000_00",
+      "question": "What is in the right corner of room by curtains?",
+      "object_ids": [
+        8
+      ],
+      "object_names": [
+        "cabinet"
+      ],
+      "gt_bbox": {
+        "min": [
+          0.13008219003677368,
+          4.981263637542725,
+          0.034378327429294586
+        ],
+        "max": [
+          1.2979336977005005,
+          6.768268585205078,
+          2.3723320960998535
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 4.438449859619141
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-1",
+      "scene_id": "scene0000_00",
+      "question": "What color table is on the left side of the cabinet?",
+      "object_ids": [
+        7
+      ],
+      "object_names": [
+        "desk"
+      ],
+      "gt_bbox": {
+        "min": [
+          2.3765249252319336,
+          0.2668211758136749,
+          0.026184888556599617
+        ],
+        "max": [
+          3.868898391723633,
+          1.2315586805343628,
+          1.084753394126892
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 6.461276531219482
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-2",
+      "scene_id": "scene0000_00",
+      "question": "What is on the left of the tv?",
+      "object_ids": [
+        57
+      ],
+      "object_names": [
+        "bicycle"
+      ],
+      "gt_bbox": {
+        "min": [
+          0.40962710976600647,
+          3.8169946670532227,
+          0.04505077376961708
+        ],
+        "max": [
+          1.063241958618164,
+          5.088596820831299,
+          0.8976319432258606
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 4.857719898223877
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-3",
+      "scene_id": "scene0000_00",
+      "question": "Where is the beige wooden working table placed?",
+      "object_ids": [
+        39
+      ],
+      "object_names": [
+        "cabinet"
+      ],
+      "gt_bbox": {
+        "min": [
+          1.7000380754470825,
+          0.06330551952123642,
+          0.035437967628240585
+        ],
+        "max": [
+          2.5171546936035156,
+          1.3427371978759766,
+          1.9735512733459473
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 6.891861438751221
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-4",
+      "scene_id": "scene0000_00",
+      "question": "What is in the corner of the bath?",
+      "object_ids": [
+        4
+      ],
+      "object_names": [
+        "shower"
+      ],
+      "gt_bbox": {
+        "min": [
+          6.016340732574463,
+          1.5632400512695312,
+          0.03239358961582184
+        ],
+        "max": [
+          7.175731658935547,
+          2.67928409576416,
+          1.8532963991165161
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 5.182238578796387
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-5",
+      "scene_id": "scene0000_00",
+      "question": "What is placed next to the fridge?",
+      "object_ids": [
+        54
+      ],
+      "object_names": [
+        "door"
+      ],
+      "gt_bbox": {
+        "min": [
+          7.206060409545898,
+          5.201488971710205,
+          0.057275183498859406
+        ],
+        "max": [
+          7.471982479095459,
+          5.866196632385254,
+          1.9755147695541382
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.9571847915649414
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-6",
+      "scene_id": "scene0000_00",
+      "question": "Where is the silver bread toaster placed?",
+      "object_ids": [
+        3
+      ],
+      "object_names": [
+        "kitchen counter"
+      ],
+      "gt_bbox": {
+        "min": [
+          5.513689041137695,
+          6.824743747711182,
+          0.8931005001068115
+        ],
+        "max": [
+          6.485874176025391,
+          8.709349632263184,
+          1.18007493019104
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 1.6348878145217896
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-7",
+      "scene_id": "scene0000_00",
+      "question": "What color is the plastic clothes handler?",
+      "object_ids": [
+        62
+      ],
+      "object_names": [
+        "object"
+      ],
+      "gt_bbox": {
+        "min": [
+          3.9833567142486572,
+          1.8376433849334717,
+          0.7821648120880127
+        ],
+        "max": [
+          4.638554573059082,
+          2.611690044403076,
+          0.981684148311615
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 4.816878318786621
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-8",
+      "scene_id": "scene0000_00",
+      "question": "On what part of the cabinet is the beige cabinet placed?",
+      "object_ids": [
+        42
+      ],
+      "object_names": [
+        "cabinet"
+      ],
+      "gt_bbox": {
+        "min": [
+          5.499726295471191,
+          6.814486026763916,
+          0.10869801044464111
+        ],
+        "max": [
+          6.13046932220459,
+          8.551965713500977,
+          0.9959655404090881
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 1.244394063949585
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-9",
+      "scene_id": "scene0000_00",
+      "question": "The beige wooden bookshelf is placed next to what else?",
+      "object_ids": [
+        8,
+        15,
+        56
+      ],
+      "object_names": [
+        "cabinet",
+        "tv",
+        "shelf"
+      ],
+      "gt_bbox": {
+        "min": [
+          0.13008219003677368,
+          4.981263637542725,
+          0.02829865738749504
+        ],
+        "max": [
+          4.01509428024292,
+          7.733455181121826,
+          2.38193416595459
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 3.065145492553711
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-10",
+      "scene_id": "scene0000_00",
+      "question": "How many trash cans can be seen on your right when you enter?",
+      "object_ids": [
+        12,
+        13
+      ],
+      "object_names": [
+        "trash can",
+        "trash can"
+      ],
+      "gt_bbox": {
+        "min": [
+          6.3210368156433105,
+          5.74392032623291,
+          0.06034233048558235
+        ],
+        "max": [
+          7.062217712402344,
+          6.2855730056762695,
+          0.7208051085472107
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.043513059616089
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-11",
+      "scene_id": "scene0000_00",
+      "question": "Where is the large wooden bookshelf placed?",
+      "object_ids": [
+        8,
+        15,
+        56
+      ],
+      "object_names": [
+        "cabinet",
+        "tv",
+        "shelf"
+      ],
+      "gt_bbox": {
+        "min": [
+          0.13008219003677368,
+          4.981263637542725,
+          0.02829865738749504
+        ],
+        "max": [
+          4.01509428024292,
+          7.733455181121826,
+          2.38193416595459
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 3.065145492553711
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-12",
+      "scene_id": "scene0000_00",
+      "question": "What is the white wooden door?",
+      "object_ids": [
+        54
+      ],
+      "object_names": [
+        "door"
+      ],
+      "gt_bbox": {
+        "min": [
+          7.206060409545898,
+          5.201488971710205,
+          0.057275183498859406
+        ],
+        "max": [
+          7.471982479095459,
+          5.866196632385254,
+          1.9755147695541382
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.9571847915649414
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-13",
+      "scene_id": "scene0000_00",
+      "question": "Where is the brown wooden cabinet located?",
+      "object_ids": [
+        43
+      ],
+      "object_names": [
+        "kitchen cabinets"
+      ],
+      "gt_bbox": {
+        "min": [
+          5.757721424102783,
+          7.043703079223633,
+          1.42039954662323
+        ],
+        "max": [
+          6.445033073425293,
+          8.64173698425293,
+          2.472905158996582
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.3387861251831055
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-14",
+      "scene_id": "scene0000_00",
+      "question": "What is placed next to the fridge on the upper side of the cabinets?",
+      "object_ids": [
+        52
+      ],
+      "object_names": [
+        "microwave"
+      ],
+      "gt_bbox": {
+        "min": [
+          6.094729423522949,
+          6.919553756713867,
+          1.4844300746917725
+        ],
+        "max": [
+          6.629389762878418,
+          7.554403781890869,
+          1.9371821880340576
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.1602158546447754
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-15",
+      "scene_id": "scene0000_00",
+      "question": "On what side of the cabinets is the microwave located?",
+      "object_ids": [
+        43
+      ],
+      "object_names": [
+        "kitchen cabinets"
+      ],
+      "gt_bbox": {
+        "min": [
+          5.757721424102783,
+          7.043703079223633,
+          1.42039954662323
+        ],
+        "max": [
+          6.445033073425293,
+          8.64173698425293,
+          2.472905158996582
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.3387861251831055
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-16",
+      "scene_id": "scene0000_00",
+      "question": "What color is the coffee table in front of a couch?",
+      "object_ids": [
+        34
+      ],
+      "object_names": [
+        "coffee table"
+      ],
+      "gt_bbox": {
+        "min": [
+          2.131899118423462,
+          5.777472496032715,
+          0.050823621451854706
+        ],
+        "max": [
+          3.2567496299743652,
+          6.629054546356201,
+          0.5354019999504089
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.0,
+          "dist": 2.3240909576416016
+        }
+      ]
+    },
+    {
+      "question_id": "train-scene0000-17",
+      "scene_id": "scene0000_00",
+      "question": "What is the coffee table in front of?",
+      "object_ids": [
+        32
+      ],
+      "object_names": [
+        "couch"
+      ],
+      "gt_bbox": {
+        "min": [
+          2.105959177017212,
+          4.3359246253967285,
+          0.042527783662080765
+        ],
+        "max": [
+          4.933394432067871,
+          7.231980800628662,
+          0.9585357308387756
+        ]
+      },
+      "top_k_results": [
+        {
+          "comp_id": "1",
+          "iou": 0.009749158401927405,
+          "dist": 1.8331434726715088
+        }
+      ]
+    }
+  ]
+}

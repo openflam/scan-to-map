@@ -1,0 +1,15 @@
+Source: /home/ziyongma/Desktop/scan-to-map/ScanQA/data/scannet/ScanQA_v1.0_val.json
+Scene: scene0000_00
+Questions for scene: 0
+
+Category                  Count
+--------------------------------
+object_retrieval              0
+location                      0
+color                         0
+number                        0
+others                        0
+
+Wrote: /home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split/manifest.json
+       /home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split/by_category/<category>.jsonl
+       /home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split/by_category/<category>_questions.txt

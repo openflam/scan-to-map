@@ -1,0 +1,1522 @@
+{
+  "meta": {
+    "created_utc": "2026-04-09T20:37:10.591531+00:00",
+    "dataset_name": "scannet_scene0000_00",
+    "method": "gpt-5-mini [Full]",
+    "server": "http://127.0.0.1:5000",
+    "scene_id": "scene0000_00",
+    "scanqa_json": "/home/ziyongma/Desktop/scan-to-map/ScanQA/data/qa/ScanQA_v1.0/ScanQA_v1.0_train.json",
+    "scanqa_bucket_filter": null
+  },
+  "summary": {
+    "total_questions": 18,
+    "successful_requests": 18,
+    "failed_requests": 0,
+    "ground_truth_metrics": {
+      "text_answers": {
+        "questions_with_reference": 18,
+        "questions_with_pool_prediction": 0,
+        "top1_accuracy": 0.0,
+        "top10_recall": 0.0
+      },
+      "bbox_components": {
+        "questions_with_reference": 18,
+        "top1_component_hit_rate": 0.333333,
+        "any_retrieved_component_hit_rate": 0.555556
+      }
+    }
+  },
+  "questions": [
+    {
+      "index": 0,
+      "question": "What is in the right corner of room by curtains?",
+      "question_id": "train-scene0000-0",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "brown cabinet with tv sitting in it"
+      ],
+      "gt_object_ids": [
+        8
+      ],
+      "ground_truth": {
+        "answers": [
+          "brown cabinet with tv sitting in it"
+        ],
+        "object_ids": [
+          8
+        ],
+        "object_names": [
+          "cabinet"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "A guitar is in the right corner of the room by the curtains.",
+        "search_time_ms": 8371.827038004994,
+        "components": [
+          {
+            "component_id": "47",
+            "caption": "guitar",
+            "bbox": {
+              "x_max": 3.603236436843872,
+              "x_min": 3.157058000564575,
+              "y_max": 1.0886448621749878,
+              "y_min": 0.09273917973041534,
+              "z_max": 6.036791801452637,
+              "z_min": 5.542278289794922
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "brown cabinet with tv sitting in it"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            47
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            8
+          ]
+        }
+      }
+    },
+    {
+      "index": 1,
+      "question": "What color table is on the left side of the cabinet?",
+      "question_id": "train-scene0000-1",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "color",
+      "gt_answers": [
+        "light brown"
+      ],
+      "gt_object_ids": [
+        7
+      ],
+      "ground_truth": {
+        "answers": [
+          "light brown"
+        ],
+        "object_ids": [
+          7
+        ],
+        "object_names": [
+          "desk"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "Selected component 2 (table) and component 8 (cabinet); the provided component descriptions do not include color information, so the table's color cannot be determined from these components.",
+        "search_time_ms": 11173.93445194466,
+        "components": [
+          {
+            "component_id": "2",
+            "caption": "table",
+            "bbox": {
+              "x_max": 8.190207481384277,
+              "x_min": 5.651544094085693,
+              "y_max": 1.288083791732788,
+              "y_min": 0.07360754162073135,
+              "z_max": 5.143650531768799,
+              "z_min": 3.9849700927734375
+            }
+          },
+          {
+            "component_id": "8",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 6.768268585205078,
+              "x_min": 4.981263637542725,
+              "y_max": 2.3723320960998535,
+              "y_min": 0.034378327429294586,
+              "z_max": 1.2979336977005005,
+              "z_min": 0.13008219003677368
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "light brown"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            2,
+            8
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            7
+          ]
+        }
+      }
+    },
+    {
+      "index": 2,
+      "question": "What is on the left of the tv?",
+      "question_id": "train-scene0000-2",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "bicycle on floor"
+      ],
+      "gt_object_ids": [
+        57
+      ],
+      "ground_truth": {
+        "answers": [
+          "bicycle on floor"
+        ],
+        "object_ids": [
+          57
+        ],
+        "object_names": [
+          "bicycle"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "A guitar is on the left of the tv.",
+        "search_time_ms": 11639.194206043612,
+        "components": [
+          {
+            "component_id": "47",
+            "caption": "guitar",
+            "bbox": {
+              "x_max": 3.603236436843872,
+              "x_min": 3.157058000564575,
+              "y_max": 1.0886448621749878,
+              "y_min": 0.09273917973041534,
+              "z_max": 6.036791801452637,
+              "z_min": 5.542278289794922
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "bicycle on floor"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            47
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            57
+          ]
+        }
+      }
+    },
+    {
+      "index": 3,
+      "question": "Where is the beige wooden working table placed?",
+      "question_id": "train-scene0000-3",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "location",
+      "gt_answers": [
+        "right of tall cabinet"
+      ],
+      "gt_object_ids": [
+        39
+      ],
+      "ground_truth": {
+        "answers": [
+          "right of tall cabinet"
+        ],
+        "object_ids": [
+          39
+        ],
+        "object_names": [
+          "cabinet"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The beige wooden working table (component 2) is placed on the floor (component 9).",
+        "search_time_ms": 8483.694238006137,
+        "components": [
+          {
+            "component_id": "2",
+            "caption": "table",
+            "bbox": {
+              "x_max": 8.190207481384277,
+              "x_min": 5.651544094085693,
+              "y_max": 1.288083791732788,
+              "y_min": 0.07360754162073135,
+              "z_max": 5.143650531768799,
+              "z_min": 3.9849700927734375
+            }
+          },
+          {
+            "component_id": "9",
+            "caption": "floor",
+            "bbox": {
+              "x_max": 8.51845645904541,
+              "x_min": 0.48928818106651306,
+              "y_max": 0.35655561089515686,
+              "y_min": -0.0005845678388141096,
+              "z_max": 8.141064643859863,
+              "z_min": 0.4882317781448364
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "right of tall cabinet"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            2,
+            9
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            39
+          ]
+        }
+      }
+    },
+    {
+      "index": 4,
+      "question": "What is in the corner of the bath?",
+      "question_id": "train-scene0000-4",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "shower"
+      ],
+      "gt_object_ids": [
+        4
+      ],
+      "ground_truth": {
+        "answers": [
+          "shower"
+        ],
+        "object_ids": [
+          4
+        ],
+        "object_names": [
+          "shower"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "There is a curtain in the corner of the bath.",
+        "search_time_ms": 6512.448030989617,
+        "components": [
+          {
+            "component_id": "5",
+            "caption": "curtain",
+            "bbox": {
+              "x_max": 5.15416955947876,
+              "x_min": 1.5161383152008057,
+              "y_max": 2.2157416343688965,
+              "y_min": 0.05539771914482117,
+              "z_max": 1.5639303922653198,
+              "z_min": 0.2399231642484665
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "shower"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            5
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            4
+          ]
+        }
+      }
+    },
+    {
+      "index": 5,
+      "question": "What is placed next to the fridge?",
+      "question_id": "train-scene0000-5",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "door"
+      ],
+      "gt_object_ids": [
+        54
+      ],
+      "ground_truth": {
+        "answers": [
+          "door"
+        ],
+        "object_ids": [
+          54
+        ],
+        "object_names": [
+          "door"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "A cabinet is placed next to the fridge.",
+        "search_time_ms": 7910.84955696715,
+        "components": [
+          {
+            "component_id": "38",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 5.059248447418213,
+              "x_min": 4.021492004394531,
+              "y_max": 2.428635597229004,
+              "y_min": 0.05728984996676445,
+              "z_max": 7.624414920806885,
+              "z_min": 7.113378524780273
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "door"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            38
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            54
+          ]
+        }
+      }
+    },
+    {
+      "index": 6,
+      "question": "Where is the silver bread toaster placed?",
+      "question_id": "train-scene0000-6",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "location",
+      "gt_answers": [
+        "countertop"
+      ],
+      "gt_object_ids": [
+        3
+      ],
+      "ground_truth": {
+        "answers": [
+          "countertop"
+        ],
+        "object_ids": [
+          3
+        ],
+        "object_names": [
+          "kitchen counter"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The silver bread toaster (component 53) is located on the kitchen counter (component 3).",
+        "search_time_ms": 3772.8374039870687,
+        "components": [
+          {
+            "component_id": "3",
+            "caption": "kitchen counter",
+            "bbox": {
+              "x_max": 8.709349632263184,
+              "x_min": 6.824743747711182,
+              "y_max": 1.18007493019104,
+              "y_min": 0.8931005001068115,
+              "z_max": 6.485874176025391,
+              "z_min": 5.513689041137695
+            }
+          },
+          {
+            "component_id": "53",
+            "caption": "toaster",
+            "bbox": {
+              "x_max": 7.86099100112915,
+              "x_min": 7.600277900695801,
+              "y_max": 1.173519253730774,
+              "y_min": 1.004314661026001,
+              "z_max": 6.481143951416016,
+              "z_min": 6.227816581726074
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "countertop"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            3,
+            53
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            3
+          ]
+        }
+      }
+    },
+    {
+      "index": 7,
+      "question": "What color is the plastic clothes handler?",
+      "question_id": "train-scene0000-7",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "color",
+      "gt_answers": [
+        "blue"
+      ],
+      "gt_object_ids": [
+        62
+      ],
+      "ground_truth": {
+        "answers": [
+          "blue"
+        ],
+        "object_ids": [
+          62
+        ],
+        "object_names": [
+          "object"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The plastic clothes handler corresponds to the laundry basket (component 46); its color is not specified in the provided component descriptions.",
+        "search_time_ms": 5505.351759959012,
+        "components": [
+          {
+            "component_id": "46",
+            "caption": "laundry basket",
+            "bbox": {
+              "x_max": 2.4050683975219727,
+              "x_min": 1.882078766822815,
+              "y_max": 0.5749708414077759,
+              "y_min": 0.030515866354107857,
+              "z_max": 6.077817916870117,
+              "z_min": 5.54044771194458
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "blue"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            46
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            62
+          ]
+        }
+      }
+    },
+    {
+      "index": 8,
+      "question": "On what part of the cabinet is the beige cabinet placed?",
+      "question_id": "train-scene0000-8",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "others",
+      "gt_answers": [
+        "right kitchen wall"
+      ],
+      "gt_object_ids": [
+        42
+      ],
+      "ground_truth": {
+        "answers": [
+          "right kitchen wall"
+        ],
+        "object_ids": [
+          42
+        ],
+        "object_names": [
+          "cabinet"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The beige cabinet is placed on the top of the cabinet.",
+        "search_time_ms": 6168.936714006122,
+        "components": [
+          {
+            "component_id": "8",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 6.768268585205078,
+              "x_min": 4.981263637542725,
+              "y_max": 2.3723320960998535,
+              "y_min": 0.034378327429294586,
+              "z_max": 1.2979336977005005,
+              "z_min": 0.13008219003677368
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "right kitchen wall"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            8
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": false,
+          "gt_object_ids": [
+            42
+          ]
+        }
+      }
+    },
+    {
+      "index": 9,
+      "question": "The beige wooden bookshelf is placed next to what else?",
+      "question_id": "train-scene0000-9",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "others",
+      "gt_answers": [
+        "brown wooden cabinet and television"
+      ],
+      "gt_object_ids": [
+        8,
+        15,
+        56
+      ],
+      "ground_truth": {
+        "answers": [
+          "brown wooden cabinet and television"
+        ],
+        "object_ids": [
+          8,
+          15,
+          56
+        ],
+        "object_names": [
+          "cabinet",
+          "tv",
+          "shelf"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "Component 56 is the shelf (the beige wooden bookshelf) and it is placed next to the wall (component 19).",
+        "search_time_ms": 9114.713660033885,
+        "components": [
+          {
+            "component_id": "56",
+            "caption": "shelf",
+            "bbox": {
+              "x_max": 7.733455181121826,
+              "x_min": 6.446152687072754,
+              "y_max": 2.38193416595459,
+              "y_min": 0.02829865738749504,
+              "z_max": 4.01509428024292,
+              "z_min": 1.1523784399032593
+            }
+          },
+          {
+            "component_id": "19",
+            "caption": "wall",
+            "bbox": {
+              "x_max": 1.6402580738067627,
+              "x_min": -0.0035437780898064375,
+              "y_max": 2.5366787910461426,
+              "y_min": 0.007113854866474867,
+              "z_max": 6.284226417541504,
+              "z_min": 2.087519645690918
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "brown wooden cabinet and television"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            56,
+            19
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            8,
+            15,
+            56
+          ]
+        }
+      }
+    },
+    {
+      "index": 10,
+      "question": "How many trash cans can be seen on your right when you enter?",
+      "question_id": "train-scene0000-10",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "number",
+      "gt_answers": [
+        "2 small white trash cans"
+      ],
+      "gt_object_ids": [
+        12,
+        13
+      ],
+      "ground_truth": {
+        "answers": [
+          "2 small white trash cans"
+        ],
+        "object_ids": [
+          12,
+          13
+        ],
+        "object_names": [
+          "trash can",
+          "trash can"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "There are three trash cans on the right when you enter — components 12, 13, and 14.",
+        "search_time_ms": 3878.1999180209823,
+        "components": [
+          {
+            "component_id": "12",
+            "caption": "trash can",
+            "bbox": {
+              "x_max": 6.168763637542725,
+              "x_min": 5.74392032623291,
+              "y_max": 0.445609986782074,
+              "y_min": 0.06034233048558235,
+              "z_max": 6.708871841430664,
+              "z_min": 6.3210368156433105
+            }
+          },
+          {
+            "component_id": "13",
+            "caption": "trash can",
+            "bbox": {
+              "x_max": 6.2855730056762695,
+              "x_min": 5.808961391448975,
+              "y_max": 0.7208051085472107,
+              "y_min": 0.0744728296995163,
+              "z_max": 7.062217712402344,
+              "z_min": 6.6055006980896
+            }
+          },
+          {
+            "component_id": "14",
+            "caption": "trash can",
+            "bbox": {
+              "x_max": 1.3706825971603394,
+              "x_min": 0.9349092841148376,
+              "y_max": 0.3284156024456024,
+              "y_min": 0.056110456585884094,
+              "z_max": 3.823674440383911,
+              "z_min": 3.4821012020111084
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "2 small white trash cans"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            12,
+            13,
+            14
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            12,
+            13
+          ]
+        }
+      }
+    },
+    {
+      "index": 11,
+      "question": "Where is the large wooden bookshelf placed?",
+      "question_id": "train-scene0000-11",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "location",
+      "gt_answers": [
+        "to right of brown wooden cabinet and television up against wall near windows"
+      ],
+      "gt_object_ids": [
+        8,
+        15,
+        56
+      ],
+      "ground_truth": {
+        "answers": [
+          "to right of brown wooden cabinet and television up against wall near windows"
+        ],
+        "object_ids": [
+          8,
+          15,
+          56
+        ],
+        "object_names": [
+          "cabinet",
+          "tv",
+          "shelf"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The large wooden bookshelf (shelf) is placed against the wall.",
+        "search_time_ms": 6090.366040007211,
+        "components": [
+          {
+            "component_id": "56",
+            "caption": "shelf",
+            "bbox": {
+              "x_max": 7.733455181121826,
+              "x_min": 6.446152687072754,
+              "y_max": 2.38193416595459,
+              "y_min": 0.02829865738749504,
+              "z_max": 4.01509428024292,
+              "z_min": 1.1523784399032593
+            }
+          },
+          {
+            "component_id": "19",
+            "caption": "wall",
+            "bbox": {
+              "x_max": 1.6402580738067627,
+              "x_min": -0.0035437780898064375,
+              "y_max": 2.5366787910461426,
+              "y_min": 0.007113854866474867,
+              "z_max": 6.284226417541504,
+              "z_min": 2.087519645690918
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "to right of brown wooden cabinet and television up against wall near windows"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            56,
+            19
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            8,
+            15,
+            56
+          ]
+        }
+      }
+    },
+    {
+      "index": 12,
+      "question": "What is the white wooden door?",
+      "question_id": "train-scene0000-12",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "kitchen door"
+      ],
+      "gt_object_ids": [
+        54
+      ],
+      "ground_truth": {
+        "answers": [
+          "kitchen door"
+        ],
+        "object_ids": [
+          54
+        ],
+        "object_names": [
+          "door"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The white wooden door is the door (component 54).",
+        "search_time_ms": 4369.41670399392,
+        "components": [
+          {
+            "component_id": "54",
+            "caption": "door",
+            "bbox": {
+              "x_max": 5.866196632385254,
+              "x_min": 5.201488971710205,
+              "y_max": 1.9755147695541382,
+              "y_min": 0.057275183498859406,
+              "z_max": 7.471982479095459,
+              "z_min": 7.206060409545898
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "kitchen door"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            54
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            54
+          ]
+        }
+      }
+    },
+    {
+      "index": 13,
+      "question": "Where is the brown wooden cabinet located?",
+      "question_id": "train-scene0000-13",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "location",
+      "gt_answers": [
+        "above kitchen counter tops"
+      ],
+      "gt_object_ids": [
+        43
+      ],
+      "ground_truth": {
+        "answers": [
+          "above kitchen counter tops"
+        ],
+        "object_ids": [
+          43
+        ],
+        "object_names": [
+          "kitchen cabinets"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "These components are all cabinets (including kitchen cabinets) in the scene and therefore represent the likely locations of the brown wooden cabinet.",
+        "search_time_ms": 7542.385307024233,
+        "components": [
+          {
+            "component_id": "8",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 6.768268585205078,
+              "x_min": 4.981263637542725,
+              "y_max": 2.3723320960998535,
+              "y_min": 0.034378327429294586,
+              "z_max": 1.2979336977005005,
+              "z_min": 0.13008219003677368
+            }
+          },
+          {
+            "component_id": "38",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 5.059248447418213,
+              "x_min": 4.021492004394531,
+              "y_max": 2.428635597229004,
+              "y_min": 0.05728984996676445,
+              "z_max": 7.624414920806885,
+              "z_min": 7.113378524780273
+            }
+          },
+          {
+            "component_id": "39",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 1.3427371978759766,
+              "x_min": 0.06330551952123642,
+              "y_max": 1.9735512733459473,
+              "y_min": 0.035437967628240585,
+              "z_max": 2.5171546936035156,
+              "z_min": 1.7000380754470825
+            }
+          },
+          {
+            "component_id": "40",
+            "caption": "kitchen cabinets",
+            "bbox": {
+              "x_max": 7.02816104888916,
+              "x_min": 6.110280990600586,
+              "y_max": 2.4471609592437744,
+              "y_min": 1.7875081300735474,
+              "z_max": 6.973340034484863,
+              "z_min": 6.053731441497803
+            }
+          },
+          {
+            "component_id": "41",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 2.1777288913726807,
+              "x_min": 1.3975462913513184,
+              "y_max": 2.375946283340454,
+              "y_min": 1.474995732307434,
+              "z_max": 6.142026901245117,
+              "z_min": 5.811040878295898
+            }
+          },
+          {
+            "component_id": "42",
+            "caption": "cabinet",
+            "bbox": {
+              "x_max": 8.551965713500977,
+              "x_min": 6.814486026763916,
+              "y_max": 0.9959655404090881,
+              "y_min": 0.10869801044464111,
+              "z_max": 6.13046932220459,
+              "z_min": 5.499726295471191
+            }
+          },
+          {
+            "component_id": "43",
+            "caption": "kitchen cabinets",
+            "bbox": {
+              "x_max": 8.64173698425293,
+              "x_min": 7.043703079223633,
+              "y_max": 2.472905158996582,
+              "y_min": 1.42039954662323,
+              "z_max": 6.445033073425293,
+              "z_min": 5.757721424102783
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "above kitchen counter tops"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            8,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            43
+          ]
+        }
+      }
+    },
+    {
+      "index": 14,
+      "question": "What is placed next to the fridge on the upper side of the cabinets?",
+      "question_id": "train-scene0000-14",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "microwave oven"
+      ],
+      "gt_object_ids": [
+        52
+      ],
+      "ground_truth": {
+        "answers": [
+          "microwave oven"
+        ],
+        "object_ids": [
+          52
+        ],
+        "object_names": [
+          "microwave"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "A microwave is placed next to the fridge on the upper side of the kitchen cabinets.",
+        "search_time_ms": 6758.36357701337,
+        "components": [
+          {
+            "component_id": "33",
+            "caption": "refrigerator",
+            "bbox": {
+              "x_max": 7.290987968444824,
+              "x_min": 5.8947858810424805,
+              "y_max": 1.882699966430664,
+              "y_min": 0.06993281841278076,
+              "z_max": 6.967851638793945,
+              "z_min": 5.906845569610596
+            }
+          },
+          {
+            "component_id": "52",
+            "caption": "microwave",
+            "bbox": {
+              "x_max": 7.554403781890869,
+              "x_min": 6.919553756713867,
+              "y_max": 1.9371821880340576,
+              "y_min": 1.4844300746917725,
+              "z_max": 6.629389762878418,
+              "z_min": 6.094729423522949
+            }
+          },
+          {
+            "component_id": "40",
+            "caption": "kitchen cabinets",
+            "bbox": {
+              "x_max": 7.02816104888916,
+              "x_min": 6.110280990600586,
+              "y_max": 2.4471609592437744,
+              "y_min": 1.7875081300735474,
+              "z_max": 6.973340034484863,
+              "z_min": 6.053731441497803
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "microwave oven"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            33,
+            52,
+            40
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            52
+          ]
+        }
+      }
+    },
+    {
+      "index": 15,
+      "question": "On what side of the cabinets is the microwave located?",
+      "question_id": "train-scene0000-15",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "location",
+      "gt_answers": [
+        "right side"
+      ],
+      "gt_object_ids": [
+        43
+      ],
+      "ground_truth": {
+        "answers": [
+          "right side"
+        ],
+        "object_ids": [
+          43
+        ],
+        "object_names": [
+          "kitchen cabinets"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The microwave (component 52) is located on the right side of the kitchen cabinets (components 40 and 43).",
+        "search_time_ms": 9982.6710660127,
+        "components": [
+          {
+            "component_id": "52",
+            "caption": "microwave",
+            "bbox": {
+              "x_max": 7.554403781890869,
+              "x_min": 6.919553756713867,
+              "y_max": 1.9371821880340576,
+              "y_min": 1.4844300746917725,
+              "z_max": 6.629389762878418,
+              "z_min": 6.094729423522949
+            }
+          },
+          {
+            "component_id": "40",
+            "caption": "kitchen cabinets",
+            "bbox": {
+              "x_max": 7.02816104888916,
+              "x_min": 6.110280990600586,
+              "y_max": 2.4471609592437744,
+              "y_min": 1.7875081300735474,
+              "z_max": 6.973340034484863,
+              "z_min": 6.053731441497803
+            }
+          },
+          {
+            "component_id": "43",
+            "caption": "kitchen cabinets",
+            "bbox": {
+              "x_max": 8.64173698425293,
+              "x_min": 7.043703079223633,
+              "y_max": 2.472905158996582,
+              "y_min": 1.42039954662323,
+              "z_max": 6.445033073425293,
+              "z_min": 5.757721424102783
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "right side"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            52,
+            40,
+            43
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            43
+          ]
+        }
+      }
+    },
+    {
+      "index": 16,
+      "question": "What color is the coffee table in front of a couch?",
+      "question_id": "train-scene0000-16",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "color",
+      "gt_answers": [
+        "gray"
+      ],
+      "gt_object_ids": [
+        34
+      ],
+      "ground_truth": {
+        "answers": [
+          "gray"
+        ],
+        "object_ids": [
+          34
+        ],
+        "object_names": [
+          "coffee table"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The coffee table (component 34) in front of the couch (component 32) has no color specified in the provided component descriptions.",
+        "search_time_ms": 8103.068609023467,
+        "components": [
+          {
+            "component_id": "34",
+            "caption": "coffee table",
+            "bbox": {
+              "x_max": 6.629054546356201,
+              "x_min": 5.777472496032715,
+              "y_max": 0.5354019999504089,
+              "y_min": 0.050823621451854706,
+              "z_max": 3.2567496299743652,
+              "z_min": 2.131899118423462
+            }
+          },
+          {
+            "component_id": "32",
+            "caption": "couch",
+            "bbox": {
+              "x_max": 7.231980800628662,
+              "x_min": 4.3359246253967285,
+              "y_max": 0.9585357308387756,
+              "y_min": 0.042527783662080765,
+              "z_max": 4.933394432067871,
+              "z_min": 2.105959177017212
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "gray"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            34,
+            32
+          ],
+          "bbox_top1_correct": true,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            34
+          ]
+        }
+      }
+    },
+    {
+      "index": 17,
+      "question": "What is the coffee table in front of?",
+      "question_id": "train-scene0000-17",
+      "scene_id": "scene0000_00",
+      "scanqa_bucket": "object_retrieval",
+      "gt_answers": [
+        "couch"
+      ],
+      "gt_object_ids": [
+        32
+      ],
+      "ground_truth": {
+        "answers": [
+          "couch"
+        ],
+        "object_ids": [
+          32
+        ],
+        "object_names": [
+          "couch"
+        ]
+      },
+      "ok": true,
+      "error": null,
+      "system": {
+        "reason": "The coffee table (34) is in front of the couch (32).",
+        "search_time_ms": 4032.7614940470085,
+        "components": [
+          {
+            "component_id": "34",
+            "caption": "coffee table",
+            "bbox": {
+              "x_max": 6.629054546356201,
+              "x_min": 5.777472496032715,
+              "y_max": 0.5354019999504089,
+              "y_min": 0.050823621451854706,
+              "z_max": 3.2567496299743652,
+              "z_min": 2.131899118423462
+            }
+          },
+          {
+            "component_id": "32",
+            "caption": "couch",
+            "bbox": {
+              "x_max": 7.231980800628662,
+              "x_min": 4.3359246253967285,
+              "y_max": 0.9585357308387756,
+              "y_min": 0.042527783662080765,
+              "z_max": 4.933394432067871,
+              "z_min": 2.105959177017212
+            }
+          }
+        ]
+      },
+      "eval": {
+        "text": {
+          "ground_truth_available": true,
+          "prediction_available": false,
+          "predicted_best": null,
+          "predicted_top10": [],
+          "text_top1_correct": false,
+          "text_top10_correct": false,
+          "gt_answers": [
+            "couch"
+          ]
+        },
+        "bbox": {
+          "ground_truth_available": true,
+          "predicted_component_ids": [
+            34,
+            32
+          ],
+          "bbox_top1_correct": false,
+          "bbox_any_retrieved_correct": true,
+          "gt_object_ids": [
+            32
+          ]
+        }
+      }
+    }
+  ]
+}

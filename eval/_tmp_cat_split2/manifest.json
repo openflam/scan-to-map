@@ -1,0 +1,46 @@
+{
+  "source_json": "/home/ziyongma/Desktop/scan-to-map/ScanQA/data/qa/ScanQA_v1.0/ScanQA_v1.0_train.json",
+  "scene_id": "scene0000_00",
+  "total_in_file": 25563,
+  "total_for_scene": 18,
+  "by_category": {
+    "object_retrieval": 7,
+    "location": 5,
+    "color": 3,
+    "number": 1,
+    "others": 2
+  },
+  "notes": [],
+  "categories_order": [
+    "object_retrieval",
+    "location",
+    "color",
+    "number",
+    "others"
+  ],
+  "output": {
+    "by_category_dir": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category",
+    "files_per_category": {
+      "object_retrieval": {
+        "jsonl": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/object_retrieval.jsonl",
+        "questions_txt": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/object_retrieval_questions.txt"
+      },
+      "location": {
+        "jsonl": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/location.jsonl",
+        "questions_txt": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/location_questions.txt"
+      },
+      "color": {
+        "jsonl": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/color.jsonl",
+        "questions_txt": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/color_questions.txt"
+      },
+      "number": {
+        "jsonl": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/number.jsonl",
+        "questions_txt": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/number_questions.txt"
+      },
+      "others": {
+        "jsonl": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/others.jsonl",
+        "questions_txt": "/home/ziyongma/Desktop/scan-to-map/scan-to-map/eval/_tmp_cat_split2/by_category/others_questions.txt"
+      }
+    }
+  }
+}

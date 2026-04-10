@@ -1,6 +1,9 @@
 """Utility functions for tools."""
 
+from __future__ import annotations
+
 import os
+
 
 def _get_dataset_name(dataset_name: str | None) -> str:
     """Resolve dataset from argument first, then from environment."""
