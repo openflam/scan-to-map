@@ -1,7 +1,12 @@
 import { Form, Button, Accordion } from "react-bootstrap";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { parseResult } from "../SearchResult";
-import { callTool } from "../query";
+import {
+  callTool,
+  saveBenchmark,
+  getBenchmarkNames,
+  getBenchmark,
+} from "../query";
 
 interface BenchmarkInputProps {
   componentIds?: string[];
@@ -17,6 +22,32 @@ function BenchmarkInput({
   const [question, setQuestion] = useState("");
   const [expectedAnswer, setExpectedAnswer] = useState("");
   const [isPreview, setIsPreview] = useState(false);
+  const [benchmarkName, setBenchmarkName] = useState("");
+  const [benchmarkType, setBenchmarkType] = useState("Entity Search");
+  const [benchmarkNamesList, setBenchmarkNamesList] = useState<string[]>([]);
+
+  useEffect(() => {
+    getBenchmarkNames().then(setBenchmarkNamesList).catch(console.error);
+  }, []);
+
+  const handleNameChange = async (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
+    const val = e.target.value;
+    setBenchmarkName(val);
+    if (benchmarkNamesList.includes(val)) {
+      try {
+        const data = await getBenchmark(val);
+        if (data.question !== undefined) setQuestion(data.question);
+        if (data.expected_answer !== undefined)
+          setExpectedAnswer(data.expected_answer);
+        if (data.benchmark_type !== undefined)
+          setBenchmarkType(data.benchmark_type);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
 
   // Distance parameters
   const [distId1, setDistId1] = useState("");
@@ -52,12 +83,33 @@ function BenchmarkInput({
     }
   };
 
-  const handleSave = () => {
-    console.log("Benchmark entry saved (dummy):", { question, expectedAnswer });
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await saveBenchmark(
+        datasetName,
+        question,
+        expectedAnswer,
+        benchmarkName,
+        benchmarkType,
+      );
+      setQuestion("");
+      setExpectedAnswer("");
+      setBenchmarkName("");
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="d-flex flex-column h-100 pb-2">
+    <div
+      className="d-flex flex-column h-100 pb-2"
+      style={{ overflowY: "auto" }}
+    >
       {/* Tools UI */}
       <Accordion className="mb-3">
         <Accordion.Item eventKey="0">
@@ -93,7 +145,10 @@ function BenchmarkInput({
                 </Button>
               </div>
               {distanceResult && (
-                <div className="text-muted mt-2" style={{ fontSize: "0.95rem" }}>
+                <div
+                  className="text-muted mt-2"
+                  style={{ fontSize: "0.95rem" }}
+                >
                   Result: <span className="fw-bold">{distanceResult}</span>
                 </div>
               )}
@@ -101,6 +156,39 @@ function BenchmarkInput({
           </Accordion.Body>
         </Accordion.Item>
       </Accordion>
+
+      <div className="d-flex flex-column mb-3" style={{ flex: "0 0 auto" }}>
+        <div className="d-flex justify-content-between align-items-center mb-1">
+          <span className="text-secondary fw-bold">Name</span>
+        </div>
+        <Form.Control
+          placeholder="Benchmark Name"
+          value={benchmarkName}
+          onChange={handleNameChange}
+          list="benchmark-names"
+        />
+        <datalist id="benchmark-names">
+          {benchmarkNamesList.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </div>
+
+      <div className="d-flex flex-column mb-3" style={{ flex: "0 0 auto" }}>
+        <div className="d-flex justify-content-between align-items-center mb-1">
+          <span className="text-secondary fw-bold">Type</span>
+        </div>
+        <Form.Select
+          value={benchmarkType}
+          onChange={(e) => setBenchmarkType(e.target.value)}
+        >
+          <option value="Entity Search">Entity Search</option>
+          <option value="Spatial Relations">Spatial Relations</option>
+          <option value="Affordance">Affordance</option>
+          <option value="Functionality">Functionality</option>
+          <option value="Physics, safety, etc.">Physics, safety, etc.</option>
+        </Form.Select>
+      </div>
 
       <div className="d-flex flex-column mb-3" style={{ flex: "0 0 auto" }}>
         <div className="d-flex justify-content-between align-items-center mb-1">
@@ -159,8 +247,8 @@ function BenchmarkInput({
       </div>
 
       <div className="mt-auto d-flex justify-content-end">
-        <Button variant="primary" onClick={handleSave}>
-          Save
+        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save"}
         </Button>
       </div>
     </div>

@@ -862,6 +862,76 @@ def benchmark_collection():
 
     return render_template("dataset_picker.html", datasets=datasets, target_url="/benchmark_collection")
 
+
+@app.route("/save_benchmark", methods=["POST"])
+def save_benchmark():
+    import time
+    import uuid
+    data = request.json
+    if not data:
+        return jsonify({"error": "No JSON payload provided"}), 400
+
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    benchmark_dir.mkdir(parents=True, exist_ok=True)
+
+    benchmark_name = data.get("benchmark_name")
+    if benchmark_name:
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', benchmark_name)
+        if not safe_name.endswith('.json'):
+            safe_name += '.json'
+        filename = safe_name
+    else:
+        filename = f"benchmark_{int(time.time() * 1000)}_{uuid.uuid4().hex[:6]}.json"
+
+    filepath = benchmark_dir / filename
+
+    try:
+        import os
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=4)
+        os.chmod(filepath, 0o666)
+        return jsonify({"success": True, "file": str(filename)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/get_benchmark_names", methods=["GET"])
+def get_benchmark_names():
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    if not benchmark_dir.exists():
+        return jsonify({"names": []})
+
+    names = []
+    for file in benchmark_dir.glob("*.json"):
+        names.append(file.name[:-5])
+        
+    return jsonify({"names": sorted(names)})
+
+@app.route("/get_benchmark", methods=["GET"])
+def get_benchmark():
+    name = request.args.get("name")
+    if not name:
+        return jsonify({"error": "name parameter is required"}), 400
+
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    
+    # We apply same filtering logic as saving
+    import re
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', name)
+    filepath = benchmark_dir / f"{safe_name}.json"
+    
+    if not filepath.exists():
+        return jsonify({"error": "Benchmark not found"}), 404
+        
+    try:
+        with open(filepath, "r") as f:
+            data = json.load(f)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/<path:path>")
 def serve_frontend(path: str):
     """
