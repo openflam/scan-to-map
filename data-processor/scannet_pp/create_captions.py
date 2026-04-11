@@ -75,9 +75,7 @@ def create_captions(
         manifest_entry = manifest[component_key]
         bbox_entry = bbox_lookup.get(component_id)
         if bbox_entry is None:
-            raise KeyError(
-                f"Component {component_id} is present in {manifest_path} but missing from {bbox_path}"
-            )
+            continue
 
         captions.append(
             {
