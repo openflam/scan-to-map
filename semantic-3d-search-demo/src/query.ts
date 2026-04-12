@@ -333,3 +333,69 @@ export async function callTool(
     throw error;
   }
 }
+
+export async function saveBenchmark(
+  datasetName: string,
+  question: string,
+  expectedAnswer: string,
+  benchmarkName: string,
+  benchmarkType: string,
+): Promise<any> {
+  console.log("Saving benchmark:", { datasetName, benchmarkName, benchmarkType });
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/save_benchmark`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        question: question,
+        expected_answer: expectedAnswer,
+        benchmark_name: benchmarkName,
+        benchmark_type: benchmarkType,
+      }),
+
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Save benchmark request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Saved benchmark:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error saving benchmark:", error);
+    throw error;
+  }
+}
+
+export async function getBenchmarkNames(): Promise<string[]> {
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/get_benchmark_names`);
+    if (!response.ok) throw new Error("Failed to fetch benchmark names");
+    const data = await response.json();
+    return data.names || [];
+  } catch (error) {
+    console.error("Error fetching benchmark names:", error);
+    return [];
+  }
+}
+
+export async function getBenchmark(name: string): Promise<any> {
+  try {
+    const response = await fetch(
+      `${SEARCH_SERVER_URL}/get_benchmark?name=${encodeURIComponent(name)}`
+    );
+    if (!response.ok) throw new Error("Failed to fetch benchmark");
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching benchmark:", error);
+    throw error;
+  }
+}

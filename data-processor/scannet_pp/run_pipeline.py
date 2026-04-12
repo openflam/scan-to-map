@@ -9,7 +9,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from create_bboxes import get_bounding_boxes
-from create_crops import create_crops
+from create_crops import main as create_crops_main
 from create_captions import create_captions
 from create_gltf import create_gltf
 
@@ -29,8 +29,7 @@ def run_pipeline(
     data_dir: str | Path,
     output_root: str | Path = DEFAULT_OUTPUT_ROOT,
     output_name: str | None = None,
-    min_fraction: float = 0.1,
-    max_crops_per_component: int = 5,
+    crop_source: str = "dslr",
 ) -> None:
     data_dir = Path(data_dir).resolve()
     
@@ -55,13 +54,16 @@ def run_pipeline(
     )
 
     print(f"\n--- Running create_crops on {data_dir} ---")
-    create_crops(
-        data_dir=data_dir,
-        output_root=output_root,
-        output_name=output_name,
-        min_fraction=min_fraction,
-        max_crops_per_component=max_crops_per_component,
-    )
+    scan_id = data_dir.name
+    if scan_id.startswith("scannetpp_"):
+        scan_id = scan_id[len("scannetpp_"):]
+        
+    create_crops_main([
+        scan_id,
+        str(data_dir.parent),
+        "--output-root", str(output_root),
+        "--crop-source", crop_source,
+    ])
 
     print(f"\n--- Running create_captions on {data_dir} ---")
     create_captions(
@@ -106,16 +108,11 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--min-fraction",
-        type=float,
-        default=0.1,
-        help="Minimum visible 3D-point fraction for projecting a bbox to an image.",
-    )
-    parser.add_argument(
-        "--max-crops-per-component",
-        type=int,
-        default=5,
-        help="Maximum number of crops to generate per component.",
+        "--crop-source",
+        type=str,
+        choices=("dslr", "iphone"),
+        default="iphone",
+        help="Input source to use for crops (default: iphone).",
     )
 
     args = parser.parse_args()
@@ -128,8 +125,7 @@ def main() -> None:
         data_dir=data_dir,
         output_root=args.output_root,
         output_name=args.output_name,
-        min_fraction=args.min_fraction,
-        max_crops_per_component=args.max_crops_per_component,
+        crop_source=args.crop_source,
     )
 
 
