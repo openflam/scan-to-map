@@ -3,10 +3,15 @@
 Backend-only evaluation for the semantic-3d-search stack (same API as the web demo).
 
 Calls search-server HTTP routes — no browser:
-  POST /search  →  reason, search_time_ms, components[{ bbox, caption, component_id }],
-  optional answer_selection. When ScanQA ground truth is on the task (answers, object_ids),
-  each result includes an ``eval`` block when GT exists. Use ``--output-json`` for one JSON file
-  with overall stats plus a list of questions (ground truth, system return, eval).
+
+- **Most methods** → ``POST /search`` (JSON): reason, search_time_ms, components, optional
+  ``answer_selection`` when ``enable_answer_pools: true`` (eval sends this; web demo does not).
+- **gpt-5.4-tools** → ``POST /search_stream`` (SSE): same final JSON shape after the stream ends.
+  That path uses the tool-calling agent (BM25, distance, search_around, **get_images** for crop
+  views), so eval can exercise vision-backed questions when ``outputs/<dataset>/crops/`` exists.
+
+When ScanQA ground truth is on the task (answers, object_ids), each result includes an ``eval``
+block. Use ``--output-json`` for one file with stats plus per-question entries.
 
 Prerequisites:
   • search-server running (e.g. python app.py or docker compose)
@@ -41,12 +46,20 @@ Examples:
       --method "gpt-5-mini [Full]" \\
       --output-json results.json
 
+  # Tool-calling agent (BM25, distance, search_around, get_images) — uses POST /search_stream
+  python semantic_demo_backend_eval.py \\
+      --scannet-scene scene0000_00 \\
+      --scanqa-json ../../../ScanQA/data/qa/ScanQA_v1.0/ScanQA_v1.0_train.json \\
+      --method "gpt-5.4-tools" \\
+      --output-json scene0000_tools.json
+
   python semantic_demo_backend_eval.py --list-methods --server http://localhost:5000
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import sys
 from datetime import datetime, timezone
@@ -251,16 +264,12 @@ def make_json_question_entry(
     row: Dict[str, Any],
 ) -> Dict[str, Any]:
     """One question record for ``--output-json``."""
-    gt_ans = task_item.get("answers")
-    gt_obj = task_item.get("object_ids")
     rec: Dict[str, Any] = {
         "index": index,
         "question": task_item["question"],
         "question_id": task_item.get("question_id"),
         "scene_id": task_item.get("scene_id"),
         "scanqa_bucket": task_item.get("scanqa_bucket"),
-        "gt_answers": gt_ans if isinstance(gt_ans, list) else None,
-        "gt_object_ids": gt_obj if isinstance(gt_obj, list) else None,
         "ground_truth": ground_truth_from_task(task_item),
         "ok": bool(row.get("ok")),
     }
@@ -308,27 +317,116 @@ def viewer_bbox_to_storage_min_max(bbox: Dict[str, float]) -> Dict[str, List[flo
     }
 
 
+STREAMING_METHOD = "gpt-5.4-tools"
+
+
+def _http_error_payload(e: urllib.error.HTTPError) -> RuntimeError:
+    err_body = e.read().decode("utf-8", errors="replace")
+    try:
+        err_json = json.loads(err_body)
+    except json.JSONDecodeError:
+        err_json = {"error": err_body or str(e)}
+    return RuntimeError(f"HTTP {e.code}: {err_json}")
+
+
 def run_search(
     base_url: str,
     dataset_name: str,
     method: str,
     question: str,
+    enable_answer_pools: bool = True,
 ) -> Dict[str, Any]:
     base = base_url.rstrip("/")
+    payload: Dict[str, Any] = {
+        "dataset_name": dataset_name,
+        "method": method,
+        "query": [{"type": "text", "value": question}],
+    }
+    # Opt-in ScanQA answer-pool prompts for gpt-5-mini [Full] (server default is off for web demo).
+    if enable_answer_pools:
+        payload["enable_answer_pools"] = True
+    try:
+        return _post_json(f"{base}/search", payload)
+    except urllib.error.HTTPError as e:
+        raise _http_error_payload(e) from e
+
+
+def run_search_stream(
+    base_url: str,
+    dataset_name: str,
+    method: str,
+    question: str,
+    timeout: float = 900.0,
+) -> Dict[str, Any]:
+    """
+    Call ``POST /search_stream`` (SSE) and return the final ``result`` payload.
+
+    Used for ``gpt-5.4-tools``: LLM agent with tools including ``get_images`` (requires
+    ``search-server/../outputs/<dataset>/crops/manifest.json`` for image retrieval).
+    """
+    base = base_url.rstrip("/")
+    url = f"{base}/search_stream"
     payload = {
         "dataset_name": dataset_name,
         "method": method,
         "query": [{"type": "text", "value": question}],
     }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        },
+        method="POST",
+    )
     try:
-        return _post_json(f"{base}/search", payload)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            final: Dict[str, Any] = {}
+            for line in io.TextIOWrapper(resp, encoding="utf-8"):
+                line = line.strip()
+                if not line or line.startswith(":"):
+                    continue
+                if not line.startswith("data:"):
+                    continue
+                raw = line[5:].strip()
+                if not raw:
+                    continue
+                try:
+                    obj = json.loads(raw)
+                except json.JSONDecodeError:
+                    continue
+                if obj.get("type") == "error":
+                    raise RuntimeError(obj.get("error", str(obj)))
+                if obj.get("type") == "result":
+                    final = obj.get("data") or {}
+                    break
+            return final
     except urllib.error.HTTPError as e:
-        err_body = e.read().decode("utf-8", errors="replace")
-        try:
-            err_json = json.loads(err_body)
-        except json.JSONDecodeError:
-            err_json = {"error": err_body or str(e)}
-        raise RuntimeError(f"HTTP {e.code}: {err_json}") from e
+        raise _http_error_payload(e) from e
+
+
+def run_search_for_method(
+    base_url: str,
+    dataset_name: str,
+    method: str,
+    question: str,
+    stream_timeout: float,
+    enable_answer_pools: bool = True,
+) -> Dict[str, Any]:
+    """Dispatch to ``/search`` or ``/search_stream`` depending on method."""
+    if method == STREAMING_METHOD:
+        return run_search_stream(
+            base_url, dataset_name, method, question, timeout=stream_timeout
+        )
+    return run_search(
+        base_url,
+        dataset_name,
+        method,
+        question,
+        enable_answer_pools=enable_answer_pools,
+    )
 
 
 def print_task_ground_truth(task_item: Dict[str, Any]) -> None:
@@ -550,6 +648,24 @@ def main() -> None:
         action="store_true",
         help="Do not print aggregate text/bbox accuracy at the end (per-row eval is unchanged).",
     )
+    parser.add_argument(
+        "--stream-timeout",
+        type=float,
+        default=900.0,
+        metavar="SEC",
+        help=(
+            "HTTP read timeout for gpt-5.4-tools (POST /search_stream, SSE). "
+            "Image tool calls can be slow; default 900s."
+        ),
+    )
+    parser.add_argument(
+        "--no-answer-pools",
+        action="store_true",
+        help=(
+            "For gpt-5-mini [Full]: do not send enable_answer_pools (base prompts only, "
+            "like the web demo). Default is to send pools for ScanQA text eval."
+        ),
+    )
     args = parser.parse_args()
 
     base = args.server.rstrip("/")
@@ -653,7 +769,14 @@ def main() -> None:
                 "method": args.method,
             }
             try:
-                result = run_search(base, dataset_name, args.method, q)
+                result = run_search_for_method(
+                    base,
+                    dataset_name,
+                    args.method,
+                    q,
+                    stream_timeout=args.stream_timeout,
+                    enable_answer_pools=not args.no_answer_pools,
+                )
                 row["ok"] = True
                 row["response"] = result
                 ev = compute_eval_metrics(item, result)
@@ -694,16 +817,27 @@ def main() -> None:
     if args.output_json:
         args.output_json.parent.mkdir(parents=True, exist_ok=True)
         gt_metrics = build_ground_truth_metrics_summary(eval_counters)
+        meta_block: Dict[str, Any] = {
+            "created_utc": datetime.now(timezone.utc).isoformat(),
+            "dataset_name": dataset_name,
+            "method": args.method,
+            "server": base,
+            "api": "search_stream" if args.method == STREAMING_METHOD else "search",
+            "scene_id": args.scene_id,
+            "scanqa_json": str(scanqa_path) if scanqa_path is not None else None,
+            "scanqa_bucket_filter": args.scanqa_bucket,
+        }
+        if args.method == STREAMING_METHOD:
+            meta_block["stream_timeout_seconds"] = args.stream_timeout
+            meta_block["notes"] = (
+                "gpt-5.4-tools uses LLM tools including get_images (requires "
+                "outputs/<dataset>/crops/manifest.json). No answer_selection; "
+                "text pool metrics apply to gpt-5-mini [Full] only."
+            )
+        if args.method != STREAMING_METHOD:
+            meta_block["enable_answer_pools"] = not args.no_answer_pools
         report: Dict[str, Any] = {
-            "meta": {
-                "created_utc": datetime.now(timezone.utc).isoformat(),
-                "dataset_name": dataset_name,
-                "method": args.method,
-                "server": base,
-                "scene_id": args.scene_id,
-                "scanqa_json": str(scanqa_path) if scanqa_path is not None else None,
-                "scanqa_bucket_filter": args.scanqa_bucket,
-            },
+            "meta": meta_block,
             "summary": {
                 "total_questions": len(tasks),
                 "successful_requests": n_ok,
@@ -735,6 +869,12 @@ def main() -> None:
                 f"  Bbox / component (n={n} with reference object_ids): "
                 f"top-1 component hit={eval_counters['bbox_top1_ok'] / n:.3f}, "
                 f"any retrieved hit={eval_counters['bbox_any_ok'] / n:.3f}"
+            )
+        if eval_counters["text_gt"] and args.method == STREAMING_METHOD:
+            print(
+                "  Note: gpt-5.4-tools has no answer_selection; text top1/top10 vs ScanQA "
+                "reference answers stay low unless you compare ``reason`` manually or use "
+                "``gpt-5-mini [Full]`` for pool-based short answers."
             )
         print("=" * 60)
 

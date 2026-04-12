@@ -150,7 +150,7 @@ def transform_bbox(bbox):
     }
 
 
-def initialize_provider(method, dataset_name):
+def initialize_provider(method, dataset_name, enable_answer_pools: bool = False):
     """
     Initialize and return the appropriate search provider for the given method.
 
@@ -160,9 +160,16 @@ def initialize_provider(method, dataset_name):
     CLIP is expensive to initialize, so it is pre-loaded at startup for a single
     dataset.  It is only returned here when the requested dataset_name matches
     CLIP_DATASET_NAME and the provider was successfully initialized at startup.
+
+    enable_answer_pools: For gpt-5-mini [Full] only — load ScanQA answer vocabulary
+    and extended JSON (eval / explicit API). The web demo omits this (default False).
     """
     if method == "gpt-5-mini [Full]":
-        return OpenAIProvider(dataset_name, model="gpt-5-mini")
+        return OpenAIProvider(
+            dataset_name,
+            model="gpt-5-mini",
+            enable_answer_pools=enable_answer_pools,
+        )
     elif method == "BM25":
         return BM25Provider(dataset_name)
     elif method == "gpt-5-mini [RAG]":
@@ -209,8 +216,11 @@ def search():
             404,
         )
 
+    # ScanQA answer-pool prompts: opt-in (backend eval); web demo does not send this.
+    enable_answer_pools = bool(request.json.get("enable_answer_pools", False))
+
     # Initialize the appropriate provider
-    provider = initialize_provider(method, dataset_name)
+    provider = initialize_provider(method, dataset_name, enable_answer_pools=enable_answer_pools)
     if provider is None:
         if method == "CLIP ViT-H-14":
             return (
