@@ -1,5 +1,5 @@
-import { Spinner, Accordion } from "react-bootstrap";
-import React from "react";
+import { Spinner, Accordion, Form } from "react-bootstrap";
+import React, { useState } from "react";
 
 interface SearchResultProps {
   result?: string;
@@ -78,6 +78,7 @@ function SearchResult({
   componentIds,
   onComponentClick,
 }: SearchResultProps) {
+  const [isRaw, setIsRaw] = useState(false);
 
   return (
     <>
@@ -111,16 +112,27 @@ function SearchResult({
           </Accordion.Item>
         </Accordion>
       )}
+      {result && (
+        <div className="mb-2">
+          <Form.Check
+            type="switch"
+            id="raw-mode-switch"
+            label={<span className="text-muted small">Raw mode</span>}
+            checked={isRaw}
+            onChange={(e) => setIsRaw(e.target.checked)}
+          />
+        </div>
+      )}
       <div className="d-flex justify-content-between align-items-start">
-        <div className="flex-grow-1">
+        <div className="flex-grow-1" style={{ minWidth: 0 }}>
           {isLoading && !result && !thinking ? (
             <div className="d-flex align-items-center gap-2 text-muted">
               <Spinner animation="border" size="sm" role="status" />
               <span>Loading...</span>
             </div>
           ) : result ? (
-            <p className="mb-0" style={{ whiteSpace: "pre-line" }}>
-              {parseResult(result, componentIds, onComponentClick)}
+            <p className="mb-0 text-break" style={{ whiteSpace: "pre-line", wordBreak: "break-word" }}>
+              {isRaw ? result : parseResult(result, componentIds, onComponentClick)}
             </p>
           ) : !thinking ? (
             <p className="text-muted mb-0">No search results yet</p>
