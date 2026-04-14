@@ -46,7 +46,7 @@ function SearchBar({
   datasetName,
 }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [method, setMethod] = useState("gpt-5-mini [Full]");
+  const [method, setMethod] = useState("gpt-5.4-tools");
   const [providers, setProviders] = useState<string[]>([]);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,7 +61,11 @@ function SearchBar({
     getProvidersList()
       .then((list) => {
         setProviders(list);
-        if (list.length > 0) setMethod(list[0]);
+        if (list.includes("gpt-5.4-tools")) {
+          setMethod("gpt-5.4-tools");
+        } else if (list.length > 0) {
+          setMethod(list[0]);
+        }
       })
       .catch((err) => console.error("Failed to fetch providers list:", err));
   }, []);
