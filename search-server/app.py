@@ -807,19 +807,14 @@ def index():
         )
 
     # No dataset selected — show the picker
-    dataset_dir_names: dict[str, str] = {}
+    datasets = []
     outputs_root = Path(__file__).parent / ".." / "outputs"
     if outputs_root.exists():
+        db_tables = set(database.list_dataset_tables())
         for directory in outputs_root.iterdir():
-            if directory.is_dir():
-                dataset_dir_names.setdefault(
-                    database.get_table_name(directory.name), directory.name
-                )
-
-    datasets = [
-        dataset_dir_names.get(table_name, table_name)
-        for table_name in database.list_dataset_tables()
-    ]
+            if directory.is_dir() and database.get_table_name(directory.name) in db_tables:
+                datasets.append(directory.name)
+    datasets.sort()
 
     return render_template("dataset_picker.html", datasets=datasets)
 
@@ -846,19 +841,14 @@ def benchmark_collection():
             404,
         )
 
-    dataset_dir_names: dict[str, str] = {}
+    datasets = []
     outputs_root = Path(__file__).parent / ".." / "outputs"
     if outputs_root.exists():
+        db_tables = set(database.list_dataset_tables())
         for directory in outputs_root.iterdir():
-            if directory.is_dir():
-                dataset_dir_names.setdefault(
-                    database.get_table_name(directory.name), directory.name
-                )
-
-    datasets = [
-        dataset_dir_names.get(table_name, table_name)
-        for table_name in database.list_dataset_tables()
-    ]
+            if directory.is_dir() and database.get_table_name(directory.name) in db_tables:
+                datasets.append(directory.name)
+    datasets.sort()
 
     return render_template("dataset_picker.html", datasets=datasets, target_url="/benchmark_collection")
 
