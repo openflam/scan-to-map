@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { TransformControls, Edges } from "@react-three/drei";
 import * as THREE from "three";
 import type { BoundingBox } from "../types/global";
@@ -20,12 +20,8 @@ export default function BBoxTransformGizmo({
   // Track live transforms in a ref – no React state updates during drag
   const liveBBoxRef = useRef<BoundingBox>(initialBBox);
 
-  // Position/scale the mesh imperatively before the first Three.js frame so the
-  // gizmo spawns at the bbox center. useLayoutEffect fires synchronously after
-  // the R3F reconciler commits but before the canvas draws.
-  useLayoutEffect(() => {
-    const m = meshRef.current;
-    if (!m) return;
+  // Compute position and geometry declaratively based on the initial box
+  const { position, geometry } = useMemo(() => {
     const { corners } = initialBBox;
 
     // prettier-ignore
@@ -39,7 +35,6 @@ export default function BBoxTransformGizmo({
     cy /= 8;
     cz /= 8;
 
-    // Create a new BufferGeometry centered at origin
     const geo = new THREE.BufferGeometry();
     const vertices = new Float32Array(24);
     for (let i = 0; i < 8; i++) {
@@ -60,13 +55,8 @@ export default function BBoxTransformGizmo({
     ];
     geo.setIndex(indices);
     geo.computeVertexNormals();
-    m.geometry = geo;
 
-    m.position.set(cx, cy, cz);
-    m.rotation.set(0, 0, 0);
-    m.scale.set(1, 1, 1);
-    m.updateMatrixWorld(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return { position: new THREE.Vector3(cx, cy, cz), geometry: geo };
   }, []); // run once on mount
 
   // Wire raw Three.js events so drag tracking never triggers React re-renders
@@ -115,10 +105,7 @@ export default function BBoxTransformGizmo({
   // group at origin, causing the gizmo to appear at (0,0,0).
   return (
     <>
-      {/* No position/scale JSX props – set imperatively above so re-renders
-          from onCommit → setEditedBBox never reset the Three.js transform */}
-      <mesh ref={meshRef}>
-        {/* Geometry is attached imperatively in useLayoutEffect */}
+      <mesh ref={meshRef} geometry={geometry} position={position}>
         <meshStandardMaterial
           color="#3b82f6"
           transparent
