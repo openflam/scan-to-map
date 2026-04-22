@@ -10,17 +10,18 @@ import sys
 from typing import Any, Callable, Sequence
 
 from .llm_call import DEFAULT_MODEL, LLMCaller
-from .tools import TOOL_FUNCTIONS, TOOLS, THINKING_TEXTS
+from .tools import get_tools, get_tool_functions, get_thinking_texts
 
-from prompts import TOOL_CALLING_SYSTEM_PROMPT
+from prompts.tools_prompt import get_tools_prompt
 
 
-def call_tool(tool_name: str, arguments: str | dict[str, Any], dataset_name: str | None = None) -> dict[str, Any]:
+def call_tool(tool_name: str, arguments: str | dict[str, Any], dataset_name: str | None = None, tool_functions: dict[str, Callable] | None = None) -> dict[str, Any]:
     """Execute a registered tool by name with the given JSON-encoded arguments."""
-    if tool_name not in TOOL_FUNCTIONS:
+    _tool_functions = tool_functions if tool_functions is not None else get_tool_functions()
+    if tool_name not in _tool_functions:
         return {"error": f"Unknown tool: {tool_name}"}
 
-    tool_fn = TOOL_FUNCTIONS[tool_name]
+    tool_fn = _tool_functions[tool_name]
 
     if isinstance(arguments, str):
         try:
@@ -78,14 +79,19 @@ class LLMAgent:
     def __init__(
         self,
         model: str = DEFAULT_MODEL,
-        system_prompt: str = TOOL_CALLING_SYSTEM_PROMPT,
+        system_prompt: str | None = None,
         max_tool_rounds: int = 8,
         api_key: str | None = None,
+        allowed_tools: list[str] | None = None,
     ) -> None:
         self.model = model
-        self.system_prompt = system_prompt
+        self.allowed_tools = allowed_tools
+        self.system_prompt = system_prompt if system_prompt is not None else get_tools_prompt(allowed_tools)
         self.max_tool_rounds = max_tool_rounds
         self.caller = LLMCaller(model=model, api_key=api_key)
+        self.tools = get_tools(allowed_tools)
+        self.tool_functions = get_tool_functions(allowed_tools)
+        self.thinking_texts = get_thinking_texts(allowed_tools)
 
     def answer_query(self, query: str, dataset_name: str) -> dict[str, Any]:
         return self.answer_query_stream(query=query, dataset_name=dataset_name)
@@ -128,8 +134,8 @@ class LLMAgent:
                         if args_delta:
                             on_stream_event({"type": "thinking", "content": args_delta})
                     else:
-                        if name_delta and name_delta in THINKING_TEXTS:
-                            on_stream_event({"type": "thinking", "content": f"\n\n> {THINKING_TEXTS[name_delta]}"})
+                        if name_delta and name_delta in self.thinking_texts:
+                            on_stream_event({"type": "thinking", "content": f"\n\n> {self.thinking_texts[name_delta]}"})
 
             wrapped_on_stream_event = _wrapped_handler
 
@@ -149,7 +155,7 @@ class LLMAgent:
         for _ in range(self.max_tool_rounds):
             message_payload = self.caller.stream_chat(
                 input=input_items,
-                tools=TOOLS,
+                tools=self.tools,
                 on_stream_event=wrapped_on_stream_event,
             )
 
@@ -180,6 +186,7 @@ class LLMAgent:
                     tool_name=tool_name,
                     arguments=call.get("arguments", "{}"),
                     dataset_name=dataset_name,
+                    tool_functions=self.tool_functions,
                 )
 
                 if on_stream_event:
@@ -261,9 +268,10 @@ def answer_query(
     dataset_name: str,
     model: str = DEFAULT_MODEL,
     on_stream_event: Callable[[dict[str, Any]], None] | None = None,
+    allowed_tools: list[str] | None = None,
 ) -> dict[str, Any]:
     """Convenience function for single-shot use."""
-    agent = LLMAgent(model=model)
+    agent = LLMAgent(model=model, allowed_tools=allowed_tools)
     return agent.answer_query_stream(
         query=query,
         dataset_name=dataset_name,

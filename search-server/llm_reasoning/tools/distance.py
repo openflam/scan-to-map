@@ -89,3 +89,5 @@ GET_DISTANCE_TOOL = {
 
 GET_DISTANCE_THINKING_TEXT = "Calculating distance between objects..."
 
+GET_DISTANCE_DESCRIPTION = """- **Distance Evaluation Tool:** Use `get_distance` to compute the spatial Euclidean distance (in meters) between any two known components in the scene.
+  - Use this tool when the query requires comparing spatial proximity, answering questions about how far apart two items are, or verifying if two objects are close to each other."""

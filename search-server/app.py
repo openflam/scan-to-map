@@ -288,6 +288,7 @@ def search_stream():
     dataset_name = request.json.get("dataset_name")
     search_query = request.json.get("query")
     method = request.json.get("method")
+    tools = request.json.get("tools")
 
     if not dataset_name:
         return jsonify({"error": "dataset_name is required"}), 400
@@ -325,7 +326,7 @@ def search_stream():
 
     def run_agent():
         try:
-            agent = LLMAgent(model="gpt-5.4")
+            agent = LLMAgent(model="gpt-5.4", allowed_tools=tools)
             result = agent.answer_query_stream(
                 query=query_input,
                 dataset_name=dataset_name,

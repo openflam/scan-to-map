@@ -46,17 +46,29 @@ def get_question_answer_from_json(json_path):
     return dataset_name, question, expected_answer_text, components
 
 
-def get_answer_from_server(dataset_name, question):
+def get_answer_from_server(dataset_name, question, tools=None):
     """
     Passes the question to the local search server's stream endpoint.
     Returns plain text predicted answer and a list of predicted components.
+    
+    Args:
+        dataset_name: Name of the dataset (e.g. 'scannetpp_5ee7c22ba0')
+        question: The natural language question string
+        tools: Optional list of tool names to allow. Possible values:
+               - "search_terms"
+               - "get_distance"
+               - "search_around_component"
+               - "get_images"
+               If None, all tools are enabled.
     """
     url = "http://localhost:5000/search_stream"
     payload = {
         "dataset_name": dataset_name,
         "query": [{"type": "text", "value": question}],
-        "method": "gpt-5.4-tools"
+        "method": "gpt-5.4-tools",
     }
+    if tools is not None:
+        payload["tools"] = tools
     
     predicted_answer_raw = ""
     predicted_components_array = []

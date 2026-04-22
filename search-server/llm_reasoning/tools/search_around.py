@@ -159,3 +159,7 @@ SEARCH_AROUND_COMPONENT_TOOL = {
 }
 
 SEARCH_AROUND_COMPONENT_THINKING_TEXT = "Searching for objects around a target object..."
+
+SEARCH_AROUND_COMPONENT_DESCRIPTION = """- **Search Around Tool:** Use `search_around_component` to find objects located within a specified radius of a known component.
+  - You can optionally filter these neighboring components using a `search_term`. When providing a search term, apply the same **BM25 Creative Expansion** rule as above (e.g., use a descriptive, creatively expanded string to catch synonyms or related items).
+  - You can optionally filter the neighbors vertically using the `direction` argument (either "above" or "below") if you specifically want components located higher or lower than the known component."""

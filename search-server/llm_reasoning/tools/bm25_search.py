@@ -68,3 +68,8 @@ SEARCH_TERMS_TOOL = {
 }
 
 SEARCH_THINKING_TEXT = "Searching for relevant objects..."
+
+SEARCH_TERMS_DESCRIPTION = """- **Primary Search Tool:** Use `search_terms` to find objects in the dataset.
+  - **BM25 Creative Expansion:** The `search_terms` tool uses BM25 keyword matching. To be effective, you must not simply repeat the user's query. Instead, creatively expand the `query_terms` list to include synonyms, related objects, or likely containers where an item might be found.
+    - _Example:_ If asked "Where is my beverage?", search for `["beverage", "coffee machine", "tea", "vending machine", "cup", "mug", "soda"]`.
+    - _Example:_ If asked "Find a place to sit," search for `["chair", "stool", "sofa", "armchair", "bench"]`."""

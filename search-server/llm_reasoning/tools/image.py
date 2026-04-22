@@ -90,3 +90,5 @@ GET_IMAGES_TOOL = {
 }
 
 GET_IMAGES_THINKING_TEXT = "Retrieving images of component..."
+
+GET_IMAGES_DESCRIPTION = """- **Image Tool:** Use `get_images` to get the top N views of a specific component. The images show the component from different angles. Returns a dictionary containing an 'images' list with Base64 encoded data URLs. This can be used to look at the appearance of the component like its color, shape, brand, etc. It can also be used to see the state of the component (e.g. if it is open or closed, on or off, messy or tidy, etc.). Generally, 2-3 images are enough to get a good sense of the component."""
