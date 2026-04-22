@@ -3,15 +3,41 @@
 from __future__ import annotations
 
 from typing import Any
+import json
 
 from spatial_db import database
 from .utils import _get_dataset_name
+
+
+def _get_bbox_json(bbox_str: str | dict | None) -> dict:
+    if isinstance(bbox_str, dict):
+        return bbox_str
+    if isinstance(bbox_str, str) and bbox_str:
+        try:
+            return json.loads(bbox_str)
+        except Exception:
+            return {}
+    return {}
+
+
+def _is_within_xy_limits(target_bbox: dict, n_bbox: dict) -> bool:
+    target_min = target_bbox.get("min")
+    target_max = target_bbox.get("max")
+    n_min = n_bbox.get("min")
+    n_max = n_bbox.get("max")
+    
+    if target_min and target_max and n_min and n_max:
+        return (target_min[0] <= n_max[0] and target_max[0] >= n_min[0] and
+                target_min[1] <= n_max[1] and target_max[1] >= n_min[1])
+    
+    return True
 
 
 def search_around_component(
     component_id: int,
     radius: float,
     search_term: str | None = None,
+    direction: str | None = None,
     dataset_name: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -32,9 +58,35 @@ def search_around_component(
 
     # Get all components in a radius around the selected component
     neighbors = database.fetch_components_in_radius(resolved_dataset, component_id, radius)
+    
+    if direction in ("above", "below"):
+        target_info = database.fetch_component_info(resolved_dataset, component_id)
+        target_z = None
+        if target_info:
+            target_bbox = _get_bbox_json(target_info.get("bbox_json"))
+            if "center" in target_bbox:
+                target_z = target_bbox["center"][2]
+                
+        if target_z is not None:
+            filtered_neighbors = []
+            for n in neighbors:
+                n_bbox = _get_bbox_json(n.get("bbox_json"))
+                if "center" in n_bbox:
+                    n_z = n_bbox["center"][2]
+                    
+                    if direction == "above" and n_z <= target_z:
+                        continue
+                    if direction == "below" and n_z >= target_z:
+                        continue
+                        
+                    if not _is_within_xy_limits(target_bbox, n_bbox):
+                        continue
+                        
+                    filtered_neighbors.append(n)
+            neighbors = filtered_neighbors
     if not neighbors:
         return {
-            "component_ids": [],
+            "components": [],
             "reason": f"No neighboring components found within {radius} meters."
         }
         
@@ -48,13 +100,30 @@ def search_around_component(
             apply_elbow=False,
             candidate_ids=neighbor_ids
         )
+        
+        components = []
+        for r in result.get("results", []):
+            components.append({
+                "id": r["component_id"],
+                "caption": r.get("caption", ""),
+                "bbox": r.get("bbox", {})
+            })
+            
         return {
-            "component_ids": result.get("component_ids", []),
+            "components": components,
             "reason": f"Filtered {len(neighbor_ids)} neighbors using BM25. " + result.get("reason", "")
         }
     else:
+        components = []
+        for n in neighbors:
+            components.append({
+                "id": n["component_id"],
+                "caption": n.get("caption", ""),
+                "bbox": _get_bbox_json(n.get("bbox_json"))
+            })
+            
         return {
-            "component_ids": neighbor_ids,
+            "components": components,
             "reason": f"Found {len(neighbor_ids)} neighboring components within {radius}m."
         }
 
@@ -77,6 +146,11 @@ SEARCH_AROUND_COMPONENT_TOOL = {
             "search_term": {
                 "type": "string",
                 "description": "Optional text to filter the neighboring components by.",
+            },
+            "direction": {
+                "type": "string",
+                "description": "Optional direction to filter components relative to the target ('above' or 'below').",
+                "enum": ["above", "below"]
             },
         },
         "required": ["component_id", "radius"],
