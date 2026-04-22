@@ -1,0 +1,6 @@
+requests
+nltk
+evaluate
+unbabel-comet
+pycocoevalcap
+numpy
