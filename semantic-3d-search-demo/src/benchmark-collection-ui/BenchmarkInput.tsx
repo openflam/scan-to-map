@@ -71,6 +71,8 @@ function BenchmarkInput({
 
       if (resp.result && resp.result.error) {
         setDistanceResult(`Error: ${resp.result.error}`);
+      } else if (resp.result && resp.result.distance !== undefined) {
+        setDistanceResult(`${Number(resp.result.distance).toFixed(2)} meters`);
       } else if (resp.result !== undefined) {
         setDistanceResult(`${Number(resp.result).toFixed(2)} meters`);
       } else {
