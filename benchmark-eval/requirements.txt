@@ -4,3 +4,4 @@ evaluate
 unbabel-comet
 pycocoevalcap
 numpy
+matplotlib

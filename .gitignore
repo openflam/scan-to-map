@@ -1,7 +1,6 @@
 # Large files and directories to be ignored
 data
-benchmark_data
-benchmark_results
+benchmark
 checkpoints
 outputs
 outputs_old

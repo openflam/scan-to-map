@@ -862,7 +862,7 @@ def save_benchmark():
     if not data:
         return jsonify({"error": "No JSON payload provided"}), 400
 
-    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark" / "data"
     benchmark_dir.mkdir(parents=True, exist_ok=True)
 
     benchmark_name = data.get("benchmark_name")
@@ -889,7 +889,7 @@ def save_benchmark():
 
 @app.route("/get_benchmark_names", methods=["GET"])
 def get_benchmark_names():
-    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark" / "data"
     if not benchmark_dir.exists():
         return jsonify({"names": []})
 
@@ -905,7 +905,7 @@ def get_benchmark():
     if not name:
         return jsonify({"error": "name parameter is required"}), 400
 
-    benchmark_dir = Path(__file__).parent / ".." / "benchmark_data"
+    benchmark_dir = Path(__file__).parent / ".." / "benchmark" / "data"
     
     # We apply same filtering logic as saving
     import re

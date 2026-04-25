@@ -40,7 +40,7 @@ services:
       # (Path(__file__).parent / ".." / "data"  →  /app/data)
       - ./data:/app/data:ro
       - ./outputs:/app/outputs
-      - ./benchmark_data:/app/benchmark_data
+      - ./benchmark:/app/benchmark
     depends_on:
       postgis:
         condition: service_healthy
