@@ -654,7 +654,8 @@ def add_component():
     if image_base64:
         try:
             # Create the directory for the crops
-            crops_dir = Path(__file__).parent / ".." / "outputs" / dataset_name / "crops" / f"component_{component_id}"
+            crops_base_dir = Path(__file__).parent / ".." / "outputs" / dataset_name / "crops"
+            crops_dir = crops_base_dir / f"component_{component_id}"
             crops_dir.mkdir(parents=True, exist_ok=True)
             
             # Save the image
@@ -663,6 +664,29 @@ def add_component():
             image_data = base64.b64decode(image_base64)
             with open(image_path, "wb") as f:
                 f.write(image_data)
+                
+            # Update manifest.json
+            manifest_path = crops_base_dir / "manifest.json"
+            manifest_data = {}
+            if manifest_path.exists():
+                try:
+                    with open(manifest_path, "r") as f:
+                        manifest_data = json.load(f)
+                except Exception as e:
+                    print(f"Warning: could not read manifest.json: {e}")
+                    
+            manifest_data[str(component_id)] = {
+                "crops": [
+                    {
+                        "crop_filename": best_crop,
+                        "fraction_visible": 1.0
+                    }
+                ]
+            }
+            
+            with open(manifest_path, "w") as f:
+                json.dump(manifest_data, f, indent=2)
+                
         except Exception as e:
             print(f"Failed to save image for component {component_id}: {e}")
 
