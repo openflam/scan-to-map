@@ -298,6 +298,44 @@ export async function updateComponent(
   }
 }
 
+export async function addComponent(
+  datasetName: string,
+  caption: string,
+  bbox: { corners: [number, number, number][] },
+  imageBase64: string | null = null
+): Promise<{ component_id: string; caption: string; bbox: object; best_crop: string; added: boolean }> {
+  console.log("Adding component:", datasetName, caption);
+
+  try {
+    const response = await fetch(`${SEARCH_SERVER_URL}/add_component`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dataset_name: datasetName,
+        caption: caption,
+        bbox: bbox,
+        image_base64: imageBase64,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Add component request failed: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+    console.log("Added component:", data);
+
+    return data;
+  } catch (error) {
+    console.error("Error adding component:", error);
+    throw error;
+  }
+}
+
 export async function callTool(
   toolName: string,
   args: any,

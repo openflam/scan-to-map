@@ -5,6 +5,8 @@ import * as THREE from "three";
 import type { BoundingBox, Route } from "./types/global";
 import ComponentDetails from "./ComponentDetails";
 import BenchmarkComponentDetails from "./benchmark-collection-ui/BenchmarkComponentDetails";
+import AddComponent from "./AddComponent";
+import { styles as addComponentStyles } from "./addComponentStyles";
 import type { GizmoMode } from "./ComponentDetails";
 import Model from "./viewer/Model";
 import BoundingBoxMesh from "./viewer/BoundingBoxMesh";
@@ -127,6 +129,26 @@ export default function Model3DViewer({
   );
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [isAddingComponent, setIsAddingComponent] = useState(false);
+
+  const handleAddComponentClick = () => {
+    setIsAddingComponent(true);
+    handleDeselect();
+    const s = 0.5;
+    setEditedBBox({
+      corners: [
+        [-s, -s, -s],
+        [s, -s, -s],
+        [s, s, -s],
+        [-s, s, -s],
+        [-s, -s, s],
+        [s, -s, s],
+        [s, s, s],
+        [-s, s, s],
+      ]
+    });
+    setIsEditing(true);
+  };
 
   // Disable OrbitControls as soon as the gizmo is visible so it never
   // interferes with pointer events intended for TransformControls.
@@ -165,12 +187,13 @@ export default function Model3DViewer({
 
   // Initialise editedBBox when entering edit mode
   useEffect(() => {
+    if (isAddingComponent) return;
     if (isEditing) {
       setEditedBBox(selectedBBoxData);
     } else {
       setEditedBBox(null);
     }
-  }, [isEditing, selectedBBoxData]);
+  }, [isEditing, selectedBBoxData, isAddingComponent]);
 
   // Clear the save warning whenever the selection changes
   useEffect(() => {
@@ -199,11 +222,8 @@ export default function Model3DViewer({
         caption: captionToSave,
       };
       if (bboxToSave) {
-        // Invert the axis swap applied when loading from the server:
-        //   viewer.x = server[1], viewer.y = server[2], viewer.z = server[0]
-        // → server[0] = viewer.z, server[1] = viewer.x, server[2] = viewer.y
         updates.bbox = {
-          corners: bboxToSave.corners.map(c => [c[2], c[0], c[1]]) as [number, number, number][]
+          corners: bboxToSave.corners as [number, number, number][]
         };
       }
       await updateComponent(currentComponentId, updates, datasetName);
@@ -284,7 +304,30 @@ export default function Model3DViewer({
     >
       <KeyboardControls map={keyboardMap}>
         {/* --- HTML OVERLAY --- */}
-        {hasSelection &&
+        {!isAddingComponent && (
+          <button
+            onClick={handleAddComponentClick}
+            style={addComponentStyles.openButton}
+          >
+            Add Component +
+          </button>
+        )}
+
+        {isAddingComponent && (
+          <AddComponent 
+            onDismiss={() => {
+              setIsAddingComponent(false);
+              setIsEditing(false);
+              setEditedBBox(null);
+            }}
+            gizmoMode={gizmoMode}
+            onGizmoModeChange={setGizmoMode}
+            datasetName={datasetName}
+            editedBBox={editedBBox}
+          />
+        )}
+
+        {hasSelection && !isAddingComponent &&
           (isBenchmark ? (
             <BenchmarkComponentDetails
               editedCaption={editedCaption}

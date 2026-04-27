@@ -160,6 +160,44 @@ def update_component(dataset_name: str, component_id: int, caption: str | None, 
     finally:
         con.close()
 
+def get_next_component_id(dataset_name: str) -> int:
+    table = get_table_name(dataset_name)
+    con = _pg_conn()
+    try:
+        with con.cursor() as cur:
+            cur.execute(f'SELECT COALESCE(MAX(component_id), 0) + 1 FROM "{table}"')
+            return cur.fetchone()[0]
+    finally:
+        con.close()
+
+def add_row(dataset_name: str, component_id: int, caption: str, bbox: dict, best_crop: str) -> int:
+    table = get_table_name(dataset_name)
+    con = _pg_conn()
+    try:
+        with con.cursor() as cur:
+            bbox_json = json.dumps(bbox)
+            geom_wkt = _linestring_z(bbox)
+            if geom_wkt:
+                cur.execute(
+                    f'''
+                    INSERT INTO "{table}" (component_id, caption, bbox_json, best_crop, bbox_geom)
+                    VALUES (%s, %s, %s, %s, ST_GeomFromText(%s, 0))
+                    ''',
+                    (component_id, caption, bbox_json, best_crop, geom_wkt)
+                )
+            else:
+                cur.execute(
+                    f'''
+                    INSERT INTO "{table}" (component_id, caption, bbox_json, best_crop)
+                    VALUES (%s, %s, %s, %s)
+                    ''',
+                    (component_id, caption, bbox_json, best_crop)
+                )
+            con.commit()
+            return cur.rowcount
+    finally:
+        con.close()
+
 def delete_component(dataset_name: str, component_id: int) -> int:
     table = get_table_name(dataset_name)
     con = _pg_conn()

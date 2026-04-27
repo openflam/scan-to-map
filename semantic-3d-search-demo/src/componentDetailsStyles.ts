@@ -3,10 +3,10 @@ import type { CSSProperties } from "react";
 export const styles = {
   panel: {
     position: "absolute",
-    top: "20px",
+    top: "70px",
     right: "20px",
     width: "300px",
-    maxHeight: "calc(100% - 40px)",
+    maxHeight: "calc(100% - 90px)",
     overflowY: "auto",
     zIndex: 10,
     backgroundColor: "rgba(255, 255, 255, 0.95)",

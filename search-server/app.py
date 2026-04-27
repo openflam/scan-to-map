@@ -111,21 +111,33 @@ def transform_coordinates(coords):
     return [coords[1], coords[2], coords[0]]
 
 
-def transform_bbox(bbox):
+def transform_bbox(bbox, transform_type="COLMAP_to_3DViewer"):
     """
-    Transform bounding box from COLMAP coordinate system to Model3DViewer coordinate system.
+    Transform bounding box coordinate system.
 
     Args:
         bbox: Bounding box dictionary with 'corners' key
+        transform_type: Type of transform to apply
 
     Returns:
         Transformed bounding box dictionary with 'corners'
     """
-    return {
-        "corners": [
-            [c[1], c[2], c[0]] for c in bbox.get("corners", [])
-        ]
-    }
+    if not bbox or "corners" not in bbox:
+        return bbox
+
+    if transform_type == "COLMAP_to_3DViewer":
+        return {
+            "corners": [
+                [c[1], c[2], c[0]] for c in bbox.get("corners", [])
+            ]
+        }
+    elif transform_type == "3DViewer_to_COLMAP":
+        return {
+            "corners": [
+                [c[2], c[0], c[1]] for c in bbox.get("corners", [])
+            ]
+        }
+    return bbox
 
 
 def initialize_provider(method, dataset_name):
@@ -584,6 +596,9 @@ def update_component():
     if new_bbox is not None and "corners" not in new_bbox:
         return jsonify({"error": "bbox must have 'corners' key"}), 400
 
+    if new_bbox is not None:
+        new_bbox = transform_bbox(new_bbox, transform_type="3DViewer_to_COLMAP")
+
     try:
         comp_id_int = int(component_id)
     except (ValueError, TypeError):
@@ -602,6 +617,67 @@ def update_component():
     if new_bbox is not None:
         result["bbox"] = new_bbox
     return jsonify(result)
+
+
+@app.route("/add_component", methods=["POST"])
+def add_component():
+    """
+    Add component endpoint.
+    Creates a new component with the given information.
+    The component ID is automatically generated.
+    """
+    data = request.json
+    dataset_name = data.get("dataset_name")
+    caption = data.get("caption", "")
+    bbox = data.get("bbox", {})
+    image_base64 = data.get("image_base64")
+
+    if not dataset_name:
+        return jsonify({"error": "dataset_name is required"}), 400
+
+    if not database.check_dataset_exists(dataset_name):
+        return (
+            jsonify({"error": f"Dataset '{dataset_name}' not found in database."}),
+            404,
+        )
+
+    if bbox and "corners" not in bbox:
+        return jsonify({"error": "bbox must have 'corners' key if provided"}), 400
+
+    if bbox:
+        bbox = transform_bbox(bbox, transform_type="3DViewer_to_COLMAP")
+
+    # Auto-generate component_id
+    component_id = database.get_next_component_id(dataset_name)
+
+    best_crop = ""
+    if image_base64:
+        try:
+            # Create the directory for the crops
+            crops_dir = Path(__file__).parent / ".." / "outputs" / dataset_name / "crops" / f"component_{component_id}"
+            crops_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save the image
+            best_crop = "user_upload.jpg"
+            image_path = crops_dir / best_crop
+            image_data = base64.b64decode(image_base64)
+            with open(image_path, "wb") as f:
+                f.write(image_data)
+        except Exception as e:
+            print(f"Failed to save image for component {component_id}: {e}")
+
+    added = database.add_row(dataset_name, component_id, caption, bbox, best_crop)
+
+    if added == 0:
+        return jsonify({"error": "Failed to add component"}), 500
+
+    return jsonify({
+        "component_id": str(component_id),
+        "caption": caption,
+        "bbox": bbox,
+        "best_crop": best_crop,
+        "added": True
+    })
 
 
 @app.route("/delete_component", methods=["DELETE"])
