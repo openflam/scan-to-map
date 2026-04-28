@@ -1,6 +1,7 @@
 import { Form, Button, Accordion } from "react-bootstrap";
 import { useState, useEffect } from "react";
 import { parseResult } from "../SearchResult";
+import DropdownWithSearch from "./DropdownWithSearch";
 import {
   callTool,
   saveBenchmark,
@@ -26,26 +27,31 @@ function BenchmarkInput({
   const [benchmarkType, setBenchmarkType] = useState("Entity Search");
   const [benchmarkNamesList, setBenchmarkNamesList] = useState<string[]>([]);
 
-  useEffect(() => {
+  const refreshBenchmarks = () => {
     getBenchmarkNames().then(setBenchmarkNamesList).catch(console.error);
+  };
+
+  useEffect(() => {
+    refreshBenchmarks();
   }, []);
 
-  const handleNameChange = async (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const val = e.target.value;
+  const loadBenchmarkData = async (val: string) => {
+    try {
+      const data = await getBenchmark(val);
+      if (data.question !== undefined) setQuestion(data.question);
+      if (data.expected_answer !== undefined)
+        setExpectedAnswer(data.expected_answer);
+      if (data.benchmark_type !== undefined)
+        setBenchmarkType(data.benchmark_type);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleNameChange = (val: string) => {
     setBenchmarkName(val);
     if (benchmarkNamesList.includes(val)) {
-      try {
-        const data = await getBenchmark(val);
-        if (data.question !== undefined) setQuestion(data.question);
-        if (data.expected_answer !== undefined)
-          setExpectedAnswer(data.expected_answer);
-        if (data.benchmark_type !== undefined)
-          setBenchmarkType(data.benchmark_type);
-      } catch (err) {
-        console.error(err);
-      }
+      loadBenchmarkData(val);
     }
   };
 
@@ -86,8 +92,17 @@ function BenchmarkInput({
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const isFormValid =
+    benchmarkName.trim() !== "" &&
+    question.trim() !== "" &&
+    expectedAnswer.trim() !== "";
 
   const handleSave = async () => {
+    if (!isFormValid) {
+      return;
+    }
     setIsSaving(true);
     try {
       await saveBenchmark(
@@ -97,6 +112,9 @@ function BenchmarkInput({
         benchmarkName,
         benchmarkType,
       );
+      setSuccessMessage(`Saved ${benchmarkName}`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+      refreshBenchmarks();
       setQuestion("");
       setExpectedAnswer("");
       setBenchmarkName("");
@@ -163,17 +181,13 @@ function BenchmarkInput({
         <div className="d-flex justify-content-between align-items-center mb-1">
           <span className="text-secondary fw-bold">Name</span>
         </div>
-        <Form.Control
-          placeholder="Benchmark Name"
+        <DropdownWithSearch
+          options={benchmarkNamesList}
           value={benchmarkName}
           onChange={handleNameChange}
-          list="benchmark-names"
+          onSelect={handleNameChange}
+          placeholder="Benchmark Name"
         />
-        <datalist id="benchmark-names">
-          {benchmarkNamesList.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
       </div>
 
       <div className="d-flex flex-column mb-3" style={{ flex: "0 0 auto" }}>
@@ -249,7 +263,21 @@ function BenchmarkInput({
       </div>
 
       <div className="mt-auto d-flex justify-content-end">
-        <Button variant="primary" onClick={handleSave} disabled={isSaving}>
+        {successMessage && (
+          <div className="text-success me-3 align-self-center small fw-bold">
+            {successMessage}
+          </div>
+        )}
+        {!successMessage && !isFormValid && (
+          <div className="text-danger me-3 align-self-center small">
+            Please fill out Name, Question, and Answer.
+          </div>
+        )}
+        <Button
+          variant="primary"
+          onClick={handleSave}
+          disabled={isSaving || !isFormValid ? true : undefined}
+        >
           {isSaving ? "Saving..." : "Save"}
         </Button>
       </div>
