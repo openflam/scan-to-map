@@ -3,6 +3,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+import pandas as pd
 from math import pi
 from collections import defaultdict
 import csv
@@ -75,7 +76,7 @@ def get_spider_plot(metric_name, data_array):
     plt.close()
     print(f"Saved {metric_name} plot to {out_path}")
 
-def save_csv_table(metric_name, data_array):
+def save_summay_csv_table(metric_name, data_array):
     """
     Saves a CSV table for a given metric where rows are ablation categories, 
     columns are benchmark_type, and an additional column aggregates across all types.
@@ -150,7 +151,7 @@ def main():
         # Generate plot and table for this metric
         if data_array:
             get_spider_plot(metric_name, data_array)
-            save_csv_table(metric_name, data_array)
+            save_summay_csv_table(metric_name, data_array)
 
 if __name__ == "__main__":
     main()

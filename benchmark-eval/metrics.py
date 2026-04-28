@@ -74,7 +74,7 @@ def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_com
     # COMET
     if comet_metric is not None and expected_text:
         try:
-            comet_result = comet_metric.compute(sources=[question], predictions=[predicted_text], references=[[expected_text]])
+            comet_result = comet_metric.compute(sources=[question], predictions=[predicted_text], references=[expected_text])
             metrics['COMET'] = comet_result['scores'][0]
         except Exception as e:
             print(f"Error computing COMET: {e}")
@@ -144,6 +144,20 @@ def aggregate_from_files(results_dir_path, metrics_dir_path, comet_metric=None):
         out_d.mkdir(parents=True, exist_ok=True)
         
         for result_file in d.glob("*_result.json"):
+            out_result_file = out_d / result_file.name
+            
+            # Check if metrics already calculated
+            if out_result_file.exists():
+                try:
+                    with open(out_result_file, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                    if "metrics" in existing_data:
+                        results.append(existing_data)
+                        print(f"Skipping {result_file.name} as metrics already calculated")
+                        continue
+                except json.JSONDecodeError:
+                    pass
+
             with open(result_file, 'r', encoding='utf-8') as f:
                 try:
                     data = json.load(f)
@@ -162,7 +176,6 @@ def aggregate_from_files(results_dir_path, metrics_dir_path, comet_metric=None):
             data["metrics"] = metrics
             
             # Save metrics to independent file in metrics directory
-            out_result_file = out_d / result_file.name
             with open(out_result_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=4)
                 
