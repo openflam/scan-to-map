@@ -43,19 +43,21 @@ def get_distance(
     except json.JSONDecodeError:
         raise ValueError("Invalid bbox JSON in the database.")
 
-    if "min" not in bbox1 or "max" not in bbox1 or "min" not in bbox2 or "max" not in bbox2:
-        raise ValueError("Missing min/max in component bounding box.")
+    corners1 = bbox1.get("corners")
+    corners2 = bbox2.get("corners")
 
-    center1 = [
-        (bbox1["min"][0] + bbox1["max"][0]) / 2.0,
-        (bbox1["min"][1] + bbox1["max"][1]) / 2.0,
-        (bbox1["min"][2] + bbox1["max"][2]) / 2.0,
-    ]
-    center2 = [
-        (bbox2["min"][0] + bbox2["max"][0]) / 2.0,
-        (bbox2["min"][1] + bbox2["max"][1]) / 2.0,
-        (bbox2["min"][2] + bbox2["max"][2]) / 2.0,
-    ]
+    if not corners1 or not corners2:
+        raise ValueError("Missing corners in component bounding box.")
+
+    def get_center(corners):
+        return [
+            sum(c[0] for c in corners) / len(corners),
+            sum(c[1] for c in corners) / len(corners),
+            sum(c[2] for c in corners) / len(corners),
+        ]
+
+    center1 = get_center(corners1)
+    center2 = get_center(corners2)
 
     distance = math.sqrt(
         (center1[0] - center2[0]) ** 2 +
