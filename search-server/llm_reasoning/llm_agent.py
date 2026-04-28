@@ -120,7 +120,7 @@ class LLMAgent:
 
         wrapped_on_stream_event = None
         if on_stream_event:
-            def _wrapped_handler(event: dict[str, Any], redacted_thinking: bool = True) -> None:
+            def _wrapped_handler(event: dict[str, Any], redacted_thinking: bool = False) -> None:
                 event_type = event.get("type")
                 if event_type == "assistant_reasoning_delta":
                     on_stream_event({"type": "thinking", "content": event.get("delta", "")})
