@@ -1,28 +1,61 @@
 import os
+import sys
 import json
 import string
 import argparse
 from pathlib import Path
 import numpy as np
+import concurrent.futures
 
-try:
-    import nltk
-    from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-    from nltk.translate.meteor_score import meteor_score
-    import evaluate
-    from pycocoevalcap.cider.cider import Cider
-    
-    # Ensure necessary NLTK data is downloaded
-    nltk.download('wordnet', quiet=True)
-except ImportError:
-    print("Warning: Please install requirements using `pip install -r requirements.txt`")
+# Add search-server to path to import LLMCaller
+sys.path.append(str(Path(__file__).parent.parent / "search-server"))
+from llm_reasoning.llm_call import LLMCaller
+
+import nltk
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from nltk.translate.meteor_score import meteor_score
+
+# Ensure necessary NLTK data is downloaded
+nltk.download('wordnet', quiet=True)
+
+# Force load WordNet to avoid thread-safety issues with LazyCorpusLoader in ThreadPoolExecutor
+nltk.corpus.wordnet.ensure_loaded()
 
 def normalize_text(text):
     """Simple text normalization: lowercase and remove punctuation."""
     text = text.lower()
     return text.translate(str.maketrans('', '', string.punctuation))
 
-def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_compo, question, comet_metric=None):
+def compute_ai_judge(expected_text, predicted_text):
+    """
+    Calls an LLM to rate the similarity between the expected and predicted text.
+    Returns a normalized score between 0.0 and 1.0.
+    """
+    if not expected_text or not predicted_text or LLMCaller is None:
+        return 0.0
+        
+    try:
+        caller = LLMCaller(model="gpt-4o-mini", max_completion_tokens=50)
+        prompt_path = Path(__file__).parent / "ai_judge_prompt.md"
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            prompt_template = f.read()
+        prompt = prompt_template.format(expected_text=expected_text, predicted_text=predicted_text)
+        
+        response = caller.stream_chat([
+            {"role": "user", "content": prompt}
+        ])
+        content = response.get("content", "").strip()
+        
+        import re
+        match = re.search(r'\b(10|[1-9])\b', content)
+        if match:
+            return float(match.group(1))
+        return 0.0
+    except Exception as e:
+        print(f"Error computing AI-Judge: {e}")
+        return 0.0
+
+def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_compo, question, disable_ai_judge=False):
     """
     Takes plain text and list of components for expected and predicted.
     Returns dictionary with evaluation metrics.
@@ -71,30 +104,9 @@ def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_com
         print(f"Error computing NLTK metrics: {e}")
         metrics['BLEU-1'] = metrics['BLEU-2'] = metrics['BLEU-3'] = metrics['BLEU-4'] = metrics['METEOR'] = 0.0
         
-    # COMET
-    if comet_metric is not None and expected_text:
-        try:
-            comet_result = comet_metric.compute(sources=[question], predictions=[predicted_text], references=[expected_text])
-            metrics['COMET'] = comet_result['scores'][0]
-        except Exception as e:
-            print(f"Error computing COMET: {e}")
-            metrics['COMET'] = 0.0
-    else:
-        metrics['COMET'] = 0.0
-
-    # CIDEr
-    # Pycocoevalcap usually processes a corpus directly. For a single string approximation:
-    try:
-        from pycocoevalcap.cider.cider import Cider
-        cider_scorer = Cider()
-        # format: dict mapping id to list of strings
-        res = {1: [predicted_text]}
-        gts = {1: [expected_text]}
-        score, _ = cider_scorer.compute_score(gts, res)
-        metrics['CIDER'] = score
-    except Exception as e:
-        print(f"Error computing CIDEr: {e}")
-        metrics['CIDER'] = 0.0
+    # AI-as-Judge
+    if not disable_ai_judge:
+        metrics['AI-Judge'] = compute_ai_judge(expected_text, predicted_text)
         
     return metrics
 
@@ -123,7 +135,44 @@ def aggregate_results(results_list):
         "aggregate_metrics": aggregate_metrics
     }
 
-def aggregate_from_files(results_dir_path, metrics_dir_path, comet_metric=None):
+def process_single_file(result_file, out_d, disable_ai_judge):
+    out_result_file = out_d / result_file.name
+    
+    # Check if metrics already calculated
+    if out_result_file.exists():
+        try:
+            with open(out_result_file, 'r', encoding='utf-8') as f:
+                existing_data = json.load(f)
+            if "metrics" in existing_data:
+                print(f"Skipping {result_file.name} as metrics already calculated")
+                return existing_data
+        except json.JSONDecodeError:
+            pass
+
+    with open(result_file, 'r', encoding='utf-8') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Failed to read {result_file.name}")
+            return None
+    
+    # Calculate metrics
+    exp_text = data.get("expected_text", "")
+    exp_comp = data.get("expected_components", [])
+    pred_text = data.get("predicted_text", "")
+    pred_comp = data.get("predicted_components", [])
+    question = data.get("question", "")
+    
+    metrics = evaluate_answer(exp_text, exp_comp, pred_text, pred_comp, question, disable_ai_judge)
+    data["metrics"] = metrics
+    
+    # Save metrics to independent file in metrics directory
+    with open(out_result_file, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+        
+    return data
+
+def aggregate_from_files(results_dir_path, metrics_dir_path, disable_ai_judge=False):
     """
     Reads all individual result JSON files from results_dir_path and its subdirectories, 
     computes missing metrics, saves them to metrics_dir_path, and calculates aggregate metrics.
@@ -143,56 +192,37 @@ def aggregate_from_files(results_dir_path, metrics_dir_path, comet_metric=None):
             
         out_d.mkdir(parents=True, exist_ok=True)
         
-        for result_file in d.glob("*_result.json"):
-            out_result_file = out_d / result_file.name
+        files_to_process = list(d.glob("*_result.json"))
+        if not files_to_process:
+            continue
             
-            # Check if metrics already calculated
-            if out_result_file.exists():
+        # Run in parallel with ThreadPoolExecutor
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [
+                executor.submit(process_single_file, f, out_d, disable_ai_judge)
+                for f in files_to_process
+            ]
+            
+            for future in concurrent.futures.as_completed(futures):
                 try:
-                    with open(out_result_file, 'r', encoding='utf-8') as f:
-                        existing_data = json.load(f)
-                    if "metrics" in existing_data:
-                        results.append(existing_data)
-                        print(f"Skipping {result_file.name} as metrics already calculated")
-                        continue
-                except json.JSONDecodeError:
-                    pass
-
-            with open(result_file, 'r', encoding='utf-8') as f:
-                try:
-                    data = json.load(f)
-                except json.JSONDecodeError:
-                    print(f"Failed to read {result_file.name}")
-                    continue
-            
-            # Calculate metrics
-            exp_text = data.get("expected_text", "")
-            exp_comp = data.get("expected_components", [])
-            pred_text = data.get("predicted_text", "")
-            pred_comp = data.get("predicted_components", [])
-            question = data.get("question", "")
-            
-            metrics = evaluate_answer(exp_text, exp_comp, pred_text, pred_comp, question, comet_metric)
-            data["metrics"] = metrics
-            
-            # Save metrics to independent file in metrics directory
-            with open(out_result_file, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-                
-            results.append(data)
+                    res = future.result()
+                    if res is not None:
+                        results.append(res)
+                except Exception as e:
+                    print(f"Error processing file: {e}")
                     
         if not results:
             continue
             
         aggregate_data = aggregate_results(results)
         
-        agg_out_path = out_d / "aggregate_results.json"
-        with open(agg_out_path, 'w', encoding='utf-8') as f:
-            json.dump(aggregate_data, f, indent=4)
+        # agg_out_path = out_d / "aggregate_results.json"
+        # with open(agg_out_path, 'w', encoding='utf-8') as f:
+        #     json.dump(aggregate_data, f, indent=4)
             
-        all_out_path = out_d / "all_results.json"
-        with open(all_out_path, 'w', encoding='utf-8') as f:
-            json.dump(results, f, indent=4)
+        # all_out_path = out_d / "all_results.json"
+        # with open(all_out_path, 'w', encoding='utf-8') as f:
+        #     json.dump(results, f, indent=4)
             
         print(f"Calculated and saved metrics from {len(results)} files to {out_d.absolute()}.")
 
@@ -208,6 +238,11 @@ def main():
         default=None, 
         help="Directory to save the JSON metrics. Defaults to benchmark/metrics in repo root."
     )
+    parser.add_argument(
+        "--disable_ai_judge", 
+        action="store_true",
+        help="Disable the AI-as-judge similarity metric."
+    )
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent.parent
@@ -218,17 +253,7 @@ def main():
         print(f"Error: Directory {results_dir} does not exist.")
         return
 
-    # Load COMET metric once to save time
-    comet_metric = None
-    try:
-        import evaluate
-        print("Loading COMET model (this could take a while on first run)...")
-        # Load a standard comet model or a fast implementation
-        comet_metric = evaluate.load("comet")
-    except Exception as e:
-        print(f"Could not load COMET evaluator. COMET scores will be 0. Error: {e}")
-
-    aggregate_from_files(results_dir, metrics_dir, comet_metric)
+    aggregate_from_files(results_dir, metrics_dir, disable_ai_judge=args.disable_ai_judge)
 
 if __name__ == "__main__":
     main()

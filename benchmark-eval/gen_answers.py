@@ -127,11 +127,13 @@ def main():
         return
 
     configs = {
-        # "all_tools": None,
         "no_tools": [],
         "search_only": ["search_terms"],
         "search_distance": ["search_terms", "get_distance"],
         "search_distance_around": ["search_terms", "get_distance", "search_around_component"],
+        "search_dist_around_image": ["search_terms", "get_distance", "search_around_component", "get_images"],
+        "search_dist_around_image_exec": ["search_terms", "get_distance", "search_around_component", "get_images", "execute_python"],
+        "only_exec": ["execute_python"],
     }
 
     evaluations_successful = False
@@ -147,6 +149,13 @@ def main():
         
         config_successful = False
         for file_path in json_files:
+            indiv_out_path = config_out_dir / f"{file_path.stem}_result.json"
+            if indiv_out_path.exists():
+                print(f"Skipping {file_path.name} [{config_name}] as it is already evaluated.")
+                config_successful = True
+                evaluations_successful = True
+                continue
+
             print(f"--- Evaluating {file_path.name} [{config_name}] ---")
             dataset_name, question, exp_text, exp_comp, benchmark_type = get_question_answer_from_json(file_path)
             
