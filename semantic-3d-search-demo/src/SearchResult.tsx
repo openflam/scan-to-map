@@ -6,12 +6,14 @@ interface SearchResultProps {
   thinking?: string;
   isLoading?: boolean;
   componentIds?: string[];
+  componentColors?: string[];
   onComponentClick?: (index: number) => void;
 }
 
 export const parseResult = (
   text: string,
   componentIds?: string[],
+  componentColors?: string[],
   onComponentClick?: (index: number) => void
 ) => {
   const regex = /<component_(\d+)>(.*?)<\/component_\1>/g;
@@ -30,11 +32,13 @@ export const parseResult = (
     const index = componentIds?.findIndex((id) => String(id) === componentId);
 
     if (index !== undefined && index !== -1) {
+      const color = componentColors?.[index] || "inherit";
       parts.push(
         <a
           key={match.index}
           href="#"
           className="text-decoration-none fw-bold"
+          style={{ color }}
           onClick={(e) => {
             e.preventDefault();
             if (onComponentClick) onComponentClick(index);
@@ -76,6 +80,7 @@ function SearchResult({
   thinking,
   isLoading,
   componentIds,
+  componentColors,
   onComponentClick,
 }: SearchResultProps) {
   const [isRaw, setIsRaw] = useState(false);
@@ -132,7 +137,7 @@ function SearchResult({
             </div>
           ) : result ? (
             <p className="mb-0 text-break" style={{ whiteSpace: "pre-line", wordBreak: "break-word" }}>
-              {isRaw ? result : parseResult(result, componentIds, onComponentClick)}
+              {isRaw ? result : parseResult(result, componentIds, componentColors, onComponentClick)}
             </p>
           ) : !thinking ? (
             <p className="text-muted mb-0">No search results yet</p>

@@ -241,7 +241,12 @@ function BenchmarkInput({
             }}
           >
             {expectedAnswer ? (
-              parseResult(expectedAnswer, componentIds, onComponentClick)
+              parseResult(
+                expectedAnswer,
+                componentIds,
+                componentIds?.map(() => "red"),
+                onComponentClick,
+              )
             ) : (
               <span className="text-muted">No content to preview</span>
             )}

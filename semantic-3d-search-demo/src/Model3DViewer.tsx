@@ -20,6 +20,7 @@ interface Model3DViewerProps {
   boundingBox?: BoundingBox[];
   captions?: string[];
   componentIds?: string[];
+  componentColors?: string[];
   autoTagBBoxes?: BoundingBox[];
   showAutoTags?: boolean;
   occupancyGrid?: BoundingBox[];
@@ -90,6 +91,7 @@ export default function Model3DViewer({
   boundingBox,
   captions,
   componentIds,
+  componentColors,
   autoTagBBoxes,
   showAutoTags,
   occupancyGrid,
@@ -410,11 +412,12 @@ export default function Model3DViewer({
               savedId && savedBBoxMap.has(savedId)
                 ? savedBBoxMap.get(savedId)!
                 : bbox;
+            const color = componentColors?.[i] || "red";
             return (
               <BoundingBoxMesh
                 key={`bbox-${i}`}
                 bbox={displayBBox}
-                color="red"
+                color={color}
                 opacity={0.3}
                 onClick={() => {
                   setSelectedBBoxIndex(i);

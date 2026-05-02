@@ -20,6 +20,7 @@ function App() {
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [captions, setCaptions] = useState<string[]>([]);
   const [componentIds, setComponentIds] = useState<string[]>([]);
+  const [componentColors, setComponentColors] = useState<string[]>([]);
   const [showAutoTags, setShowAutoTags] = useState(false);
   const [showOccupancyGrid, setShowOccupancyGrid] = useState(false);
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
@@ -81,6 +82,7 @@ function App() {
             setBoundingBox(result.components.map((c: any) => c.bbox));
             setCaptions(result.components.map((c: any) => c.caption));
             setComponentIds(result.components.map((c: any) => c.component_id));
+            setComponentColors(result.components.map((_: any, i: number) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`));
             setSearchResult(result.reason);
             setSearchTime(result.search_time_ms);
           } else if (event.type === "error") {
@@ -100,6 +102,7 @@ function App() {
       setBoundingBox(result.components.map((c) => c.bbox));
       setCaptions(result.components.map((c) => c.caption));
       setComponentIds(result.components.map((c) => c.component_id));
+      setComponentColors(result.components.map((_, i) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`));
       setSearchResult(result.reason);
       setSearchTime(result.search_time_ms);
       setIsLoading(false);
@@ -118,6 +121,7 @@ function App() {
     setBoundingBox([sourceBBox, destinationBBox]);
     setCaptions(["Source", "Destination"]);
     setComponentIds([]); // Clear component IDs for directions mode
+    setComponentColors(["hsl(0, 70%, 50%)", "hsl(120, 70%, 50%)"]); // Red and Green
     setFocusedComponentIndex(null);
     // Combine the reasons
     const combinedReason = `Source: ${sourceReason}\n\nDestination: ${destinationReason}`;
@@ -167,6 +171,7 @@ function App() {
               thinking={thinking}
               isLoading={isLoading}
               componentIds={componentIds}
+              componentColors={componentColors}
               onComponentClick={(i: number) => setFocusedComponentIndex(i)}
             />
           </div>
@@ -199,6 +204,7 @@ function App() {
             boundingBox={boundingBox}
             captions={captions}
             componentIds={componentIds}
+            componentColors={componentColors}
             autoTagBBoxes={autoTagBBoxes}
             showAutoTags={showAutoTags}
             occupancyGrid={occupancyGrid}

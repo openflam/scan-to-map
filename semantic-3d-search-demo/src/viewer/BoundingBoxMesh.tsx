@@ -64,7 +64,7 @@ export default function BoundingBoxMesh({
   const maxY = useMemo(() => Math.max(...corners.map((c) => c[1])), [corners]);
 
   const finalOpacity = isDimmed ? 0.05 : isSelected ? 0.6 : opacity;
-  const finalColor = isSelected ? "#3b82f6" : color;
+  const finalColor = color;
 
   return (
     <group>
