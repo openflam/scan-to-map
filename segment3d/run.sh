@@ -22,7 +22,7 @@ python -m src.objects_inventory.orchestrator --dataset "$DATASET_NAME" --batch-s
 python -m src.objects_inventory.normalize_labels --dataset "$DATASET_NAME" --distance-threshold 0.05 --skip-lemmatize
 
 # Step 2: Run SAM3
-python src/per_object_sam3/sam3_runner.py --dataset "$DATASET_NAME"
+python -m src.per_object_sam3.sam3_runner --dataset "$DATASET_NAME"
 
 # Step 3: Post-SAM3 pipeline
 python -m src.per_object_sam3.postsam3_pipeline --dataset "$DATASET_NAME" --skip-caption

@@ -162,19 +162,33 @@ def identify_all_frames_cli(
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(per_frame_objects, f, indent=2)
 
+    # Object count statistics
+    object_counts = [len(v) for v in per_frame_objects.values()]
+    avg_objects = sum(object_counts) / len(object_counts) if object_counts else 0.0
+    min_objects = min(object_counts) if object_counts else 0
+    max_objects = max(object_counts) if object_counts else 0
+
     # Save statistics
-    stats = {
-        "total_frames_processed": total_processed,
-        "total_runtime_seconds": total_runtime,
-        "frames_per_second": fps,
-        "batch_size": batch_size,
-        "identifier_type": identifier_type,
-        "model": model,
-        "device": device,
+    from ..utils.save_runtime_stats import save_runtime_stats
+    
+    step_stats = {
+        "duration_seconds": total_runtime,
+        "status": "completed",
+        "parameters": {
+            "total_frames_processed": total_processed,
+            "frames_per_second": fps,
+            "batch_size": batch_size,
+            "identifier_type": identifier_type,
+            "model": model,
+            "device": device,
+            "avg_objects_per_frame": avg_objects,
+            "min_objects_per_frame": min_objects,
+            "max_objects_per_frame": max_objects,
+        }
     }
-    stats_path = inventory_dir / "objects_inventory_stats.json"
-    with stats_path.open("w", encoding="utf-8") as f:
-        json.dump(stats, f, indent=2)
+    save_runtime_stats(dataset_name, "identify_frames", step_stats)
+    
+    stats_path = outputs_dir / "runtime_stats.json"
 
     print(f"\n{'='*60}")
     print(f"Objects inventory complete!")
@@ -187,14 +201,11 @@ def identify_all_frames_cli(
     )
     print(f"  Frames per second: {fps:.2f}")
 
-    # Object count statistics
-    object_counts = [len(v) for v in per_frame_objects.values()]
     if object_counts:
-        avg_objects = sum(object_counts) / len(object_counts)
         print(f"\nObjects per frame statistics:")
         print(f"  Average: {avg_objects:.1f}")
-        print(f"  Min: {min(object_counts)}")
-        print(f"  Max: {max(object_counts)}")
+        print(f"  Min: {min_objects}")
+        print(f"  Max: {max_objects}")
 
 
 def main() -> None:

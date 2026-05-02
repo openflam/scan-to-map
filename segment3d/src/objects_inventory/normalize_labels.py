@@ -25,12 +25,16 @@ import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+import time
+from datetime import datetime
 
 import numpy as np
 import open_clip
 import spacy
 import torch
 from sklearn.cluster import AgglomerativeClustering
+
+from ..io_paths import load_config, get_outputs_dir
 
 
 # ---------------------------------------------------------------------------
@@ -627,6 +631,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    start_time = time.time()
+
     normalize_inventory_cli(
         dataset_name=args.dataset,
         distance_threshold=args.distance_threshold,
@@ -644,6 +651,28 @@ def main() -> None:
             dataset_name=args.dataset,
             min_sequence_length=args.min_sequence_length,
         )
+
+    end_time = time.time()
+    duration = end_time - start_time
+
+    from ..utils.save_runtime_stats import save_runtime_stats
+    
+    step_stats = {
+        "duration_seconds": duration,
+        "status": "completed",
+        "parameters": {
+            "normalize_distance_threshold": args.distance_threshold,
+            "normalize_clip_model": args.clip_model,
+            "normalize_clip_pretrained": args.clip_pretrained,
+            "normalize_skip_lemmatize": args.skip_lemmatize,
+            "normalize_fill_holes": args.fill_holes,
+            "normalize_max_gap": args.max_gap,
+            "normalize_objects_to_frames": args.objects_to_frames,
+            "normalize_min_sequence_length": args.min_sequence_length,
+        }
+    }
+    
+    save_runtime_stats(args.dataset, "normalize_labels", step_stats)
 
 
 if __name__ == "__main__":

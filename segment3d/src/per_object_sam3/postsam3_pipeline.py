@@ -214,50 +214,7 @@ def run_pipeline(
     total_steps = 7
     current_step = 0
 
-    runtime_stats = {
-        "dataset_name": dataset_name,
-        "pipeline_start_time": time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime(pipeline_start)
-        ),
-        "steps": {},
-        "parameters": {
-            "skip_association": skip_association,
-            "skip_graph": skip_graph,
-            "skip_clean": skip_clean,
-            "skip_bbox": skip_bbox,
-            "skip_segment_crops": skip_segment_crops,
-            "skip_caption": skip_caption,
-            "skip_clip": skip_clip,
-            "K": K,
-            "tau": tau,
-            "min_points": min_points,
-            "min_points_in_3d_segment": min_points_in_3d_segment,
-            "intersection_type": intersection_type,
-            "voxel_size_cm": voxel_size_cm,
-            "clip_distance_threshold": clip_distance_threshold,
-            "save_segment_images": save_segment_images,
-            "segment_dbscan_eps": segment_dbscan_eps,
-            "segment_dbscan_min_samples": segment_dbscan_min_samples,
-            "discard_objects_list": discard_objects_list,
-            "component_dbscan_eps": component_dbscan_eps,
-            "component_dbscan_min_samples": component_dbscan_min_samples,
-            "component_dbscan_min_points": component_dbscan_min_points,
-            "split_components": split_components,
-            "percentile": percentile,
-            "crop_type": crop_type,
-            "top_n": top_n,
-            "min_fraction": min_fraction,
-            "caption_n_images": caption_n_images,
-            "captioner_type": captioner_type,
-            "caption_model": caption_model,
-            "caption_device": caption_device,
-            "caption_batch_size": caption_batch_size,
-            "clip_model": clip_model,
-            "clip_pretrained": clip_pretrained,
-            "clip_batch_size": clip_batch_size,
-            "clip_device": clip_device,
-        },
-    }
+    from ..utils.save_runtime_stats import save_runtime_stats
 
     try:
         # Step 1: Associate 2D-3D
@@ -276,17 +233,22 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["1_associate_2d_3d"] = {
+            save_runtime_stats(dataset_name, "associate_2d_3d", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "segment_dbscan_eps": segment_dbscan_eps,
+                    "segment_dbscan_min_samples": segment_dbscan_min_samples,
+                    "discard_objects_list": discard_objects_list,
+                }
+            })
             print_step_complete(step_time)
         else:
             print("\nSkipping Step 1: 2D-3D Association (using existing associations)")
-            runtime_stats["steps"]["1_associate_2d_3d"] = {
+            save_runtime_stats(dataset_name, "associate_2d_3d", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Step 2: Build object mask graph
         if not skip_graph:
@@ -309,17 +271,27 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["2_build_mask_graph"] = {
+            save_runtime_stats(dataset_name, "build_mask_graph", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "K": K,
+                    "tau": tau,
+                    "min_points": min_points,
+                    "min_points_in_3d_segment": min_points_in_3d_segment,
+                    "intersection_type": intersection_type,
+                    "voxel_size_cm": voxel_size_cm,
+                    "clip_distance_threshold": clip_distance_threshold,
+                    "save_segment_images": save_segment_images,
+                }
+            })
             print_step_complete(step_time)
         else:
             print("\nSkipping Step 2: Mask Graph Building (using existing graph)")
-            runtime_stats["steps"]["2_build_mask_graph"] = {
+            save_runtime_stats(dataset_name, "build_mask_graph", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Step 3: Clean connected components
         if not skip_clean:
@@ -338,19 +310,25 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["3_clean_components"] = {
+            save_runtime_stats(dataset_name, "clean_components", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "component_dbscan_eps": component_dbscan_eps,
+                    "component_dbscan_min_samples": component_dbscan_min_samples,
+                    "component_dbscan_min_points": component_dbscan_min_points,
+                    "split_components": split_components,
+                }
+            })
             print_step_complete(step_time)
         else:
             print(
                 "\nSkipping Step 3: Component Cleaning (using existing connected_components.json)"
             )
-            runtime_stats["steps"]["3_clean_components"] = {
+            save_runtime_stats(dataset_name, "clean_components", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Step 4: Compute 3D bounding boxes
         if not skip_bbox:
@@ -361,19 +339,22 @@ def run_pipeline(
             get_all_bbox_corners_cli(dataset_name=dataset_name, percentile=percentile)
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["4_compute_bboxes"] = {
+            save_runtime_stats(dataset_name, "compute_bboxes", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "percentile": percentile,
+                }
+            })
             print_step_complete(step_time)
         else:
             print(
                 "\nSkipping Step 4: 3D Bounding Box Computation (using existing bbox_corners.json)"
             )
-            runtime_stats["steps"]["4_compute_bboxes"] = {
+            save_runtime_stats(dataset_name, "compute_bboxes", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Step 5: Segment/crop images
         if not skip_segment_crops:
@@ -396,17 +377,22 @@ def run_pipeline(
                 )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["5_segment_crops"] = {
+            save_runtime_stats(dataset_name, "segment_crops", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "crop_type": crop_type,
+                    "top_n": top_n,
+                    "min_fraction": min_fraction,
+                }
+            })
             print_step_complete(step_time)
         else:
             print("\nSkipping Step 5: Image Cropping (using existing crops)")
-            runtime_stats["steps"]["5_segment_crops"] = {
+            save_runtime_stats(dataset_name, "segment_crops", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Step 6: Caption components
         if not skip_caption:
@@ -424,20 +410,27 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["6_caption_components"] = {
+            save_runtime_stats(dataset_name, "caption_components", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "caption_n_images": caption_n_images,
+                    "captioner_type": captioner_type,
+                    "caption_model": caption_model,
+                    "caption_device": caption_device,
+                    "caption_batch_size": caption_batch_size,
+                }
+            })
             print_step_complete(step_time)
         else:
             print("\nSkipping Step 6: VLM Captioning (generating dummy captions)")
             step_start = time.time()
             generate_dummy_captions(dataset_name=dataset_name)
             step_time = time.time() - step_start
-            runtime_stats["steps"]["6_caption_components"] = {
+            save_runtime_stats(dataset_name, "caption_components", {
                 "duration_seconds": step_time,
                 "status": "skipped_dummy",
-            }
+            })
 
         # Step 7: Generate CLIP embeddings
         if not skip_clip:
@@ -454,31 +447,29 @@ def run_pipeline(
             )
 
             step_time = time.time() - step_start
-            runtime_stats["steps"]["7_clip_embeddings"] = {
+            save_runtime_stats(dataset_name, "clip_embeddings", {
                 "duration_seconds": step_time,
                 "status": "completed",
-            }
+                "parameters": {
+                    "clip_model": clip_model,
+                    "clip_pretrained": clip_pretrained,
+                    "clip_batch_size": clip_batch_size,
+                    "clip_device": clip_device,
+                }
+            })
             print_step_complete(step_time)
         else:
             print("\nSkipping Step 7: CLIP Embedding Generation")
-            runtime_stats["steps"]["7_clip_embeddings"] = {
+            save_runtime_stats(dataset_name, "clip_embeddings", {
                 "duration_seconds": 0,
                 "status": "skipped",
-            }
+            })
 
         # Pipeline complete
         total_time = time.time() - pipeline_start
 
-        runtime_stats["total_duration_seconds"] = total_time
-        runtime_stats["total_duration_minutes"] = total_time / 60
-        runtime_stats["pipeline_end_time"] = time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime()
-        )
-
         outputs_dir = Path(config.get("outputs_dir"))
-        runtime_stats_path = outputs_dir / "runtime_stats_postsam3.json"
-        with runtime_stats_path.open("w", encoding="utf-8") as f:
-            json.dump(runtime_stats, f, indent=2)
+        runtime_stats_path = outputs_dir / "runtime_stats.json"
 
         print("\n" + "=" * 80)
         print("PIPELINE COMPLETE")
@@ -504,7 +495,7 @@ def run_pipeline(
         print("  ├── clip_embeddings.json    - CLIP embeddings (JSON)")
         print("  ├── clip_embeddings.npz     - CLIP embeddings (numpy)")
         print("  ├── clip_embeddings.faiss   - FAISS HNSW index")
-        print("  └── runtime_stats_postsam3.json")
+        print("  └── runtime_stats.json")
 
     except KeyboardInterrupt:
         print("\n\nPipeline interrupted by user")

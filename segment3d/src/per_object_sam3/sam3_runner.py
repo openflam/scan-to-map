@@ -34,6 +34,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,17 +43,8 @@ import numpy as np
 import torch
 from pycocotools import mask as mask_utils
 
-# ---------------------------------------------------------------------------
-# Path plumbing – make src/ importable regardless of cwd
-# ---------------------------------------------------------------------------
-_SCRIPT_DIR = Path(__file__).resolve().parent  # src/per_object_sam3
-_SRC_DIR = _SCRIPT_DIR.parent  # src/
-_SEGMENT3D_DIR = _SRC_DIR.parent  # segment3d/
-for _p in [str(_SRC_DIR), str(_SEGMENT3D_DIR)]:
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
-
-from io_paths import get_images_dir, get_outputs_dir, load_config  # noqa: E402
+from ..utils.save_runtime_stats import save_runtime_stats
+from ..io_paths import get_images_dir, get_outputs_dir, load_config
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +217,7 @@ def run_sam3(
                                 defaults to the system temp dir
         save_images:            if True, also save overlay JPEG visualizations
     """
+    start_time = time.time()
     # ----- Config & paths ---------------------------------------------------
     config = load_config(dataset_name)
     images_dir = get_images_dir(config)
@@ -416,6 +409,23 @@ def run_sam3(
     print(f"\nDone. Masks saved under:  {masks_base_dir}")
     if save_images:
         print(f"      Images saved under: {images_base_dir}")
+
+    end_time = time.time()
+    duration = end_time - start_time
+    
+    step_stats = {
+        "duration_seconds": duration,
+        "status": "completed",
+        "parameters": {
+            "objects_filter": objects_filter,
+            "resume": resume,
+            "objects_to_frames_path": str(objects_to_frames_path) if objects_to_frames_path else None,
+            "tmp_root": str(tmp_root) if tmp_root else None,
+            "save_images": save_images,
+        }
+    }
+    
+    save_runtime_stats(dataset_name, "sam3_runner", step_stats)
 
 
 # ---------------------------------------------------------------------------

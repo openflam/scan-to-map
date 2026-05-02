@@ -213,21 +213,25 @@ def caption_all_components_cli(
         json.dump(all_captions, f, indent=2)
 
     # Save caption statistics
-    caption_stats = {
-        "total_captions_generated": total_captions_generated,
-        "total_runtime_seconds": total_runtime,
-        "captions_per_second": captions_per_second,
-        "time_per_caption_seconds": time_per_caption,
-        "batch_size": batch_size,
-        "n_images_per_component": n_images,
-        "captioner_type": captioner_type,
-        "model": model,
-        "device": device,
+    from ..utils.save_runtime_stats import save_runtime_stats
+    
+    step_stats = {
+        "duration_seconds": total_runtime,
+        "status": "completed",
+        "parameters": {
+            "total_captions_generated": total_captions_generated,
+            "captions_per_second": captions_per_second,
+            "time_per_caption_seconds": time_per_caption,
+            "batch_size": batch_size,
+            "n_images_per_component": n_images,
+            "captioner_type": captioner_type,
+            "model": model,
+            "device": device,
+        }
     }
-
-    stats_output_path = outputs_dir / "caption_stats.json"
-    with stats_output_path.open("w", encoding="utf-8") as f:
-        json.dump(caption_stats, f, indent=2)
+    
+    save_runtime_stats(dataset_name, "captioning", step_stats)
+    stats_output_path = outputs_dir / "runtime_stats.json"
 
     print(f"\n{'='*60}")
     print(f"Captioning complete!")
