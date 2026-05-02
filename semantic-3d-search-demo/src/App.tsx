@@ -70,6 +70,19 @@ function App() {
     setFocusedComponentIndex(null);
     setRoute([]); // Clear any existing route
 
+    const handleResult = (result: any) => {
+      setBoundingBox(result.components.map((c: any) => c.bbox));
+      setCaptions(result.components.map((c: any) => c.caption));
+      setComponentIds(result.components.map((c: any) => c.component_id));
+      setComponentColors(
+        result.components.map(
+          (_: any, i: number) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`,
+        ),
+      );
+      setSearchResult(result.reason);
+      setSearchTime(result.search_time_ms);
+    };
+
     if (method === "gpt-5.4-tools") {
       let currentThinking = "";
       try {
@@ -78,13 +91,7 @@ function App() {
             currentThinking += event.content;
             setThinking(currentThinking);
           } else if (event.type === "result") {
-            const result = event.data;
-            setBoundingBox(result.components.map((c: any) => c.bbox));
-            setCaptions(result.components.map((c: any) => c.caption));
-            setComponentIds(result.components.map((c: any) => c.component_id));
-            setComponentColors(result.components.map((_: any, i: number) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`));
-            setSearchResult(result.reason);
-            setSearchTime(result.search_time_ms);
+            handleResult(event.data);
           } else if (event.type === "error") {
             console.error("Stream error:", event.error);
             setSearchResult(`Error: ${event.error}`);
@@ -98,13 +105,7 @@ function App() {
       }
     } else {
       const result = await query(searchQuery, method, datasetName!);
-      // Extract bounding boxes, captions, and component IDs from components
-      setBoundingBox(result.components.map((c) => c.bbox));
-      setCaptions(result.components.map((c) => c.caption));
-      setComponentIds(result.components.map((c) => c.component_id));
-      setComponentColors(result.components.map((_, i) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`));
-      setSearchResult(result.reason);
-      setSearchTime(result.search_time_ms);
+      handleResult(result);
       setIsLoading(false);
     }
   };
