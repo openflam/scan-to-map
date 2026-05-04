@@ -261,6 +261,7 @@ def search():
     result_data = process_query(query_input, dataset_name, provider)
     bboxes = result_data["bbox"]  # This is now a list of bounding boxes
     component_ids = result_data["component_ids"]  # List of component IDs
+    custom_bboxes = result_data.get("custom_bboxes", [])
     reason = result_data["reason"]
     search_time_ms = result_data["search_time_ms"]
 
@@ -281,10 +282,21 @@ def search():
             {"bbox": transformed_bbox, "caption": caption, "component_id": str(comp_id)}
         )
 
+    transformed_custom_bboxes = []
+    for custom_bbox in custom_bboxes:
+        if isinstance(custom_bbox, list):
+            bbox_dict = {"corners": custom_bbox}
+        elif isinstance(custom_bbox, dict) and "corners" in custom_bbox:
+            bbox_dict = custom_bbox
+        else:
+            continue
+        transformed_custom_bboxes.append(transform_bbox(bbox_dict))
+
     result = {
         "reason": reason,
         "search_time_ms": search_time_ms,
         "components": components,
+        "custom_bboxes": transformed_custom_bboxes,
     }
 
     return jsonify(result)
@@ -368,6 +380,7 @@ def search_stream():
                 search_time_ms = (end_time - start_time) * 1000
 
                 component_ids = result.get("component_ids", [])
+                custom_bboxes = result.get("custom_bboxes", [])
                 reason = result.get("reason", "")
 
                 valid_bboxes = []
@@ -429,10 +442,21 @@ def search_stream():
                         }
                     )
 
+                transformed_custom_bboxes = []
+                for custom_bbox in custom_bboxes:
+                    if isinstance(custom_bbox, list):
+                        bbox_dict = {"corners": custom_bbox}
+                    elif isinstance(custom_bbox, dict) and "corners" in custom_bbox:
+                        bbox_dict = custom_bbox
+                    else:
+                        continue
+                    transformed_custom_bboxes.append(transform_bbox(bbox_dict))
+
                 final_result = {
                     "reason": reason,
                     "search_time_ms": search_time_ms,
                     "components": components,
+                    "custom_bboxes": transformed_custom_bboxes,
                 }
 
                 yield f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"

@@ -164,13 +164,14 @@ class LLMAgent:
             output_items = message_payload.get("output_items", [])
 
             if not tool_calls:
-                component_ids, reason = _parse_final_response(assistant_content)
+                component_ids, reason, custom_bboxes = _parse_final_response(assistant_content)
                 return {
                     "dataset_name": dataset_name,
                     "query": query,
                     "model": self.model,
                     "response": assistant_content,
                     "component_ids": component_ids,
+                    "custom_bboxes": custom_bboxes,
                     "reason": reason,
                     "tool_trace": tool_trace,
                 }
@@ -225,14 +226,15 @@ class LLMAgent:
             "model": self.model,
             "response": "Tool-calling loop stopped before a final answer was produced.",
             "component_ids": [],
+            "custom_bboxes": [],
             "reason": "Tool-calling loop reached the maximum number of rounds without a final answer.",
             "tool_trace": tool_trace,
         }
 
 
-def _parse_final_response(content: str) -> tuple[list[int], str]:
+def _parse_final_response(content: str) -> tuple[list[int], str, list[dict]]:
     """
-    Extract component_ids and reason from the model's final JSON response.
+    Extract component_ids, reason, and custom_bboxes from the model's final JSON response.
 
     Tries json.loads on the full content first; falls back to finding the
     outermost {...} block if the model included extra prose.
@@ -249,6 +251,7 @@ def _parse_final_response(content: str) -> tuple[list[int], str]:
         try:
             parsed = json.loads(candidate)
             raw_ids = parsed.get("component_ids") or []
+            custom_bboxes = parsed.get("custom_bboxes") or []
             component_ids: list[int] = []
             for x in raw_ids:
                 try:
@@ -256,11 +259,11 @@ def _parse_final_response(content: str) -> tuple[list[int], str]:
                 except (TypeError, ValueError):
                     pass
             reason: str = str(parsed.get("reason") or text)
-            return component_ids, reason
+            return component_ids, reason, custom_bboxes
         except (json.JSONDecodeError, AttributeError):
             continue
 
-    return [], text
+    return [], text, []
 
 
 def answer_query(

@@ -49,6 +49,12 @@ export default function SearchComponentList({
     const generation = ++fetchKeyRef.current;
 
     componentIds.forEach((id, i) => {
+      if (id.startsWith("custom_bbox_")) {
+        setEntries((prev) =>
+          prev.map((e) => (e.index === i ? { ...e, loaded: true } : e)),
+        );
+        return;
+      }
       getComponentInfo(id, datasetName)
         .then((info) => {
           if (fetchKeyRef.current !== generation) return;

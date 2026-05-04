@@ -59,7 +59,9 @@ EXECUTE_PYTHON_TOOL = {
     "name": "execute_python",
     "description": (
         "Execute a python program in a sandboxed environment. "
-        "Useful for performing complex logic, calculations, or multi-step reasoning."
+        "Useful for performing complex logic, calculations, multi-step reasoning, or generating custom bounding boxes. "
+        "If the user query requires generating a new bounding box (e.g., show me where I can place a new bookshelf), "
+        "it should use execute_python to compute and return that bounding box."
     ),
     "parameters": {
         "type": "object",
@@ -89,4 +91,5 @@ EXECUTE_PYTHON_DESCRIPTION = """- **Python Execution Tool:** Use `execute_python
   - `numpy` is also pre-imported as `np`.
   - The result returned will be whatever is printed to standard output (`stdout`), so make sure to use `print()` for any results you want to see. If there is an error, the traceback will be returned.
   - You do not need to provide `dataset_name` when calling the pre-imported tools; it is handled automatically.
-  - Do NOT wrap the code in markdown formatting (like ```python ... ```), just provide pure python code."""
+  - Do NOT wrap the code in markdown formatting (like ```python ... ```), just provide pure python code.
+  - If the user query requires generating a new bounding box (e.g., show me where I can place a new bookshelf), write a program to calculate it and print it. You can get custom bboxes even around free space by writing a program to be called by this tool. The final query result should be returned as a list of bounding box corners if required. When referencing these custom bboxes in the reason, you MUST use strict 0-based indexing (e.g., `<custom_bbox_0>`)."""

@@ -30,8 +30,9 @@ def process_query(
     end_time = time.perf_counter()
     search_time_ms = (end_time - start_time) * 1000  # Convert to milliseconds
 
-    component_ids = result["component_ids"]
-    reason = result["reason"]
+    component_ids = result.get("component_ids", [])
+    custom_bboxes = result.get("custom_bboxes", [])
+    reason = result.get("reason", "")
 
     # Fetch bounding boxes for matched components from the DB
     valid_bboxes = []
@@ -71,6 +72,7 @@ def process_query(
     return {
         "bbox": valid_bboxes,
         "component_ids": valid_component_ids,
+        "custom_bboxes": custom_bboxes,
         "reason": reason,
         "search_time_ms": search_time_ms,
     }

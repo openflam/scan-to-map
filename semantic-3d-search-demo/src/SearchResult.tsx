@@ -16,7 +16,7 @@ export const parseResult = (
   componentColors?: string[],
   onComponentClick?: (index: number) => void
 ) => {
-  const regex = /<component_(\d+)>(.*?)<\/component_\1>/g;
+  const regex = /<(component|custom_bbox)_(\d+)>(.*?)<\/\1_\2>/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match;
@@ -26,10 +26,18 @@ export const parseResult = (
       parts.push(text.substring(lastIndex, match.index));
     }
 
-    const componentId = match[1];
-    const componentName = match[2];
+    const type = match[1];
+    const idStr = match[2];
+    const componentName = match[3];
 
-    const index = componentIds?.findIndex((id) => String(id) === componentId);
+    const lookupId = type === "component" ? idStr : `${type}_${idStr}`;
+    let index = componentIds?.findIndex((id) => String(id) === lookupId);
+
+    if ((index === undefined || index === -1) && type === "custom_bbox") {
+      // Fallback for LLMs that mistakenly use 1-based indexing
+      const fallbackId = `${type}_${parseInt(idStr, 10) - 1}`;
+      index = componentIds?.findIndex((id) => String(id) === fallbackId);
+    }
 
     if (index !== undefined && index !== -1) {
       const color = componentColors?.[index] || "inherit";
@@ -55,8 +63,8 @@ export const parseResult = (
           style={{ cursor: "pointer" }}
           onClick={() =>
             console.warn(
-              "Component ID not found in results list",
-              componentId,
+              "Component/BBox ID not found in results list",
+              lookupId,
             )
           }
         >

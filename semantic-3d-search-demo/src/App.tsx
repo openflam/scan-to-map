@@ -71,14 +71,32 @@ function App() {
     setRoute([]); // Clear any existing route
 
     const handleResult = (result: any) => {
-      setBoundingBox(result.components.map((c: any) => c.bbox));
-      setCaptions(result.components.map((c: any) => c.caption));
-      setComponentIds(result.components.map((c: any) => c.component_id));
-      setComponentColors(
-        result.components.map(
-          (_: any, i: number) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`,
-        ),
+      const dbComponents = result.components || [];
+      const customBBoxes = result.custom_bboxes || [];
+
+      const allBBoxes = [
+        ...dbComponents.map((c: any) => c.bbox),
+        ...customBBoxes
+      ];
+      
+      const allCaptions = [
+        ...dbComponents.map((c: any) => c.caption),
+        ...customBBoxes.map(() => "Custom Location")
+      ];
+      
+      const allComponentIds = [
+        ...dbComponents.map((c: any) => String(c.component_id)),
+        ...customBBoxes.map((_: any, i: number) => `custom_bbox_${i}`)
+      ];
+
+      const allColors = allBBoxes.map(
+        (_: any, i: number) => `hsl(${(i * 137.508) % 360}, 70%, 50%)`,
       );
+
+      setBoundingBox(allBBoxes);
+      setCaptions(allCaptions);
+      setComponentIds(allComponentIds);
+      setComponentColors(allColors);
       setSearchResult(result.reason);
       setSearchTime(result.search_time_ms);
     };

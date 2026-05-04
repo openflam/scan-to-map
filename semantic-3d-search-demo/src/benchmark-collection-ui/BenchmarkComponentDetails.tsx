@@ -29,7 +29,11 @@ export default function BenchmarkComponentDetails({
 }: ComponentDetailsProps) {
   return (
     <div style={styles.panel}>
-      <h3 style={styles.sectionLabel}>Component {componentId}</h3>
+      <h3 style={styles.sectionLabel}>
+        {componentId?.startsWith("custom_bbox_") 
+          ? `Custom Location ${parseInt(componentId.split("_").pop() || "0") + 1}`
+          : `Component ${componentId}`}
+      </h3>
 
       {isLoading ? (
         <div style={styles.loadingContainer}>

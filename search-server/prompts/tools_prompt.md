@@ -16,6 +16,7 @@ When you have finished using tools and are ready to provide your final answer, r
 
 {
 "component_ids": [<list of integer component IDs that are referenced in the reason>],
+"custom_bboxes": [<list of bounding box dictionaries if any, e.g., {"corners": [[x, y, z], ...]} generated via execute_python>],
 "reason": "<detailed explanation of why these components match based on tool output, and answering the user's query.>"
 }
 
@@ -25,5 +26,6 @@ When you have finished using tools and are ready to provide your final answer, r
 2. Do not mention component ID numbers in the reason directly. Refer to them using their real-world object names (e.g., "drill press").
 3. Whenever a component is mentioned in the reason, enclose it in a tag which will be parsed later. The tag should have the format <component_ID>object_name</component_ID>. It should flow naturally with the sentence. For example, "The <component_4>coffee machine</component_4> can be used to make a beverage".
 4. Make sure that ALL of the component IDs explicitly recommended in the reason are also present in the component_ids list.
+5. If you generate custom bounding boxes (e.g., around free space), include them in the custom_bboxes list. In the reason, enclose the relevant text in a tag like <custom_bbox_0>empty space</custom_bbox_0> where "0" refers to the 0-based index of the bbox in the custom_bboxes list. Use strict 0-based indexing.
 
 If no components match after your search attempts, use an empty list for "component_ids" and explain why in the "reason" field.

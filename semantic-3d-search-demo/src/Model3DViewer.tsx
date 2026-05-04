@@ -215,6 +215,12 @@ export default function Model3DViewer({
     }
     setIsEditing(false);
     if (!currentComponentId) return;
+
+    if (currentComponentId.startsWith("custom_bbox_")) {
+      setSaveWarning("Cannot save custom locations to the database.");
+      return;
+    }
+
     try {
       const { updateComponent } = await import("./query");
       const updates: {
@@ -264,7 +270,7 @@ export default function Model3DViewer({
       // Handle search result selection
       else if (selectedBBoxIndex !== null && componentIds) {
         const componentId = componentIds[selectedBBoxIndex];
-        if (componentId) {
+        if (componentId && !componentId.startsWith("custom_bbox_")) {
           setIsLoadingComponent(true);
           try {
             const { getComponentInfo } = await import("./query");
@@ -355,7 +361,7 @@ export default function Model3DViewer({
               onDismiss={handleDeselect}
               onSave={handleSave}
               onDelete={
-                currentComponentId
+                currentComponentId && !currentComponentId.startsWith("custom_bbox_")
                   ? async () => {
                       try {
                         const { deleteComponent } = await import("./query");
