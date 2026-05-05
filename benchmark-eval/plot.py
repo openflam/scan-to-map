@@ -7,6 +7,7 @@ import pandas as pd
 from math import pi
 from collections import defaultdict
 import csv
+import textwrap
 
 plt.rcParams.update({
     'font.size': 25,
@@ -32,6 +33,23 @@ INCLUDED_BENCHMARK_TYPES = [
     "Entity Search", 
     # "Affordance"
 ]
+
+def custom_wrap_label(text, width=12):
+    import textwrap
+    lines = textwrap.wrap(text, width=width, break_long_words=False)
+    result = []
+    for line in lines:
+        if len(line) > width and len(line.split()) == 1:
+            if len(line) <= 14:  # allow slightly longer words like "Functionality" to remain whole
+                result.append(line)
+            else:
+                first = line[:width]
+                second = "-" + line[width:]
+                result.append(first)
+                result.append(second)
+        else:
+            result.append(line)
+    return "\n".join(result)
 
 def get_metrics(filepath):
     """
@@ -77,7 +95,8 @@ def get_spider_plot(metric_name, data_array):
     
     fig, ax = plt.subplots(figsize=(10, 8), subplot_kw=dict(polar=True))
     
-    plt.xticks(angles[:-1], benchmark_types, color='black', size=14)
+    wrapped_benchmark_types = [custom_wrap_label(bt) for bt in benchmark_types]
+    plt.xticks(angles[:-1], wrapped_benchmark_types, color='black', size=14)
     ax.set_rlabel_position(0)
     
     # Determine the y limits based on max value
@@ -244,7 +263,8 @@ def plot_question_counts(benchmark_counts):
     
     fig, ax = plt.subplots(figsize=(8, 8))
     
-    ax.pie(counts, labels=labels, autopct='%1.1f%%', startangle=140, 
+    wrapped_labels = [custom_wrap_label(l) for l in labels]
+    ax.pie(counts, labels=wrapped_labels, autopct='%1.1f%%', startangle=140, 
            colors=plt.cm.Pastel1.colors, wedgeprops={'edgecolor': 'black'})
            
     plt.tight_layout()
@@ -255,6 +275,52 @@ def plot_question_counts(benchmark_counts):
     plt.savefig(out_path, bbox_inches='tight')
     plt.close()
     print(f"Saved question counts plot to {out_path}")
+
+def plot_question_counts_horizontal_bar(benchmark_counts):
+    """
+    Generates a horizontal bar chart showing the proportion of questions available for each benchmark type.
+    """
+    if not benchmark_counts:
+        return
+        
+    labels = sorted(list(benchmark_counts.keys()))
+    counts = [len(benchmark_counts[l]) for l in labels]
+    total = sum(counts)
+    percentages = [c / total * 100 for c in counts]
+    
+    base_colors = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7"]
+    colors = [base_colors[i % len(base_colors)] for i in range(len(labels))]
+    
+    fig, ax = plt.subplots(figsize=(9, 6))
+    
+    y_pos = np.arange(len(labels))
+    bars = ax.barh(y_pos, percentages, align='center', alpha=0.85, color=colors, edgecolor='black')
+    
+    for bar in bars:
+        width = bar.get_width()
+        ax.text(width + 1.0, bar.get_y() + bar.get_height()/2, 
+                f'{width:.1f}%', 
+                va='center', ha='left', size=25)
+                
+    ax.set_yticks(y_pos)
+    wrapped_labels = [custom_wrap_label(l) for l in labels]
+    ax.set_yticklabels(wrapped_labels)
+    ax.invert_yaxis()
+    ax.set_xlabel('Percentage (%)')
+    max_x = max(percentages) + 15
+    ax.set_xlim(0, max_x)
+    ax.set_xticks(np.arange(0, max_x, 10))
+    ax.xaxis.grid(True, linestyle='--', alpha=0.7)
+    ax.set_axisbelow(True)
+    
+    plt.tight_layout()
+    
+    out_dir = Path(__file__).parent.parent / "benchmark" / "plots"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "question_counts_bar_horizontal.pdf"
+    plt.savefig(out_path, bbox_inches='tight')
+    plt.close()
+    print(f"Saved horizontal bar question counts plot to {out_path}")
 
 def main():
     metrics_dir = Path(__file__).parent.parent / "benchmark" / "metrics"
@@ -318,6 +384,7 @@ def main():
         
     if benchmark_counts:
         plot_question_counts(benchmark_counts)
+        plot_question_counts_horizontal_bar(benchmark_counts)
 
 if __name__ == "__main__":
     main()
