@@ -92,7 +92,7 @@ def get_providers_list():
     Returns the list of available search provider names.
     CLIP ViT-H-14 is only listed when it was pre-initialized at startup.
     """
-    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]", "gpt-5.4-tools"]
+    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]", "Tools"]
     if clip_provider is not None:
         providers.append("CLIP ViT-H-14")
     return jsonify({"providers": providers})
@@ -311,7 +311,13 @@ def search_stream():
     # Get search query, method, and dataset_name
     dataset_name = request.json.get("dataset_name")
     search_query = request.json.get("query")
-    method = request.json.get("method")
+    model_name = request.json.get("model_name") or request.json.get("model")
+    
+    if model_name:
+        active_model = model_name
+    else:
+        active_model = "gpt-5.4"
+
     tools = request.json.get("tools")
 
     if not dataset_name:
@@ -333,15 +339,9 @@ def search_stream():
     if query_type != "text":
         return jsonify({"error": "Streaming only supports text queries"}), 400
 
-    if method != "gpt-5.4-tools":
-        return (
-            jsonify({"error": "Streaming currently only supports gpt-5.4-tools"}),
-            400,
-        )
-
     query_input = query_item.get("value")
     if not query_input:
-        return jsonify({"error": "No query string provided for gpt-5.4-tools"}), 400
+        return jsonify({"error": f"No query string provided for {active_model}"}), 400
 
     q = queue.Queue()
 
@@ -350,7 +350,7 @@ def search_stream():
 
     def run_agent():
         try:
-            agent = LLMAgent(model="gpt-5.4", allowed_tools=tools)
+            agent = LLMAgent(model=active_model, allowed_tools=tools)
             result = agent.answer_query_stream(
                 query=query_input,
                 dataset_name=dataset_name,
@@ -412,7 +412,7 @@ def search_stream():
 
                 if not valid_bboxes:
                     print(
-                        "Warning: No valid component IDs found for gpt-5.4-tools. Using first component."
+                        f"Warning: No valid component IDs found for {active_model}. Using first component."
                     )
                     row = database.fetch_first_component(dataset_name)
                     if row:

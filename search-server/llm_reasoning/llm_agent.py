@@ -44,33 +44,28 @@ def call_tool(tool_name: str, arguments: str | dict[str, Any], dataset_name: str
         return {"error": str(exc)}
 
 
-def _build_tool_output(tool_output: dict[str, Any]) -> str | list[dict[str, Any]]:
-    """Build the ``output`` value for a ``function_call_output`` item.
+def _build_tool_output(tool_output: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
+    """Build the ``content`` value for a ``tool`` message and extract images.
 
-    The Responses API ``function_call_output`` supports multimodal content
-    natively.  When the tool result contains images, we return a list with
-    ``input_image`` entries so the model can analyse them.
-
-    For regular (non-image) results the output is a plain JSON string.
+    Returns:
+        tuple containing:
+        - text representation of the tool output
+        - list of image dictionary parts to be appended as a user message
     """
     images: list[str] = tool_output.get("images") or []
-    if not images:
-        return json.dumps(tool_output)
-
-    # Build a multimodal output list for the Responses API
     non_image_fields = {k: v for k, v in tool_output.items() if k != "images"}
-    parts: list[dict[str, Any]] = []
+    
+    # Text content for the tool message itself
+    text_content = json.dumps(non_image_fields) if non_image_fields else "Images successfully retrieved."
 
-    if non_image_fields:
-        parts.append({"type": "input_text", "text": json.dumps(non_image_fields)})
-
+    image_parts: list[dict[str, Any]] = []
     for data_url in images:
-        parts.append({
-            "type": "input_image",
-            "image_url": data_url,
+        image_parts.append({
+            "type": "image_url",
+            "image_url": {"url": data_url},
         })
 
-    return parts
+    return text_content, image_parts
 
 
 class LLMAgent:
@@ -177,8 +172,24 @@ class LLMAgent:
                 }
 
             # Append the model's output items back to input for multi-turn
-            for item in output_items:
-                input_items.append(item)
+            if tool_calls:
+                assistant_message: dict[str, Any] = {
+                    "role": "assistant",
+                    "content": assistant_content if assistant_content else None,
+                    "tool_calls": []
+                }
+                for tc in tool_calls:
+                    assistant_message["tool_calls"].append({
+                        "id": tc.get("id"),
+                        "type": "function",
+                        "function": {
+                            "name": tc.get("name"),
+                            "arguments": tc.get("arguments")
+                        }
+                    })
+                input_items.append(assistant_message)
+            elif assistant_content:
+                input_items.append({"role": "assistant", "content": assistant_content})
 
             for call in tool_calls:
                 tool_name = call.get("name", "")
@@ -209,16 +220,27 @@ class LLMAgent:
                     }
                 )
 
-                # Build the function_call_output content
-                output_content = _build_tool_output(tool_output)
+                # Build the tool output message
+                output_content, image_parts = _build_tool_output(tool_output)
 
                 input_items.append(
                     {
-                        "type": "function_call_output",
-                        "call_id": call_id,
-                        "output": output_content,
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": tool_name,
+                        "content": output_content,
                     }
                 )
+
+                if image_parts:
+                    input_items.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": f"Images from tool {tool_name}:"}
+                            ] + image_parts
+                        }
+                    )
 
         return {
             "dataset_name": dataset_name,

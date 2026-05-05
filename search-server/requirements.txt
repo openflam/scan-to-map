@@ -9,3 +9,4 @@ bm25s>=0.1.0
 PyStemmer>=2.0.1
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.0
+litellm>=1.0.0

@@ -61,9 +61,9 @@ function AppBenchmark() {
     setFocusedComponentIndex(null);
     setRoute([]); // Clear any existing route
 
-    if (method === "gpt-5.4-tools") {
+    if (method === "Tools" || method === "gpt-5.4-tools") {
       try {
-        await queryStream(searchQuery, method, datasetName!, (event) => {
+        await queryStream(searchQuery, method, datasetName!, undefined, (event) => {
           if (event.type === "result") {
             const result = event.data;
             setBoundingBox(result.components.map((c: any) => c.bbox));

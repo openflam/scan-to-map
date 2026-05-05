@@ -20,6 +20,7 @@ export async function query(
   searchQuery: SearchQuery,
   method: string,
   datasetName: string,
+  modelName?: string,
 ): Promise<SearchResult> {
   console.log("Querying with:", searchQuery, "using method:", method);
 
@@ -33,6 +34,7 @@ export async function query(
         dataset_name: datasetName,
         query: searchQuery,
         method: method,
+        model_name: modelName,
       }),
     });
 
@@ -58,6 +60,7 @@ export async function queryStream(
   searchQuery: SearchQuery,
   method: string,
   datasetName: string,
+  modelName: string | undefined,
   onEvent: (eventData: any) => void
 ): Promise<void> {
   console.log("Streaming query with:", searchQuery, "using method:", method);
@@ -72,6 +75,7 @@ export async function queryStream(
         dataset_name: datasetName,
         query: searchQuery,
         method: method,
+        model_name: modelName,
       }),
     });
 
@@ -117,6 +121,7 @@ export async function queryDirections(
   destination: SearchQuery,
   method: string,
   datasetName: string,
+  modelName?: string,
 ): Promise<{
   path: number[][];
   source_bbox: any;
@@ -144,6 +149,7 @@ export async function queryDirections(
         source: source,
         destination: destination,
         method: method,
+        model_name: modelName,
       }),
     });
 

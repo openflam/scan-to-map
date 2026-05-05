@@ -63,7 +63,7 @@ function App() {
       });
   }, []);
 
-  const handleSearch = async (searchQuery: SearchQuery, method: string) => {
+  const handleSearch = async (searchQuery: SearchQuery, method: string, modelName?: string) => {
     setIsLoading(true);
     setSearchResult(undefined);
     setThinking(undefined);
@@ -101,10 +101,10 @@ function App() {
       setSearchTime(result.search_time_ms);
     };
 
-    if (method === "gpt-5.4-tools") {
+    if (method === "Tools") {
       let currentThinking = "";
       try {
-        await queryStream(searchQuery, method, datasetName!, (event) => {
+        await queryStream(searchQuery, method, datasetName!, modelName, (event) => {
           if (event.type === "thinking") {
             currentThinking += event.content;
             setThinking(currentThinking);
@@ -122,7 +122,7 @@ function App() {
         setIsLoading(false);
       }
     } else {
-      const result = await query(searchQuery, method, datasetName!);
+      const result = await query(searchQuery, method, datasetName!, modelName);
       handleResult(result);
       setIsLoading(false);
     }

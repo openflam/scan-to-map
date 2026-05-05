@@ -14,7 +14,7 @@ import {
 } from "./query";
 
 interface SearchBarProps {
-  onSearch: (searchQuery: SearchQuery, method: string) => void;
+  onSearch: (searchQuery: SearchQuery, method: string, modelName?: string) => void;
   onDirections: (
     route: Route,
     sourceBBox: any,
@@ -46,7 +46,8 @@ function SearchBar({
   datasetName,
 }: SearchBarProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [method, setMethod] = useState("gpt-5.4-tools");
+  const [method, setMethod] = useState("Tools");
+  const [modelName, setModelName] = useState("");
   const [providers, setProviders] = useState<string[]>([]);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -61,8 +62,8 @@ function SearchBar({
     getProvidersList()
       .then((list) => {
         setProviders(list);
-        if (list.includes("gpt-5.4-tools")) {
-          setMethod("gpt-5.4-tools");
+        if (list.includes("Tools")) {
+          setMethod("Tools");
         } else if (list.length > 0) {
           setMethod(list[0]);
         }
@@ -108,13 +109,13 @@ function SearchBar({
         reader.onloadend = () => {
           const base64String = reader.result as string;
           searchQuery.push({ type: "image", value: base64String });
-          onSearch(searchQuery, method);
+          onSearch(searchQuery, method, modelName);
         };
         reader.readAsDataURL(uploadedImage);
         return;
       }
 
-      onSearch(searchQuery, method);
+      onSearch(searchQuery, method, modelName);
     }
   };
 
@@ -201,6 +202,15 @@ function SearchBar({
             </option>
           ))}
         </Form.Select>
+
+        {method === "Tools" && (
+          <FormControl
+            placeholder="Model (Default: gpt-5.4)"
+            value={modelName}
+            onChange={(e) => setModelName(e.target.value)}
+            style={{ maxWidth: "200px" }}
+          />
+        )}
 
         {!showDirections ? (
           <>
