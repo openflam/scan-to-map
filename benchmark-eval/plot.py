@@ -322,6 +322,88 @@ def plot_question_counts_horizontal_bar(benchmark_counts):
     plt.close()
     print(f"Saved horizontal bar question counts plot to {out_path}")
 
+def plot_models_comparison():
+    """
+    Plots a bar chart comparing performance across models for each metric.
+    Reads from metrics_multiple_models and gpt-5.4 from metrics/search_dist_around_image_exec.
+    """
+    base_dir = Path(__file__).parent.parent
+    metrics_mm_dir = base_dir / "benchmark" / "metrics_multiple_models"
+    metrics_base_dir = base_dir / "benchmark" / "metrics"
+    
+    gpt54_dir = metrics_base_dir / "search_dist_around_image_exec"
+    
+    if not metrics_mm_dir.exists() and not gpt54_dir.exists():
+        return
+        
+    raw_data = defaultdict(lambda: defaultdict(list))
+    
+    # Process multiple models
+    if metrics_mm_dir.exists():
+        for metric_file in metrics_mm_dir.rglob("*_result.json"):
+            try:
+                metrics, benchmark_type, benchmark_name, model_name = get_metrics(metric_file)
+                if benchmark_type not in INCLUDED_BENCHMARK_TYPES:
+                    continue
+                for metric_name, value in metrics.items():
+                    raw_data[metric_name][model_name].append(value)
+            except Exception as e:
+                pass
+                
+    # Process gpt-5.4
+    if gpt54_dir.exists():
+        for metric_file in gpt54_dir.rglob("*_result.json"):
+            try:
+                metrics, benchmark_type, benchmark_name, _ = get_metrics(metric_file)
+                if benchmark_type not in INCLUDED_BENCHMARK_TYPES:
+                    continue
+                for metric_name, value in metrics.items():
+                    raw_data[metric_name]["gpt-5.4"].append(value)
+            except Exception as e:
+                pass
+                
+    for metric_name, model_dict in raw_data.items():
+        if not model_dict:
+            continue
+            
+        models = sorted(list(model_dict.keys()))
+        means = []
+        cis = []
+        
+        for m in models:
+            vals = model_dict[m]
+            n = len(vals)
+            means.append(np.mean(vals) if n > 0 else 0)
+            if n > 1:
+                ci = 1.96 * np.std(vals, ddof=1) / np.sqrt(n)
+            else:
+                ci = 0
+            cis.append(ci)
+            
+        fig, ax = plt.subplots(figsize=(10, 6))
+        x_pos = np.arange(len(models))
+        color = "#56B4E9"
+        
+        bars = ax.bar(x_pos, means, yerr=cis, align='center', width=0.85, alpha=0.85, 
+                      ecolor='black', capsize=10, color=color, edgecolor='black')
+        ax.set_ylabel(metric_name)
+        
+        # Use the same format as ablation but add x labels to distinguish bars
+        ax.set_xticks(x_pos)
+        # Format model names for display
+        display_models = [m.replace("anthropic_", "").replace("openai_", "").replace("gemini_", "") for m in models]
+        ax.set_xticklabels(display_models, rotation=30, ha="right", fontsize=18)
+        ax.yaxis.grid(True, linestyle='--', alpha=0.7)
+        
+        plt.tight_layout()
+        
+        out_dir = base_dir / "benchmark" / "plots" / "model_comparisons"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{metric_name.replace(' ', '_')}_models_bar.pdf"
+        plt.savefig(out_path, bbox_inches='tight')
+        plt.close()
+        print(f"Saved {metric_name} models comparison chart to {out_path}")
+
 def main():
     metrics_dir = Path(__file__).parent.parent / "benchmark" / "metrics"
     
@@ -385,6 +467,8 @@ def main():
     if benchmark_counts:
         plot_question_counts(benchmark_counts)
         plot_question_counts_horizontal_bar(benchmark_counts)
+
+    plot_models_comparison()
 
 if __name__ == "__main__":
     main()

@@ -7,6 +7,7 @@ import requests
 import string
 from collections import defaultdict
 from pathlib import Path
+import concurrent.futures
 
 def get_question_answer_from_json(json_path):
     """
@@ -32,7 +33,7 @@ def get_question_answer_from_json(json_path):
     return dataset_name, question, expected_answer_text, components, benchmark_type
 
 
-def get_answer_from_server(dataset_name, question, tools=None):
+def get_answer_from_server(dataset_name, question, tools=None, model="gpt-5.4"):
     """
     Passes the question to the local search server's stream endpoint.
     Returns plain text predicted answer and a list of predicted components.
@@ -46,12 +47,13 @@ def get_answer_from_server(dataset_name, question, tools=None):
                - "search_around_component"
                - "get_images"
                If None, all tools are enabled.
+        model: Optional model string. Defaults to "gpt-5.4"
     """
     url = "http://localhost:5000/search_stream"
     payload = {
         "dataset_name": dataset_name,
         "query": [{"type": "text", "value": question}],
-        "method": "gpt-5.4-tools",
+        "model_name": model,
     }
     if tools is not None:
         payload["tools"] = tools
@@ -109,6 +111,12 @@ def main():
         default=None, 
         help="Directory to save the JSON results. Defaults to benchmark/results in repo root."
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers."
+    )
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent.parent
@@ -136,63 +144,51 @@ def main():
         "only_exec": ["execute_python"],
     }
 
-    evaluations_successful = False
-
+    work_items = []
     for config_name, tools in configs.items():
-        print(f"\n{'='*50}")
-        print(f"Running Configuration: {config_name}")
-        print(f"Tools: {tools if tools is not None else 'All Tools'}")
-        print(f"{'='*50}\n")
-        
         config_out_dir = out_dir / config_name
         config_out_dir.mkdir(parents=True, exist_ok=True)
-        
-        config_successful = False
         for file_path in json_files:
-            indiv_out_path = config_out_dir / f"{file_path.stem}_result.json"
-            if indiv_out_path.exists():
-                print(f"Skipping {file_path.name} [{config_name}] as it is already evaluated.")
-                config_successful = True
-                evaluations_successful = True
-                continue
+            work_items.append((config_name, tools, file_path, config_out_dir))
 
-            print(f"--- Evaluating {file_path.name} [{config_name}] ---")
-            dataset_name, question, exp_text, exp_comp, benchmark_type = get_question_answer_from_json(file_path)
+    def process_item(item):
+        config_name, tools, file_path, config_out_dir = item
+        indiv_out_path = config_out_dir / f"{file_path.stem}_result.json"
+        if indiv_out_path.exists():
+            print(f"Skipping {file_path.name} [{config_name}] as it is already evaluated.")
+            return True
+
+        print(f"--- Evaluating {file_path.name} [{config_name}] ---")
+        dataset_name, question, exp_text, exp_comp, benchmark_type = get_question_answer_from_json(file_path)
+        
+        if not dataset_name:
+            print(f"Skipping {file_path.name} as it lacks a dataset_name.")
+            return False
             
-            if not dataset_name:
-                print(f"Skipping {file_path.name} as it lacks a dataset_name.")
-                continue
-                
-            print(f"Question: {question}")
-            pred_text, pred_comp = get_answer_from_server(dataset_name, question, tools=tools)
+        pred_text, pred_comp = get_answer_from_server(dataset_name, question, tools=tools)
+        
+        result_dict = {
+            "file": file_path.name,
+            "config": config_name,
+            "tools": tools,
+            "benchmark_type": benchmark_type,
+            "question": question,
+            "expected_text": exp_text,
+            "predicted_text": pred_text,
+            "expected_components": exp_comp,
+            "predicted_components": pred_comp
+        }
+        
+        # Save individual result
+        with open(indiv_out_path, 'w', encoding='utf-8') as f:
+            json.dump(result_dict, f, indent=4)
             
-            print(f"Expected Text: {exp_text}")
-            print(f"Predicted Text: {pred_text}")
-            print(f"Expected Comp: {exp_comp}")
-            print(f"Predicted Comp: {pred_comp}")
-            
-            result_dict = {
-                "file": file_path.name,
-                "config": config_name,
-                "tools": tools,
-                "benchmark_type": benchmark_type,
-                "question": question,
-                "expected_text": exp_text,
-                "predicted_text": pred_text,
-                "expected_components": exp_comp,
-                "predicted_components": pred_comp
-            }
-            
-            # Save individual result
-            indiv_out_path = config_out_dir / f"{file_path.stem}_result.json"
-            with open(indiv_out_path, 'w', encoding='utf-8') as f:
-                json.dump(result_dict, f, indent=4)
-                
-            config_successful = True
-            evaluations_successful = True
-            
-        if not config_successful:
-            print(f"No evaluations were successful for {config_name}.")
+        return True
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as executor:
+        results = list(executor.map(process_item, work_items))
+
+    evaluations_successful = any(results)
 
     if not evaluations_successful:
         print("No evaluations were successful across any configuration.")

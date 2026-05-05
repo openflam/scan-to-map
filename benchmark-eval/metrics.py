@@ -249,11 +249,16 @@ def main():
     results_dir = Path(args.results_dir) if args.results_dir else base_dir / "benchmark" / "results"
     metrics_dir = Path(args.metrics_dir) if args.metrics_dir else base_dir / "benchmark" / "metrics"
 
-    if not results_dir.exists():
-        print(f"Error: Directory {results_dir} does not exist.")
-        return
-
-    aggregate_from_files(results_dir, metrics_dir, disable_ai_judge=args.disable_ai_judge)
+    if results_dir.exists():
+        aggregate_from_files(results_dir, metrics_dir, disable_ai_judge=args.disable_ai_judge)
+    else:
+        print(f"Directory {results_dir} does not exist, skipping.")
+        
+    results_mm_dir = base_dir / "benchmark" / "results_multiple_models"
+    metrics_mm_dir = base_dir / "benchmark" / "metrics_multiple_models"
+    if results_mm_dir.exists():
+        print(f"Processing multiple models results from {results_mm_dir}")
+        aggregate_from_files(results_mm_dir, metrics_mm_dir, disable_ai_judge=args.disable_ai_judge)
 
 if __name__ == "__main__":
     main()
