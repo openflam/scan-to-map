@@ -14,7 +14,11 @@ import {
 } from "./query";
 
 interface SearchBarProps {
-  onSearch: (searchQuery: SearchQuery, method: string, modelName?: string) => void;
+  onSearch: (
+    searchQuery: SearchQuery,
+    method: string,
+    modelName?: string,
+  ) => void;
   onDirections: (
     route: Route,
     sourceBBox: any,
@@ -57,6 +61,9 @@ function SearchBar({
   const [isDownloadingAnnotations, setIsDownloadingAnnotations] =
     useState(false);
   const [annotationsLoaded, setAnnotationsLoaded] = useState(false);
+
+  // @ts-ignore
+  let _searchTime = searchTime;
 
   useEffect(() => {
     getProvidersList()
@@ -215,7 +222,7 @@ function SearchBar({
         {!showDirections ? (
           <>
             <FormControl
-              placeholder="Search..."
+              placeholder="Ask..."
               value={searchTerm}
               onChange={handleTextChange}
               onKeyDown={handleKeyPress}
@@ -257,7 +264,7 @@ function SearchBar({
             )}
 
             <Button variant="outline-primary" onClick={handleSearch}>
-              Search
+              Ask
             </Button>
           </>
         ) : (
@@ -326,8 +333,8 @@ function SearchBar({
           className="d-flex align-items-center"
           style={{ fontSize: "1.1rem", fontWeight: "500" }}
         >
-          <i className="bi bi-clock me-2"></i>
-          {searchTime !== undefined ? `${searchTime.toFixed(2)} ms` : "..."}
+          {/* <i className="bi bi-clock me-2"></i> */}
+          {/* {searchTime !== undefined ? `${searchTime.toFixed(2)} ms` : "..."} */}
         </div>
       </div>
     </>
