@@ -99,10 +99,15 @@ def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_com
         metrics['BLEU-2'] = sentence_bleu([exp_tokens], pred_tokens, weights=(0.5, 0.5, 0, 0), smoothing_function=cc)
         metrics['BLEU-3'] = sentence_bleu([exp_tokens], pred_tokens, weights=(0.33, 0.33, 0.33, 0), smoothing_function=cc)
         metrics['BLEU-4'] = sentence_bleu([exp_tokens], pred_tokens, weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=cc)
+    except Exception as e:
+        print(f"Error computing BLEU for question '{question[:30]}...'. Error: {e}")
+        metrics['BLEU-1'] = metrics['BLEU-2'] = metrics['BLEU-3'] = metrics['BLEU-4'] = "NA"
+        
+    try:
         metrics['METEOR'] = meteor_score([exp_tokens], pred_tokens)
     except Exception as e:
-        print(f"Error computing NLTK metrics: {e}")
-        metrics['BLEU-1'] = metrics['BLEU-2'] = metrics['BLEU-3'] = metrics['BLEU-4'] = metrics['METEOR'] = 0.0
+        print(f"Error computing METEOR (likely WordNet corpus issue) for question '{question[:30]}...'. Error: {e}")
+        metrics['METEOR'] = "NA"
         
     # AI-as-Judge
     if not disable_ai_judge:
@@ -121,7 +126,17 @@ def aggregate_results(results_list):
     metric_keys = results_list[0]["metrics"].keys()
     
     for key in metric_keys:
-        values = [r["metrics"].get(key, 0.0) for r in results_list]
+        values = [r["metrics"].get(key, 0.0) for r in results_list if r["metrics"].get(key) != "NA"]
+        if not values:
+            aggregate_metrics[key] = {
+                "mean": "NA",
+                "std": "NA",
+                "median": "NA",
+                "25th_percentile": "NA",
+                "75th_percentile": "NA"
+            }
+            continue
+            
         aggregate_metrics[key] = {
             "mean": float(np.mean(values)),
             "std": float(np.std(values)),

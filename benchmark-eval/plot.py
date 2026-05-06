@@ -17,7 +17,7 @@ plt.rcParams.update({
     'legend.fontsize': 25,
 })
 
-CATEGORY_INFO = {
+ABLATION_CATEGORIES = {
     "no_tools": {"label": "No Tools", "color": "#E69F00"},
     "search_only": {"label": "Search Only", "color": "#56B4E9"},
     "search_distance": {"label": "+Distance", "color": "#009E73"},
@@ -26,12 +26,17 @@ CATEGORY_INFO = {
     "search_dist_around_image_exec": {"label": "+Exec", "color": "#CC79A7"}
 }
 
+ONLY_EXEC_CATEGORIES = {
+    "only_exec": {"label": "Exec Only", "color": "#d95f02"},
+    "search_dist_around_image_exec": {"label": "All tools", "color": "#CC79A7"}
+}
+
 INCLUDED_BENCHMARK_TYPES = [
     "Spatial Relations", 
     "Physics, safety, etc.", 
     "Functionality", 
     "Entity Search", 
-    # "Affordance"
+    "Affordance"
 ]
 
 def custom_wrap_label(text, width=12):
@@ -69,7 +74,7 @@ def get_metrics(filepath):
     
     return metrics, benchmark_type, benchmark_name, ablation_category
 
-def get_spider_plot(metric_name, data_array):
+def get_spider_plot(metric_name, data_array, category_info, group_dir):
     """
     Generates a spider plot for a given metric.
     
@@ -84,7 +89,7 @@ def get_spider_plot(metric_name, data_array):
     benchmark_types = sorted(list(set(item["benchmark_type"] for item in data_array)))
     ablation_categories = sorted(list(set(item["ablation_category"] for item in data_array)))
     
-    ordered_cats = [c for c in CATEGORY_INFO if c in ablation_categories]
+    ordered_cats = [c for c in category_info if c in ablation_categories]
     
     if not benchmark_types:
         return
@@ -99,8 +104,11 @@ def get_spider_plot(metric_name, data_array):
     plt.xticks(angles[:-1], wrapped_benchmark_types, color='black', size=14)
     ax.set_rlabel_position(0)
     
-    # Determine the y limits based on max value
-    max_val = max(item["metric_value"] for item in data_array) if data_array else 1.0
+    # Determine the y limits based on max value (ignoring NA)
+    max_val = 1.0
+    valid_vals = [item["metric_value"] for item in data_array if item["metric_value"] != "NA"]
+    if valid_vals:
+        max_val = max(valid_vals)
     upper_bound = max(0.2, (int(max_val * 10) + 1) / 10.0)
     
     ticks = np.linspace(0, upper_bound, 5)[1:]
@@ -114,7 +122,7 @@ def get_spider_plot(metric_name, data_array):
         values = [val_map.get(bt, 0.0) for bt in benchmark_types]
         values_closed = values + values[:1]
         
-        info = CATEGORY_INFO.get(category, {"label": category, "color": "black"})
+        info = category_info.get(category, {"label": category, "color": "black"})
         label_name = info["label"]
         color = info["color"]
         ax.plot(angles, values_closed, linewidth=2, linestyle='solid', label=label_name, color=color)
@@ -122,7 +130,7 @@ def get_spider_plot(metric_name, data_array):
         
     # plt.title(f'{metric_name} by Benchmark Type', size=15, y=1.1)
     
-    out_dir = Path(__file__).parent.parent / "benchmark" / "plots" / "spider_charts"
+    out_dir = group_dir / "spider_chart"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{metric_name.replace(' ', '_')}_spider.pdf"
     plt.savefig(out_path, bbox_inches='tight')
@@ -160,20 +168,20 @@ def save_summay_csv_table(metric_name, data_array):
                             if item["ablation_category"] == category and item["benchmark_type"] == bt), 0.0)
                 vals.append(val)
                 
-            agg_mean = sum(vals) / len(vals) if vals else 0.0
+            valid_vals = [v for v in vals if v != "NA"]
+            agg_mean = sum(valid_vals) / len(valid_vals) if valid_vals else 0.0
             
             # Format row
-            row = [category] + [f"{v:.4f}" for v in vals] + [f"{agg_mean:.4f}"]
+            row = [category] + [(f"{v:.4f}" if v != "NA" else "NA") for v in vals] + [f"{agg_mean:.4f}"]
             writer.writerow(row)
             
     print(f"Saved {metric_name} tabl to {out_path}")
 
-def generate_legend(labels, colors):
+def generate_legend(labels, colors, out_dir):
     """
     Generates standalone vertical and horizontal legends for the bar charts.
     """
     import matplotlib.patches as mpatches
-    out_dir = Path(__file__).parent.parent / "benchmark" / "plots"
     out_dir.mkdir(parents=True, exist_ok=True)
     
     patches = [mpatches.Patch(facecolor=colors[i], edgecolor='black', alpha=0.85, label=labels[i]) for i in range(len(labels))]
@@ -196,7 +204,7 @@ def generate_legend(labels, colors):
     plt.close(fig_h)
     print(f"Saved horizontal legend to {out_path_h}")
 
-def get_bar_chart(metric_name, category_dict):
+def get_bar_chart(metric_name, category_dict, category_info, group_dir, figsize=(6, 5)):
     """
     Generates a bar chart for a given metric showing mean and std per ablation category.
     """
@@ -209,7 +217,7 @@ def get_bar_chart(metric_name, category_dict):
             cat_values[category].extend(values)
             
     existing_cats = set(cat_values.keys())
-    ordered_cats = [c for c in CATEGORY_INFO if c in existing_cats]
+    ordered_cats = [c for c in category_info if c in existing_cats]
     
     means = []
     cis = []
@@ -217,7 +225,7 @@ def get_bar_chart(metric_name, category_dict):
     colors = []
     
     for c in ordered_cats:
-        vals = cat_values[c]
+        vals = [v for v in cat_values[c] if v != "NA" and not isinstance(v, str)]
         n = len(vals)
         means.append(np.mean(vals) if n > 0 else 0)
         
@@ -227,11 +235,11 @@ def get_bar_chart(metric_name, category_dict):
         else:
             ci = 0
         cis.append(ci)
-        info = CATEGORY_INFO.get(c, {"label": c, "color": "black"})
+        info = category_info.get(c, {"label": c, "color": "black"})
         labels.append(info["label"])
         colors.append(info["color"])
         
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=figsize)
     
     x_pos = np.arange(len(labels))
     bars = ax.bar(x_pos, means, yerr=cis, align='center', width=0.85, alpha=0.85, ecolor='black', capsize=10, color=colors, edgecolor='black')
@@ -242,10 +250,11 @@ def get_bar_chart(metric_name, category_dict):
     
     plt.tight_layout()
     
-    generate_legend(labels, colors)
-    
-    out_dir = Path(__file__).parent.parent / "benchmark" / "plots" / "bar_charts"
+    out_dir = group_dir / "bar_chart"
     out_dir.mkdir(parents=True, exist_ok=True)
+    
+    generate_legend(labels, colors, out_dir)
+    
     out_path = out_dir / f"{metric_name.replace(' ', '_')}_bar.pdf"
     plt.savefig(out_path, bbox_inches='tight')
     plt.close()
@@ -283,9 +292,14 @@ def plot_question_counts_horizontal_bar(benchmark_counts):
     if not benchmark_counts:
         return
         
-    labels = sorted(list(benchmark_counts.keys()))
-    counts = [len(benchmark_counts[l]) for l in labels]
-    total = sum(counts)
+    data_pairs = [(l, len(benchmark_counts[l])) for l in benchmark_counts.keys()]
+    total = sum(c for _, c in data_pairs)
+    
+    # Sort in descending order of counts/percentages
+    data_pairs.sort(key=lambda x: x[1], reverse=True)
+    
+    labels = [l for l, _ in data_pairs]
+    counts = [c for _, c in data_pairs]
     percentages = [c / total * 100 for c in counts]
     
     base_colors = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7"]
@@ -371,7 +385,7 @@ def plot_models_comparison():
         cis = []
         
         for m in models:
-            vals = model_dict[m]
+            vals = [v for v in model_dict[m] if v != "NA" and not isinstance(v, str)]
             n = len(vals)
             means.append(np.mean(vals) if n > 0 else 0)
             if n > 1:
@@ -380,25 +394,27 @@ def plot_models_comparison():
                 ci = 0
             cis.append(ci)
             
-        fig, ax = plt.subplots(figsize=(10, 6))
+        fig, ax = plt.subplots(figsize=(6, 5))
         x_pos = np.arange(len(models))
-        color = "#56B4E9"
+        
+        base_colors = ["#E69F00", "#56B4E9", "#009E73", "#0072B2", "#D55E00", "#CC79A7"]
+        colors = [base_colors[i % len(base_colors)] for i in range(len(models))]
         
         bars = ax.bar(x_pos, means, yerr=cis, align='center', width=0.85, alpha=0.85, 
-                      ecolor='black', capsize=10, color=color, edgecolor='black')
+                      ecolor='black', capsize=10, color=colors, edgecolor='black')
         ax.set_ylabel(metric_name)
-        
-        # Use the same format as ablation but add x labels to distinguish bars
-        ax.set_xticks(x_pos)
-        # Format model names for display
-        display_models = [m.replace("anthropic_", "").replace("openai_", "").replace("gemini_", "") for m in models]
-        ax.set_xticklabels(display_models, rotation=30, ha="right", fontsize=18)
+        ax.set_xticks([])
         ax.yaxis.grid(True, linestyle='--', alpha=0.7)
         
         plt.tight_layout()
         
+        display_models = [m.replace("anthropic_", "").replace("openai_", "").replace("gemini_", "") for m in models]
+        
         out_dir = base_dir / "benchmark" / "plots" / "model_comparisons"
         out_dir.mkdir(parents=True, exist_ok=True)
+        
+        generate_legend(display_models, colors, out_dir)
+        
         out_path = out_dir / f"{metric_name.replace(' ', '_')}_models_bar.pdf"
         plt.savefig(out_path, bbox_inches='tight')
         plt.close()
@@ -440,7 +456,8 @@ def main():
         for category, bench_dict in category_dict.items():
             for bench_type, values in bench_dict.items():
                 # Compute mean for this category and benchmark type
-                mean_val = sum(values) / len(values) if values else 0.0
+                valid_vals = [v for v in values if v != "NA" and not isinstance(v, str)]
+                mean_val = sum(valid_vals) / len(valid_vals) if valid_vals else "NA"
                 data_array.append({
                     "benchmark_type": bench_type,
                     "metric_value": mean_val,
@@ -448,10 +465,18 @@ def main():
                 })
                 
         # Generate plot and table for this metric
-        if data_array:
-            get_spider_plot(metric_name, data_array)
+        valid_data_array = [d for d in data_array if d["metric_value"] != "NA"]
+        if valid_data_array:
+            groups = [
+                ("ablation", ABLATION_CATEGORIES, (6, 5)),
+                ("only_exec_comparison", ONLY_EXEC_CATEGORIES, (4, 5))
+            ]
+            for group_name, category_info, figsize in groups:
+                group_dir = Path(__file__).parent.parent / "benchmark" / "plots" / group_name
+                get_spider_plot(metric_name, valid_data_array, category_info, group_dir)
+                get_bar_chart(metric_name, category_dict, category_info, group_dir, figsize=figsize)
+                
             save_summay_csv_table(metric_name, data_array)
-            get_bar_chart(metric_name, category_dict)
             
     if all_data_rows:
         tables_dir = Path(__file__).parent.parent / "benchmark" / "tables"

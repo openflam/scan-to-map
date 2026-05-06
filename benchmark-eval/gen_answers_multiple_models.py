@@ -9,6 +9,8 @@ from gen_answers import get_question_answer_from_json, get_answer_from_server
 
 MODELS = [
     "gpt-4.1-nano",
+    "gpt-5-nano",
+    "gpt-5-mini",
 ]
 
 import concurrent.futures
