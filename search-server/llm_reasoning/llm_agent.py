@@ -191,6 +191,9 @@ class LLMAgent:
             elif assistant_content:
                 input_items.append({"role": "assistant", "content": assistant_content})
 
+            tool_messages = []
+            image_messages = []
+
             for call in tool_calls:
                 tool_name = call.get("name", "")
                 call_id = call.get("id", "")
@@ -223,7 +226,7 @@ class LLMAgent:
                 # Build the tool output message
                 output_content, image_parts = _build_tool_output(tool_output)
 
-                input_items.append(
+                tool_messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call_id,
@@ -233,7 +236,7 @@ class LLMAgent:
                 )
 
                 if image_parts:
-                    input_items.append(
+                    image_messages.append(
                         {
                             "role": "user",
                             "content": [
@@ -241,6 +244,9 @@ class LLMAgent:
                             ] + image_parts
                         }
                     )
+
+            input_items.extend(tool_messages)
+            input_items.extend(image_messages)
 
         return {
             "dataset_name": dataset_name,
