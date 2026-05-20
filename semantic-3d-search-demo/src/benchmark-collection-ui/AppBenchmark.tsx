@@ -63,7 +63,7 @@ function AppBenchmark() {
 
     if (method === "Tools" || method === "gpt-5.4-tools") {
       try {
-        await queryStream(searchQuery, method, datasetName!, undefined, (event) => {
+        await queryStream(searchQuery, method, datasetName!, undefined, undefined, (event) => {
           if (event.type === "result") {
             const result = event.data;
             setBoundingBox(result.components.map((c: any) => c.bbox));

@@ -26,6 +26,7 @@ from routing.path_calculation import calculate_route
 import queue
 import threading
 from llm_reasoning.llm_agent import LLMAgent, call_tool
+from prompts.robot_prompt import get_robot_prompt
 
 STATIC_DIR = Path(__file__).parent / "front-end-build"
 
@@ -302,17 +303,22 @@ def search():
     return jsonify(result)
 
 
-@app.route("/search_stream", methods=["POST"])
-def search_stream():
+def _stream_agent_response(system_prompt=None):
     """
-    Search endpoint that streams reasoning and search results using Server-Sent Events (SSE).
-    Currently only supports the gpt-5.4-tools method.
+    Shared implementation for streaming LLM agent responses via SSE.
+
+    Args:
+        system_prompt: If provided, overrides the default tools system prompt
+                       used by LLMAgent. Used by /robot_steps to inject the
+                       robot-planning prompt.
+
+    Returns:
+        A Flask streaming response (text/event-stream).
     """
-    # Get search query, method, and dataset_name
     dataset_name = request.json.get("dataset_name")
     search_query = request.json.get("query")
     model_name = request.json.get("model_name") or request.json.get("model")
-    
+
     if model_name:
         active_model = model_name
     else:
@@ -350,7 +356,10 @@ def search_stream():
 
     def run_agent():
         try:
-            agent = LLMAgent(model=active_model, allowed_tools=tools)
+            agent_kwargs = {"model": active_model, "allowed_tools": tools}
+            if system_prompt is not None:
+                agent_kwargs["system_prompt"] = system_prompt
+            agent = LLMAgent(**agent_kwargs)
             result = agent.answer_query_stream(
                 query=query_input,
                 dataset_name=dataset_name,
@@ -463,6 +472,27 @@ def search_stream():
                 break
 
     return app.response_class(generate(), mimetype="text/event-stream")
+
+
+@app.route("/search_stream", methods=["POST"])
+def search_stream():
+    """
+    Search endpoint that streams reasoning and search results using Server-Sent Events (SSE).
+    Uses the default tools system prompt.
+    """
+    return _stream_agent_response()
+
+
+@app.route("/robot_steps", methods=["POST"])
+def robot_steps():
+    """
+    Robot task-planning endpoint that streams reasoning and step-by-step plans
+    using Server-Sent Events (SSE).
+    Takes the same arguments as /search_stream but uses a robot-planning system prompt
+    that returns ordered steps referencing scene components.
+    """
+    tools = request.json.get("tools")
+    return _stream_agent_response(system_prompt=get_robot_prompt(tools))
 
 
 @app.route("/get_route", methods=["POST"])

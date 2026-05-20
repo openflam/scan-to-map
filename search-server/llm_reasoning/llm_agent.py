@@ -260,12 +260,14 @@ class LLMAgent:
         }
 
 
-def _parse_final_response(content: str) -> tuple[list[int], str, list[dict]]:
+def _parse_final_response(content: str) -> tuple[list[int], str | list[str], list[dict]]:
     """
     Extract component_ids, reason, and custom_bboxes from the model's final JSON response.
 
     Tries json.loads on the full content first; falls back to finding the
     outermost {...} block if the model included extra prose.
+
+    reason may be a string (search_stream) or a list of strings (robot_steps).
     """
     text = content.strip()
     candidates: list[str] = [text]
@@ -286,7 +288,11 @@ def _parse_final_response(content: str) -> tuple[list[int], str, list[dict]]:
                     component_ids.append(int(x))
                 except (TypeError, ValueError):
                     pass
-            reason: str = str(parsed.get("reason") or text)
+            raw_reason = parsed.get("reason")
+            if isinstance(raw_reason, list):
+                reason: str | list[str] = raw_reason
+            else:
+                reason = str(raw_reason or text)
             return component_ids, reason, custom_bboxes
         except (json.JSONDecodeError, AttributeError):
             continue

@@ -93,21 +93,31 @@
     }
     {% endif %}
 
-    button {
+    .button-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
       margin-top: 1.5rem;
-      width: 100%;
+    }
+
+    button {
+      flex: 1;
       padding: 0.7rem;
-      background: #6366f1;
       border: none;
       border-radius: 8px;
       color: #fff;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.15s, transform 0.1s;
     }
 
-    button:hover { background: #4f46e5; }
+    .btn-primary { background: #6366f1; }
+    .btn-primary:hover { background: #4f46e5; }
+
+    .btn-secondary { background: #0d9488; }
+    .btn-secondary:hover { background: #0f766e; }
+
     button:active { transform: scale(0.98); }
     button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
 
@@ -128,14 +138,17 @@
     <form method="GET" action="{{ target_url|default('/') }}">
       <label for="dataset-select">Dataset</label>
 
-      {% if datasets %}
+    {% if datasets %}
         <select id="dataset-select" name="dataset_name" required>
           {% for dataset in datasets %}
             <option value="{{ dataset }}">{{ dataset }}</option>
           {% endfor %}
         </select>
         <p class="dataset-count">{{ datasets | length }} dataset{{ 's' if datasets | length != 1 else '' }} available</p>
-        <button type="submit">Open Dataset &rarr;</button>
+        <div class="button-row">
+          <button type="button" onclick="openDataset('reasoner')" class="btn-primary">Open Reasoner &rarr;</button>
+          <button type="button" onclick="openDataset('robot')" class="btn-secondary">Open Robot Planner &rarr;</button>
+        </div>
       {% else %}
         <select id="dataset-select" name="dataset_name" disabled>
           <option>No datasets found</option>
@@ -143,9 +156,25 @@
         <div class="empty-notice">
           No processed datasets were found.
         </div>
-        <button type="submit" disabled>Open Dataset &rarr;</button>
+        <div class="button-row">
+          <button type="button" disabled>Open Reasoner &rarr;</button>
+          <button type="button" disabled>Open Robot Planner &rarr;</button>
+        </div>
       {% endif %}
     </form>
   </div>
+
+  <script>
+    function openDataset(mode) {
+      const select = document.getElementById('dataset-select');
+      const dataset = select.value;
+      const baseUrl = '{{ target_url|default("/") }}';
+      let url = baseUrl + '?dataset_name=' + encodeURIComponent(dataset);
+      if (mode === 'robot') {
+        url += '&mode=robot';
+      }
+      window.location.href = url;
+    }
+  </script>
 </body>
 </html>

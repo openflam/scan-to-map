@@ -61,12 +61,14 @@ export async function queryStream(
   method: string,
   datasetName: string,
   modelName: string | undefined,
+  mode: string | undefined,
   onEvent: (eventData: any) => void
 ): Promise<void> {
-  console.log("Streaming query with:", searchQuery, "using method:", method);
+  const route = mode === "robot" ? "/robot_steps" : "/search_stream";
+  console.log("Streaming query with:", searchQuery, "using method:", method, "route:", route);
 
   try {
-    const response = await fetch(`${SEARCH_SERVER_URL}/search_stream`, {
+    const response = await fetch(`${SEARCH_SERVER_URL}${route}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

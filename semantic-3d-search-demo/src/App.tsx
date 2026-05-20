@@ -14,8 +14,14 @@ function getDatasetNameFromPath(): string | null {
   return new URLSearchParams(window.location.search).get("dataset_name");
 }
 
+/** Read the mode from the `mode` query parameter (e.g. "robot"). Defaults to undefined (reasoner). */
+function getModeFromPath(): string | undefined {
+  return new URLSearchParams(window.location.search).get("mode") ?? undefined;
+}
+
 function App() {
   const datasetName = useMemo(() => getDatasetNameFromPath(), []);
+  const mode = useMemo(() => getModeFromPath(), []);
 
   const [boundingBox, setBoundingBox] = useState<BoundingBox[]>([]);
   const [captions, setCaptions] = useState<string[]>([]);
@@ -104,7 +110,7 @@ function App() {
     if (method === "Tools") {
       let currentThinking = "";
       try {
-        await queryStream(searchQuery, method, datasetName!, modelName, (event) => {
+        await queryStream(searchQuery, method, datasetName!, modelName, mode, (event) => {
           if (event.type === "thinking") {
             currentThinking += event.content;
             setThinking(currentThinking);
