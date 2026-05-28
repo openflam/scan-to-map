@@ -32,7 +32,7 @@ function App() {
   const [autoTagBBoxes, setAutoTagBBoxes] = useState<BoundingBox[]>([]);
   const [occupancyGrid, setOccupancyGrid] = useState<BoundingBox[]>([]);
   const [annotations, setAnnotations] = useState<string[]>([]);
-  const [searchResult, setSearchResult] = useState<string | undefined>(
+  const [searchResult, setSearchResult] = useState<string | string[] | undefined>(
     undefined,
   );
   const [thinking, setThinking] = useState<string | undefined>(undefined);

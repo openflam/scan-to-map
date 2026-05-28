@@ -2,7 +2,7 @@ import { Spinner, Accordion, Form } from "react-bootstrap";
 import React, { useState } from "react";
 
 interface SearchResultProps {
-  result?: string;
+  result?: string | string[];
   thinking?: string;
   isLoading?: boolean;
   componentIds?: string[];
@@ -11,11 +11,15 @@ interface SearchResultProps {
 }
 
 export const parseResult = (
-  text: string,
+  text: string | string[],
   componentIds?: string[],
   componentColors?: string[],
   onComponentClick?: (index: number) => void
 ) => {
+  // Normalize: if reason is a list of steps (robot planner), join into a single string
+  if (Array.isArray(text)) {
+    text = text.join("\n");
+  }
   const regex = /<(component|custom_bbox)_(\d+)>(.*?)<\/\1_\2>/g;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -145,7 +149,9 @@ function SearchResult({
             </div>
           ) : result ? (
             <p className="mb-0 text-break" style={{ whiteSpace: "pre-line", wordBreak: "break-word" }}>
-              {isRaw ? result : parseResult(result, componentIds, componentColors, onComponentClick)}
+              {isRaw
+                ? (Array.isArray(result) ? result.join("\n") : result)
+                : parseResult(result, componentIds, componentColors, onComponentClick)}
             </p>
           ) : !thinking ? (
             <p className="text-muted mb-0">No search results yet</p>
