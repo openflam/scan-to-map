@@ -259,6 +259,11 @@ def main():
         help="Disable the AI-as-judge similarity metric."
     )
     args = parser.parse_args()
+    if (args.results_dir is None) != (args.metrics_dir is None):
+        parser.error(
+            "--results_dir and --metrics_dir must be provided together so an "
+            "isolated run cannot write into a default benchmark directory"
+        )
 
     base_dir = Path(__file__).parent.parent
     results_dir = Path(args.results_dir) if args.results_dir else base_dir / "benchmark" / "results"
@@ -269,6 +274,11 @@ def main():
     else:
         print(f"Directory {results_dir} does not exist, skipping.")
         
+    # An explicit directory is an isolated run (for example, a sensitivity
+    # condition) and must not write to the default multiple-model metrics.
+    if args.results_dir is not None or args.metrics_dir is not None:
+        return
+
     results_mm_dir = base_dir / "benchmark" / "results_multiple_models"
     metrics_mm_dir = base_dir / "benchmark" / "metrics_multiple_models"
     if results_mm_dir.exists():

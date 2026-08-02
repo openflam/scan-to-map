@@ -10,3 +10,6 @@ PyStemmer>=2.0.1
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.0
 litellm>=1.0.0
+requests>=2.31.0
+nltk>=3.8.0
+matplotlib>=3.7.0
