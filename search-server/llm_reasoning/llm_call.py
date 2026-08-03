@@ -32,10 +32,12 @@ class LLMCaller:
         model: str = DEFAULT_MODEL,
         api_key: str | None = None,
         max_completion_tokens: int = 2000,
+        service_tier: str | None = None,
     ) -> None:
         self.model = model
         self.max_completion_tokens = max_completion_tokens
         self.api_key = api_key
+        self.service_tier = service_tier
 
     def stream_chat(
         self,
@@ -72,6 +74,8 @@ class LLMCaller:
             request["tools"] = formatted_tools
         if self.api_key:
             request["api_key"] = self.api_key
+        if self.service_tier is not None:
+            request["service_tier"] = self.service_tier
 
         content_parts: list[str] = []
         # Track function calls being streamed: index -> dict of tool call data

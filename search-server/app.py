@@ -327,6 +327,10 @@ def _stream_agent_response(system_prompt=None):
     dataset_name = request.json.get("dataset_name")
     search_query = request.json.get("query")
     model_name = request.json.get("model_name") or request.json.get("model")
+    service_tier = request.json.get("service_tier")
+
+    if service_tier not in (None, "flex"):
+        return jsonify({"error": "service_tier must be 'flex' when provided"}), 400
 
     if model_name:
         active_model = model_name
@@ -366,6 +370,8 @@ def _stream_agent_response(system_prompt=None):
     def run_agent():
         try:
             agent_kwargs = {"model": active_model, "allowed_tools": tools}
+            if service_tier is not None:
+                agent_kwargs["service_tier"] = service_tier
             if system_prompt is not None:
                 agent_kwargs["system_prompt"] = system_prompt
             agent = LLMAgent(**agent_kwargs)

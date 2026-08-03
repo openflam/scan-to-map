@@ -4,7 +4,7 @@ import importlib.util
 import sys
 from decimal import Decimal
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -25,6 +25,7 @@ prepare = load_module("split_merge_prepare", "prepare.py")
 recreate = load_module("split_merge_recreate", "recreate_crops_captions.py")
 experiment = load_module("split_merge_experiment", "experiment.py")
 summarize = load_module("split_merge_summarize", "summarize.py")
+run = load_module("split_merge_run", "run.py")
 
 
 def bbox_record(component_id: int, minimum: list[float], maximum: list[float]):
@@ -291,3 +292,75 @@ def test_experiment_forwards_recreation_settings(tmp_path):
     assert command[command.index("--projection-min-fraction") + 1] == "0.25"
     assert command[command.index("--caption-model") + 1] == "caption-model"
     assert command[-1] == "--dry-run"
+
+
+def test_split_merge_answer_command_forces_flex(tmp_path):
+    command = run.answer_command(
+        SCRIPT_DIR.parents[2],
+        tmp_path / "questions",
+        tmp_path / "results",
+        ["search_dist_around_image_exec"],
+        "gpt-5.4",
+        2,
+        900.0,
+        True,
+    )
+
+    assert "--split_merge_flex" in command
+
+
+def test_llm_caller_only_sets_service_tier_when_requested(monkeypatch):
+    captured_requests = []
+    fake_litellm = ModuleType("litellm")
+    fake_litellm.completion = lambda **request: captured_requests.append(request) or []
+    fake_dotenv = ModuleType("dotenv")
+    fake_dotenv.load_dotenv = lambda: None
+    monkeypatch.setitem(sys.modules, "litellm", fake_litellm)
+    monkeypatch.setitem(sys.modules, "dotenv", fake_dotenv)
+
+    llm_call_path = (
+        SCRIPT_DIR.parents[2] / "search-server" / "llm_reasoning" / "llm_call.py"
+    )
+    spec = importlib.util.spec_from_file_location("split_merge_llm_call", llm_call_path)
+    assert spec is not None and spec.loader is not None
+    llm_call = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(llm_call)
+
+    llm_call.LLMCaller().stream_chat([])
+    llm_call.LLMCaller(service_tier="flex").stream_chat([])
+
+    assert "service_tier" not in captured_requests[0]
+    assert captured_requests[1]["service_tier"] == "flex"
+
+
+def test_gen_answers_forwards_flex_only_when_requested(monkeypatch):
+    gen_answers_path = SCRIPT_DIR.parents[1] / "gen_answers.py"
+    spec = importlib.util.spec_from_file_location(
+        "split_merge_gen_answers",
+        gen_answers_path,
+    )
+    assert spec is not None and spec.loader is not None
+    gen_answers = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen_answers)
+
+    captured_payloads = []
+
+    def fake_post(_url, *, json, stream, timeout):
+        assert stream is True
+        assert timeout == 600.0
+        captured_payloads.append(json)
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            iter_lines=lambda: [
+                b'data: {"type":"result","data":{"reason":"ok","components":[]}}'
+            ],
+        )
+
+    monkeypatch.setattr(gen_answers.requests, "post", fake_post)
+
+    gen_answers.get_answer_from_server("scene", "question")
+    gen_answers.get_answer_from_server(
+        "scene",
+        "question",
+        service_tier="flex",
+    )

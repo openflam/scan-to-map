@@ -78,12 +78,17 @@ class LLMAgent:
         max_tool_rounds: int = 8,
         api_key: str | None = None,
         allowed_tools: list[str] | None = None,
+        service_tier: str | None = None,
     ) -> None:
         self.model = model
         self.allowed_tools = allowed_tools
         self.system_prompt = system_prompt if system_prompt is not None else get_tools_prompt(allowed_tools)
         self.max_tool_rounds = max_tool_rounds
-        self.caller = LLMCaller(model=model, api_key=api_key)
+        self.caller = LLMCaller(
+            model=model,
+            api_key=api_key,
+            service_tier=service_tier,
+        )
         self.tools = get_tools(allowed_tools)
         self.tool_functions = get_tool_functions(allowed_tools)
         self.thinking_texts = get_thinking_texts(allowed_tools)

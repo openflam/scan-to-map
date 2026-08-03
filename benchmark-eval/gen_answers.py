@@ -62,6 +62,7 @@ def get_answer_from_server(
     model="gpt-5.4",
     request_timeout=600.0,
     fail_on_error=False,
+    service_tier=None,
 ):
     """
     Passes the question to the local search server's stream endpoint.
@@ -77,6 +78,7 @@ def get_answer_from_server(
                - "get_images"
                If None, all tools are enabled.
         model: Optional model string. Defaults to "gpt-5.4"
+        service_tier: Optional OpenAI processing tier forwarded by the server.
     """
     url = "http://localhost:5000/search_stream"
     payload = {
@@ -86,6 +88,8 @@ def get_answer_from_server(
     }
     if tools is not None:
         payload["tools"] = tools
+    if service_tier is not None:
+        payload["service_tier"] = service_tier
     
     predicted_answer_raw = ""
     predicted_components_array = []
@@ -208,6 +212,14 @@ def main():
         action="store_true",
         help="Abort instead of saving an empty answer when a server query fails.",
     )
+    parser.add_argument(
+        "--split_merge_flex",
+        action="store_true",
+        help=(
+            "Use Flex processing. This is gated to prepared split/merge "
+            "sensitivity records and is intended only for that experiment."
+        ),
+    )
     args = parser.parse_args()
 
     if args.files and args.data_dir:
@@ -235,6 +247,21 @@ def main():
     if not json_files:
         print("No JSON files found to evaluate.")
         return
+
+    if args.split_merge_flex:
+        invalid_files = []
+        for file_path in json_files:
+            with open(file_path, "r", encoding="utf-8") as f:
+                record = json.load(f)
+            sensitivity = record.get("sensitivity") or {}
+            if sensitivity.get("perturbation") != "split_merge_components":
+                invalid_files.append(file_path)
+        if invalid_files:
+            preview = "\n".join(str(path) for path in invalid_files[:10])
+            parser.error(
+                "--split_merge_flex may only be used with prepared split/merge "
+                f"sensitivity records. Invalid files:\n{preview}"
+            )
 
     work_items = []
     for config_name in args.configs:
@@ -283,6 +310,7 @@ def main():
             model=args.model,
             request_timeout=args.request_timeout,
             fail_on_error=args.fail_on_query_error,
+            service_tier="flex" if args.split_merge_flex else None,
         )
         
         result_dict = {
@@ -301,6 +329,8 @@ def main():
 
         if "sensitivity" in benchmark_record:
             result_dict["sensitivity"] = benchmark_record["sensitivity"]
+        if args.split_merge_flex:
+            result_dict["service_tier"] = "flex"
         
         # Save individual result
         with open(indiv_out_path, 'x', encoding='utf-8') as f:

@@ -95,6 +95,7 @@ def answer_command(
         "--request_timeout",
         str(request_timeout),
         "--fail_on_query_error",
+        "--split_merge_flex",
     ]
     if fail_on_existing:
         command.append("--fail_on_existing")
