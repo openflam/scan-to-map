@@ -20,6 +20,7 @@ from semantic_search import (
     OpenAIProvider,
     BM25Provider,
     OpenAIRAGProvider,
+    ComponentIDProvider,
 )
 from utils.load_clip import load_clip_provider
 from routing.path_calculation import calculate_route
@@ -93,7 +94,13 @@ def get_providers_list():
     Returns the list of available search provider names.
     CLIP ViT-H-14 is only listed when it was pre-initialized at startup.
     """
-    providers = ["gpt-5-mini [Full]", "BM25", "gpt-5-mini [RAG]", "Tools"]
+    providers = [
+        "gpt-5-mini [Full]",
+        "BM25",
+        "gpt-5-mini [RAG]",
+        "Component ID",
+        "Tools",
+    ]
     if clip_provider is not None:
         providers.append("CLIP ViT-H-14")
     return jsonify({"providers": providers})
@@ -158,6 +165,8 @@ def initialize_provider(method, dataset_name):
         return BM25Provider(dataset_name)
     elif method == "gpt-5-mini [RAG]":
         return OpenAIRAGProvider(dataset_name, model="gpt-5-mini", bm25_top_k=20)
+    elif method == "Component ID":
+        return ComponentIDProvider(dataset_name)
     elif method == "CLIP ViT-H-14":
         if clip_provider is None:
             return None  # CLIP was not initialized at startup
