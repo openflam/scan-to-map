@@ -3,6 +3,8 @@ import sys
 import json
 import string
 import argparse
+import threading
+import time
 from pathlib import Path
 import numpy as np
 import concurrent.futures
@@ -29,7 +31,7 @@ def normalize_text(text):
 def compute_ai_judge(expected_text, predicted_text):
     """
     Calls an LLM to rate the similarity between the expected and predicted text.
-    Returns a normalized score between 0.0 and 1.0.
+    Returns an integer-valued score from 1 to 10, or 0 when scoring fails.
     """
     if not expected_text or not predicted_text or LLMCaller is None:
         return 0.0
@@ -54,6 +56,19 @@ def compute_ai_judge(expected_text, predicted_text):
     except Exception as e:
         print(f"Error computing AI-Judge: {e}")
         return 0.0
+
+def compute_ai_judge_with_retries(expected_text, predicted_text, max_attempts=3):
+    """Retry failed or malformed judge responses without storing false zeros."""
+    if not expected_text or not predicted_text or LLMCaller is None:
+        return 0.0
+    for attempt in range(1, max_attempts + 1):
+        score = compute_ai_judge(expected_text, predicted_text)
+        if score != 0.0:
+            return score
+        if attempt < max_attempts:
+            time.sleep(2 ** (attempt - 1))
+    return None
+
 
 def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_compo, question, disable_ai_judge=False):
     """
@@ -111,7 +126,9 @@ def evaluate_answer(expected_text, expected_compo, predicted_text, predicted_com
         
     # AI-as-Judge
     if not disable_ai_judge:
-        metrics['AI-Judge'] = compute_ai_judge(expected_text, predicted_text)
+        ai_judge_score = compute_ai_judge_with_retries(expected_text, predicted_text)
+        if ai_judge_score is not None:
+            metrics['AI-Judge'] = ai_judge_score
         
     return metrics
 
@@ -159,6 +176,31 @@ def process_single_file(result_file, out_d, disable_ai_judge):
             with open(out_result_file, 'r', encoding='utf-8') as f:
                 existing_data = json.load(f)
             if "metrics" in existing_data:
+                retry_failed_ai_judge = (
+                    existing_data["metrics"].get("AI-Judge") == 0.0
+                    and bool(existing_data.get("expected_text"))
+                    and bool(existing_data.get("predicted_text"))
+                )
+                if not disable_ai_judge and (
+                    "AI-Judge" not in existing_data["metrics"]
+                    or retry_failed_ai_judge
+                ):
+                    ai_judge_score = compute_ai_judge_with_retries(
+                        existing_data.get("expected_text", ""),
+                        existing_data.get("predicted_text", ""),
+                    )
+                    if ai_judge_score is None:
+                        print(f"AI-Judge remains missing for {result_file.name}")
+                        return existing_data
+                    existing_data["metrics"]["AI-Judge"] = ai_judge_score
+                    temp_result_file = out_result_file.with_suffix(
+                        f"{out_result_file.suffix}.{os.getpid()}.{threading.get_ident()}.tmp"
+                    )
+                    with open(temp_result_file, "w", encoding="utf-8") as f:
+                        json.dump(existing_data, f, indent=4)
+                    temp_result_file.replace(out_result_file)
+                    print(f"Backfilled AI-Judge for {result_file.name}")
+                    return existing_data
                 print(f"Skipping {result_file.name} as metrics already calculated")
                 return existing_data
         except json.JSONDecodeError:
