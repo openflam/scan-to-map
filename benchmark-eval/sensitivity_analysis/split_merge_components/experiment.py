@@ -24,6 +24,7 @@ DEFAULT_METRICS = (
     "F1 Score",
     "Recall",
     "Source F1 Score",
+    "Spatial IoU",
     "Source Recall",
     "Topology Ceiling F1",
 )

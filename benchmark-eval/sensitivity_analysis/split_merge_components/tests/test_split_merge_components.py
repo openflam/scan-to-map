@@ -91,13 +91,28 @@ def test_source_space_metrics_penalize_merge_contamination():
         "expected_components": ["1"],
         "predicted_components": ["10"],
     }
-    scene = {"component_lineage": {"10": [1, 2], "3": [3]}}
+    scene = {
+        "component_lineage": {"10": [1, 2], "3": [3]},
+        "source_bbox_map": {
+            1: (
+                summarize.np.asarray([0.0, 0.0, 0.0]),
+                summarize.np.asarray([1.0, 1.0, 1.0]),
+            ),
+        },
+        "perturbed_bbox_map": {
+            10: (
+                summarize.np.asarray([0.0, 0.0, 0.0]),
+                summarize.np.asarray([2.0, 1.0, 1.0]),
+            ),
+        },
+    }
 
     metrics = summarize.derived_component_metrics(record, scene)
 
     assert metrics["Source Precision"] == pytest.approx(0.5)
     assert metrics["Source Recall"] == pytest.approx(1.0)
     assert metrics["Source F1 Score"] == pytest.approx(2 / 3)
+    assert metrics["Spatial IoU"] == pytest.approx(0.5)
     assert metrics["Topology Ceiling F1"] == pytest.approx(2 / 3)
     assert metrics["Merge Contamination"] == pytest.approx(0.5)
 
@@ -107,11 +122,30 @@ def test_source_space_metrics_collapse_split_children_and_record_redundancy():
         "expected_components": ["1"],
         "predicted_components": ["1", "10"],
     }
-    scene = {"component_lineage": {"1": [1], "10": [1], "2": [2]}}
+    scene = {
+        "component_lineage": {"1": [1], "10": [1], "2": [2]},
+        "source_bbox_map": {
+            1: (
+                summarize.np.asarray([0.0, 0.0, 0.0]),
+                summarize.np.asarray([2.0, 1.0, 1.0]),
+            ),
+        },
+        "perturbed_bbox_map": {
+            1: (
+                summarize.np.asarray([0.0, 0.0, 0.0]),
+                summarize.np.asarray([1.0, 1.0, 1.0]),
+            ),
+            10: (
+                summarize.np.asarray([1.0, 0.0, 0.0]),
+                summarize.np.asarray([2.0, 1.0, 1.0]),
+            ),
+        },
+    }
 
     metrics = summarize.derived_component_metrics(record, scene)
 
     assert metrics["Source F1 Score"] == pytest.approx(1.0)
+    assert metrics["Spatial IoU"] == pytest.approx(1.0)
     assert metrics["Split Redundancy"] == pytest.approx(0.5)
 
 

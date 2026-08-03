@@ -19,6 +19,7 @@ DEFAULT_METRICS = (
     "F1 Score",
     "Recall",
     "Source F1 Score",
+    "Spatial IoU",
     "Source Recall",
     "Topology Ceiling F1",
 )
@@ -70,6 +71,115 @@ def integer_set(values: Iterable[Any]) -> set[int]:
         except (TypeError, ValueError):
             continue
     return result
+
+
+def load_bbox_map(
+    path: Path,
+) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+    """Load component AABBs as minimum/maximum coordinate arrays."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Bounding-box file not found: {path}")
+    bbox_map: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+    for record in read_json(path):
+        component_id = record.get("connected_comp_id")
+        bbox = record.get("bbox") or {}
+        minimum = np.asarray(bbox.get("min"), dtype=float)
+        maximum = np.asarray(bbox.get("max"), dtype=float)
+        if (
+            component_id is None
+            or minimum.shape != (3,)
+            or maximum.shape != (3,)
+            or not np.all(np.isfinite(minimum))
+            or not np.all(np.isfinite(maximum))
+            or np.any(maximum < minimum)
+        ):
+            raise ValueError(f"Invalid bounding box in {path}: {record}")
+        bbox_map[int(component_id)] = (minimum, maximum)
+    return bbox_map
+
+
+def bbox_occupancy(
+    boxes: list[tuple[np.ndarray, np.ndarray]],
+    axes: tuple[np.ndarray, np.ndarray, np.ndarray],
+) -> np.ndarray:
+    """Rasterize exact AABB coverage on a coordinate-compressed grid."""
+    occupancy = np.zeros(
+        tuple(len(axis) - 1 for axis in axes),
+        dtype=bool,
+    )
+    for minimum, maximum in boxes:
+        starts = [
+            int(np.searchsorted(axes[axis], minimum[axis], side="left"))
+            for axis in range(3)
+        ]
+        ends = [
+            int(np.searchsorted(axes[axis], maximum[axis], side="left"))
+            for axis in range(3)
+        ]
+        occupancy[
+            starts[0] : ends[0],
+            starts[1] : ends[1],
+            starts[2] : ends[2],
+        ] = True
+    return occupancy
+
+
+def spatial_bbox_iou(
+    expected_boxes: list[tuple[np.ndarray, np.ndarray]],
+    predicted_boxes: list[tuple[np.ndarray, np.ndarray]],
+) -> float:
+    """Compute exact IoU between unions of axis-aligned 3D boxes."""
+    all_boxes = [*expected_boxes, *predicted_boxes]
+    if not all_boxes:
+        return 1.0
+    axes = tuple(
+        np.unique(
+            np.asarray(
+                [
+                    coordinate
+                    for minimum, maximum in all_boxes
+                    for coordinate in (minimum[axis], maximum[axis])
+                ],
+                dtype=float,
+            )
+        )
+        for axis in range(3)
+    )
+    expected_occupancy = bbox_occupancy(expected_boxes, axes)
+    predicted_occupancy = bbox_occupancy(predicted_boxes, axes)
+    intersection = expected_occupancy & predicted_occupancy
+    union = expected_occupancy | predicted_occupancy
+    cell_volumes = (
+        np.diff(axes[0])[:, None, None]
+        * np.diff(axes[1])[None, :, None]
+        * np.diff(axes[2])[None, None, :]
+    )
+    union_volume = float(cell_volumes[union].sum())
+    if union_volume <= 0:
+        return 1.0
+    return float(cell_volumes[intersection].sum()) / union_volume
+
+
+def spatial_component_iou(
+    record: dict[str, Any],
+    scene: dict[str, Any],
+) -> float:
+    """Compare expected clean and predicted perturbed component geometry."""
+    expected = integer_set(record.get("expected_components", []))
+    predicted = integer_set(record.get("predicted_components", []))
+    source_bboxes = scene["source_bbox_map"]
+    perturbed_bboxes = scene["perturbed_bbox_map"]
+    missing_expected = expected - source_bboxes.keys()
+    if missing_expected:
+        raise ValueError(
+            f"Expected component bounding boxes are missing: {sorted(missing_expected)}"
+        )
+    if predicted - perturbed_bboxes.keys():
+        return 0.0
+    return spatial_bbox_iou(
+        [source_bboxes[component_id] for component_id in expected],
+        [perturbed_bboxes[component_id] for component_id in predicted],
+    )
 
 
 def derived_component_metrics(
@@ -124,6 +234,7 @@ def derived_component_metrics(
         "Source Precision": source_precision,
         "Source Recall": source_recall,
         "Source F1 Score": source_f1,
+        "Spatial IoU": spatial_component_iou(record, scene),
         "Topology Ceiling F1": ceiling_f1,
         "Retrieval Efficiency": retrieval_efficiency,
         "Merge Contamination": merge_contamination,
@@ -194,11 +305,29 @@ def grouped_summary(
 
 
 def scene_lookup(manifest: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
-    return {
-        (condition["condition_id"], dataset_name): scene
-        for condition in manifest["conditions"]
-        for dataset_name, scene in condition["scenes"].items()
-    }
+    outputs_dir = Path(manifest["outputs_dir"]).resolve()
+    bbox_cache: dict[str, dict[int, tuple[np.ndarray, np.ndarray]]] = {}
+
+    def dataset_bboxes(dataset_name: str) -> dict[int, tuple[np.ndarray, np.ndarray]]:
+        if dataset_name not in bbox_cache:
+            dataset_dir = (outputs_dir / dataset_name).resolve()
+            if dataset_dir.parent != outputs_dir:
+                raise ValueError(f"Dataset output escapes outputs directory: {dataset_name}")
+            bbox_cache[dataset_name] = load_bbox_map(
+                dataset_dir / "bbox_corners.json"
+            )
+        return bbox_cache[dataset_name]
+
+    scenes: dict[tuple[str, str], dict[str, Any]] = {}
+    for condition in manifest["conditions"]:
+        for source_dataset_name, scene in condition["scenes"].items():
+            enriched_scene = dict(scene)
+            enriched_scene["source_bbox_map"] = dataset_bboxes(source_dataset_name)
+            enriched_scene["perturbed_bbox_map"] = dataset_bboxes(
+                scene["dataset_name"]
+            )
+            scenes[(condition["condition_id"], source_dataset_name)] = enriched_scene
+    return scenes
 
 
 def metric_values(
@@ -494,6 +623,14 @@ def build_parser(repo_root: Path) -> argparse.ArgumentParser:
     parser.add_argument("--metrics", nargs="+", default=list(DEFAULT_METRICS))
     parser.add_argument("--bootstrap-samples", type=int, default=2000)
     parser.add_argument("--bootstrap-seed", type=int, default=2026)
+    parser.add_argument(
+        "--allow-incomplete",
+        action="store_true",
+        help=(
+            "Summarize available results and report condition completeness "
+            "instead of failing on partial or missing conditions."
+        ),
+    )
     return parser
 
 
@@ -544,6 +681,24 @@ def summarize(
         bootstrap_samples,
         rng,
     )
+    operation_rows = {
+        operation: [
+            row for row in rows if row["operation"] in {"baseline", operation}
+        ]
+        for operation in ("split", "merge")
+    }
+    operation_overall_summaries = {
+        operation: [
+            row
+            for row in overall_summary
+            if row["operation"] in {"baseline", operation}
+        ]
+        for operation in ("split", "merge")
+    }
+    operation_delta_summaries = {
+        operation: [row for row in delta_summary if row["operation"] == operation]
+        for operation in ("split", "merge")
+    }
 
     long_fields = [
         "condition_id",
@@ -597,6 +752,22 @@ def summarize(
         delta_summary,
         summary_fieldnames(overall_fields),
     )
+    for operation in ("split", "merge"):
+        write_csv(
+            out_dir / f"{operation}_per_question_metrics.csv",
+            operation_rows[operation],
+            long_fields,
+        )
+        write_csv(
+            out_dir / f"{operation}_overall_summary.csv",
+            operation_overall_summaries[operation],
+            summary_fieldnames(overall_fields),
+        )
+        write_csv(
+            out_dir / f"{operation}_delta_from_baseline_summary.csv",
+            operation_delta_summaries[operation],
+            summary_fieldnames(overall_fields),
+        )
     write_csv(
         out_dir / "reference_status_summary.csv",
         status_summary,
@@ -620,7 +791,7 @@ def summarize(
     write_json(
         out_dir / "summary.json",
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "experiment": "split_merge_components",
             "analysis_status": "partial" if allow_incomplete else "complete",
             "confidence_interval": {
@@ -637,6 +808,13 @@ def summarize(
             "by_benchmark_type": type_summary,
             "by_merge_pairing": pairing_summary,
             "merge_minus_split": contrast_summary,
+            "by_operation": {
+                operation: {
+                    "overall": operation_overall_summaries[operation],
+                    "delta_from_clean_baseline": operation_delta_summaries[operation],
+                }
+                for operation in ("split", "merge")
+            },
         },
     )
     prefix = "split_merge_components_partial" if allow_incomplete else "split_merge_components"
@@ -654,6 +832,21 @@ def summarize(
         ylabel_suffix=" change",
         include_zero_line=True,
     )
+    for operation in ("split", "merge"):
+        plot_summaries(
+            operation_overall_summaries[operation],
+            metrics,
+            out_dir / f"{prefix}_{operation}_error_propagation.pdf",
+            ylabel_suffix="",
+            include_zero_line=False,
+        )
+        plot_summaries(
+            operation_delta_summaries[operation],
+            metrics,
+            out_dir / f"{prefix}_{operation}_delta_from_baseline.pdf",
+            ylabel_suffix=" change",
+            include_zero_line=True,
+        )
     print(f"Wrote {'partial ' if allow_incomplete else ''}sensitivity analysis to {out_dir}")
     print("No files under benchmark/data or benchmark/plots were modified.")
 
@@ -672,6 +865,7 @@ def main() -> None:
         list(dict.fromkeys(args.metrics)),
         args.bootstrap_samples,
         args.bootstrap_seed,
+        allow_incomplete=args.allow_incomplete,
     )
 
 
