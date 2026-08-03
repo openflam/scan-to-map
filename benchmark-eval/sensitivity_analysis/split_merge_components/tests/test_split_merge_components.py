@@ -46,6 +46,21 @@ def test_balanced_split_reconstructs_source_aabb():
     assert second["bbox"]["max"] == [4.0, 2.0, 1.0]
 
 
+def test_axis_aligned_bbox_uses_viewer_face_ring_corner_order():
+    bbox = prepare.axis_aligned_bbox([0.0, 1.0, 2.0], [3.0, 4.0, 5.0])
+
+    assert bbox["corners"] == [
+        [0.0, 1.0, 2.0],
+        [3.0, 1.0, 2.0],
+        [3.0, 4.0, 2.0],
+        [0.0, 4.0, 2.0],
+        [0.0, 1.0, 5.0],
+        [3.0, 1.0, 5.0],
+        [3.0, 4.0, 5.0],
+        [0.0, 4.0, 5.0],
+    ]
+
+
 def test_merge_plan_is_deterministic_and_disjoint():
     component_ids = {0, 1, 2, 3}
     scene = {

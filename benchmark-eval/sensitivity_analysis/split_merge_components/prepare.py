@@ -166,11 +166,18 @@ def bbox_limits(bbox_record: dict[str, Any], source: str) -> tuple[list[float], 
 
 
 def axis_aligned_bbox(minimum: list[float], maximum: list[float]) -> dict[str, Any]:
+    # Keep the same perimeter order used by segment3d/src/bbox_corners.py and
+    # semantic-3d-search-demo/src/viewer/BoundingBoxMesh.tsx. In particular,
+    # each group of four corners forms a non-self-intersecting face ring.
     corners = [
-        [x, y, z]
-        for z in (minimum[2], maximum[2])
-        for y in (minimum[1], maximum[1])
-        for x in (minimum[0], maximum[0])
+        [minimum[0], minimum[1], minimum[2]],
+        [maximum[0], minimum[1], minimum[2]],
+        [maximum[0], maximum[1], minimum[2]],
+        [minimum[0], maximum[1], minimum[2]],
+        [minimum[0], minimum[1], maximum[2]],
+        [maximum[0], minimum[1], maximum[2]],
+        [maximum[0], maximum[1], maximum[2]],
+        [minimum[0], maximum[1], maximum[2]],
     ]
     return {
         "corners": corners,
